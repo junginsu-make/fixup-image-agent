@@ -20,7 +20,8 @@ export interface PdpDocumentV3 {
   inputs: Pick<PdpDraftInput, "additionalInfo" | "sellerBrief" | "modelImageUsage" | "textDraft" | "attachmentIntents" | "styleReferenceEnabled">;
   settings: Settings;
   references: Array<{ role: "product" | "person" | "character" | "style"; assetId: string;
-    enabled: boolean; instruction?: string; characterId?: string; angles?: string[] }>;
+    enabled: boolean; instruction?: string; characterId?: string; angles?: string[];
+    /** 제품 참조만: 사용자가 올린 원본. `assetId` 는 1024 사본(미리보기·분석)이다. */ originalAssetId?: string }>;
   assets: Record<string, Asset>;
   originalAssetId?: string;
   sections: PdpSection[];
@@ -69,7 +70,17 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
     const id = existing?.id ?? randomId(); assets[id] = { ...existing, ...image, id }; return id;
   };
   const references: PdpDocumentV3["references"] = [];
-  if (input.preparedImage) references.push({ role: "product", assetId: addAsset(input.preparedImage), enabled: true, instruction: input.attachmentIntents?.anchor });
+  if (input.preparedImage) {
+    const { original } = input.preparedImage;
+    references.push({
+      role: "product",
+      assetId: addAsset(input.preparedImage),
+      // 원본은 따로 둔다. 1024 사본(미리보기·분석)과 원본(그림 모델)은 쓰임이 다르다.
+      ...(original ? { originalAssetId: addAsset({ base64: original.base64, mimeType: original.mimeType }) } : {}),
+      enabled: true,
+      instruction: input.attachmentIntents?.anchor,
+    });
+  }
   if (input.modelImage) references.push({ role: "person", assetId: addAsset(input.modelImage), enabled: true, instruction: input.attachmentIntents?.person });
   if (input.characterId) references.push({ role: "character", assetId: input.characterId, enabled: true,
     characterId: input.characterId, angles: input.characterAngles ?? [], instruction: input.attachmentIntents?.person });
@@ -130,8 +141,10 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
   const find = (role: PdpDocumentV3["references"][number]["role"]) => doc.references.find((ref) => ref.role === role);
   const prepared = (role: "product" | "person"): PreparedImageDraft | null => {
     const ref = find(role); const asset = ref && doc.assets[ref.assetId];
+    const originalAsset = ref?.originalAssetId ? doc.assets[ref.originalAssetId] : undefined;
     return asset ? { base64: asset.base64, mimeType: asset.mimeType, fileName: asset.fileName ?? "image",
-      previewUrl: asset.previewUrl ?? `data:${asset.mimeType};base64,${asset.base64}` } : null;
+      previewUrl: asset.previewUrl ?? `data:${asset.mimeType};base64,${asset.base64}`,
+      ...(originalAsset ? { original: { base64: originalAsset.base64, mimeType: originalAsset.mimeType } } : {}) } : null;
   };
   const style = find("style"); const styleAsset = style && doc.assets[style.assetId];
   const blueprint = { ...doc.blueprint, sections: doc.sections };

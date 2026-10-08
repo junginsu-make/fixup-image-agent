@@ -91,7 +91,22 @@ function toAnchorJpegDataUrl(sourceImage: HTMLImageElement) {
   return canvas.toDataURL("image/jpeg", ANCHOR_JPEG_QUALITY);
 }
 
+/** 그림 모델이 그대로 받는 형식. 다른 형식(HEIC 등)은 브라우저가 열 수 있으면 같은 크기의 JPEG 로 바꾼다. */
+const ORIGINAL_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ORIGINAL_MAX_BYTES = 20 * 1024 * 1024;
+
+function toFullSizeJpegBase64(sourceImage: HTMLImageElement) {
+  const canvas = document.createElement("canvas");
+  canvas.width = sourceImage.naturalWidth;
+  canvas.height = sourceImage.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("이미지 캔버스를 초기화하지 못했습니다.");
+  context.drawImage(sourceImage, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.95).split(",")[1] ?? "";
+}
+
 export async function prepareImageFile(file: File) {
+  if (file.size > ORIGINAL_MAX_BYTES) throw new Error("이미지 용량이 너무 큽니다. 20MB 이하로 올려 주세요.");
   const sourceDataUrl = await readFileAsDataUrl(file);
   const sourceImage = await loadImage(sourceDataUrl);
   const previewUrl = toAnchorJpegDataUrl(sourceImage);
@@ -101,11 +116,17 @@ export async function prepareImageFile(file: File) {
     throw new Error("이미지 변환 결과가 비어 있습니다.");
   }
 
+  // **원본은 줄이지 않는다**(설계 2026-10-08 D1). 형식만 모델이 받는 것으로 맞춘다.
+  const original = ORIGINAL_TYPES.includes(file.type)
+    ? { base64: sourceDataUrl.split(",")[1] ?? "", mimeType: file.type }
+    : { base64: toFullSizeJpegBase64(sourceImage), mimeType: "image/jpeg" };
+
   return {
     base64,
     mimeType: "image/jpeg" as const,
     previewUrl,
     fileName: file.name,
+    original,
   };
 }
 

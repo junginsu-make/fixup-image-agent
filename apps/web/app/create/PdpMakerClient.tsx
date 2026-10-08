@@ -450,7 +450,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         return;
       }
 
-      const nextImage = await prepareImageFile(file);
+      const { original: _notUsedForPerson, ...nextImage } = await prepareImageFile(file);
       setModelImage(nextImage);
       setModelImageUsage(null);
       setErrorMessage("");

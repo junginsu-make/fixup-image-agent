@@ -186,6 +186,9 @@ export function validateDocument(value: unknown, userId: string, id: string): Se
   visit(doc as unknown as Json);
   for(const ref of body.data.references){
     if(ref.role!=="character" && !Object.hasOwn(doc.assets,ref.assetId))throw new DocumentError(400,"첨부 그림이 누락됐습니다.");
+    // 제품 원본(설계 2026-10-08 §4.6): 참조 안의 `originalAssetId` 도 문서에 실린 그림이어야 한다.
+    const originalId=(ref as {originalAssetId?:unknown}).originalAssetId;
+    if(originalId!==undefined && (typeof originalId!=="string" || !Object.hasOwn(doc.assets,originalId)))throw new DocumentError(400,"첨부 그림이 누락됐습니다.");
   }
   if(typeof doc.body.originalAssetId==="string" && !Object.hasOwn(doc.assets,doc.body.originalAssetId))throw new DocumentError(400,"원본 그림이 누락됐습니다.");
   if (!Array.isArray(doc.body.sections) || doc.body.sections.length > 30) throw new DocumentError(400, "섹션 정보가 올바르지 않습니다.");

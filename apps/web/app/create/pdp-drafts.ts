@@ -118,6 +118,11 @@ export interface PreparedImageDraft {
   mimeType: string;
   previewUrl: string;
   fileName: string;
+  /**
+   * **사용자가 올린 원본**(설계 2026-10-08 §4.6). 그림 모델에는 이것을 올린 주소가 간다.
+   * 위의 `base64` 는 미리보기·분석용 1024px 사본이다. 옛 초안에는 없다.
+   */
+  original?: { base64: string; mimeType: string };
 }
 
 /** 텍스트 경로의 중간 상태도 초안의 일부다. 컴포넌트 수명과 분리한다. */
