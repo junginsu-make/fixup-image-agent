@@ -1702,7 +1702,13 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
 
               <DropPasteHint locked={false} className="mt-1" />
               {/* 제품마다 사진 1~4장, 제품은 3개까지(설계 2026-10-08 §3.1). 칸 동작은 그 파일에 있다. */}
-              <ProductSlots products={products} onChange={setProducts} onError={setErrorMessage} />
+              <ProductSlots
+                products={products}
+                onChange={setProducts}
+                // 옛 「로그 보기」 내용이 새 문구에 붙지 않게 함께 뗀다. 넣기에 성공하면 앞 오류를 지운다(옛 한 장 칸과 같다).
+                onError={(message) => { setErrorMessage(message); setErrorDetail(""); setShowErrorDetail(false); }}
+                onSuccess={() => { setErrorMessage(""); setErrorDetail(""); setShowErrorDetail(false); }}
+              />
 
             </div>
 

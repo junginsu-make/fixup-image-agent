@@ -91,11 +91,13 @@ interface ProductSlotsProps {
   products: readonly PdpProductDraft[];
   onChange: (products: PdpProductDraft[]) => void;
   onError: (message: string) => void;
+  /** 사진을 넘침 없이 넣었다 — 앞서 띄운 오류(예: 못 여는 형식)를 지울 때다. */
+  onSuccess?: () => void;
   /** 시험이 브라우저 캔버스 없이 돌도록 바꿔 끼우는 자리. */
   prepare?: Prepare;
 }
 
-export function ProductSlots({ products, onChange, onError, prepare = prepareProductImageFile }: ProductSlotsProps) {
+export function ProductSlots({ products, onChange, onError, onSuccess, prepare = prepareProductImageFile }: ProductSlotsProps) {
   // 사진 준비를 기다린 뒤 읽을 목록. 렌더마다 맞춘다(기다리기 전 값을 쥐지 않으려고).
   const latest = useRef(products);
   latest.current = products;
@@ -107,10 +109,14 @@ export function ProductSlots({ products, onChange, onError, prepare = preparePro
 
   const addFiles = async (id: ProductId, files: readonly File[]) => {
     setBusy((current) => [...current, id]);
-    const outcome = await placeFiles(() => latest.current, () => id, files, prepare);
+    // 준비하는 사이 그 칸을 뺐으면 사진 자리가 남은 첫 제품으로 — 없는 칸을 「다 찼다」고 하지 않는다.
+    const pick = (current: readonly PdpProductDraft[]) =>
+      current.some((product) => product.id === id) ? id : firstOpenProduct(current);
+    const outcome = await placeFiles(() => latest.current, pick, files, prepare);
     setBusy((current) => current.filter((busyId) => busyId !== id));
     if (outcome.products) onChange(outcome.products);
     if (outcome.error) onError(outcome.error);
+    else if (outcome.products) onSuccess?.();
   };
 
   return (

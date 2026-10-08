@@ -30,10 +30,12 @@ const 가짜준비 = async (file: File) => 사진(file.name);
 let renderer: ReactTestRenderer;
 let changes: PdpProductDraft[][] = [];
 let errors: string[] = [];
+let cleared = 0;
 
 const 칸을그린다 = async (initial: PdpProductDraft[], prepare = 가짜준비) => {
   changes = [];
   errors = [];
+  cleared = 0;
   function Host() {
     const [products, setProducts] = React.useState(initial);
     return (
@@ -42,6 +44,7 @@ const 칸을그린다 = async (initial: PdpProductDraft[], prepare = 가짜준�
         prepare={prepare}
         onChange={(next) => { changes.push(next); setProducts(next); }}
         onError={(message) => errors.push(message)}
+        onSuccess={() => { cleared += 1; }}
       />
     );
   }
@@ -137,6 +140,42 @@ describe("사진", () => {
     await 파일고른다(0, [파일("a.heic")]);
     expect(changes.length).toBe(0);
     expect(errors).toEqual(["JPEG·PNG·WebP 로 올려 주세요"]);
+    expect(cleared).toBe(0);
+  });
+
+  it("실패 뒤 넣기에 성공하면 앞 오류를 지우게 알린다", async () => {
+    let fail = true;
+    await 칸을그린다([], async (file) => {
+      if (fail) throw new Error("JPEG·PNG·WebP 로 올려 주세요");
+      return 사진(file.name);
+    });
+    await 파일고른다(0, [파일("a.heic")]);
+    expect(cleared).toBe(0);
+    fail = false;
+    await 파일고른다(0, [파일("b.jpg")]);
+    expect(마지막()[0]!.photos.map((photo) => photo.fileName)).toEqual(["b.jpg"]);
+    expect(cleared).toBe(1);
+    expect(errors).toEqual(["JPEG·PNG·WebP 로 올려 주세요"]);
+  });
+
+  it("넘친 장이 있으면 오류만 알리고 지우지 않는다", async () => {
+    await 칸을그린다([제품("p1", 3)]);
+    await 파일고른다(0, [파일("a.jpg"), 파일("b.jpg")]);
+    expect(errors.at(-1)).toContain("1장");
+    expect(cleared).toBe(0);
+  });
+
+  it("준비하는 사이 그 제품 칸을 빼면 사진 자리가 남은 첫 제품에 넣는다 — 「4장까지」라고 틀리게 말하지 않는다", async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    await 칸을그린다([제품("p1", 1), 제품("p2", 0)], async (file) => { await gate; return 사진(file.name); });
+    const inputs = renderer.root.findAll((node) => node.type === "input" && node.props.type === "file");
+    let pending!: Promise<void>;
+    await act(async () => { pending = inputs[1]!.props.onChange({ target: { files: [파일("a.jpg")], value: "x" } }); });
+    await 누른다("제품 빼기");
+    await act(async () => { finish(); await pending; });
+    expect(마지막().map((product) => [product.id, product.photos.length])).toEqual([["p1", 2]]);
+    expect(errors).toEqual([]);
   });
 });
 
@@ -211,6 +250,13 @@ describe("상세페이지 화면 연결", () => {
 
   it("올리기 자리는 제품 칸이고, 첫 화면이 여러 장을 알린다", () => {
     expect(client).toContain("<ProductSlots");
+  });
+
+  it("칸의 오류는 옛 「로그 보기」 내용을 떼고, 넣기에 성공하면 오류를 지운다", () => {
+    const at = client.indexOf("<ProductSlots");
+    const tag = client.slice(at, client.indexOf("/>", at));
+    expect(tag).toMatch(/onError=\{\(message\) => \{ setErrorMessage\(message\); setErrorDetail\(""\);/);
+    expect(tag).toMatch(/onSuccess=\{\(\) => \{ setErrorMessage\(""\); setErrorDetail\(""\);/);
     expect(client).toContain("상품 사진 한 장이면 됩니다. 다른 각도·다른 제품도 함께 올릴 수 있습니다.");
   });
 });
