@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **289개**, 저장 기록(커밋, 합치기 제외) **1,138개**, 배포 꾸러미(릴리스) **249개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **290개**, 저장 기록(커밋, 합치기 제외) **1,140개**, 배포 꾸러미(릴리스) **250개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 41 | 303 | 57 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 42 | 305 | 58 |
 
 <a id="w-2026-08-31"></a>
 
@@ -522,8 +522,10 @@
 - 상세페이지에서 첨부한 제품이 섹션마다 바뀌지 않도록 그림 만들기 지시를 강화했습니다. 제품 모양·색·라벨 글자는 지키고 각도와 배경만 바뀝니다.
 - 제품 사진을 줄이지 않고 원본 화질 그대로 그림에 씁니다. 휴대폰으로 찍어 누운 사진도 바로 세워 씁니다.
 - 제품을 3개까지, 제품마다 다른 각도 사진을 4장까지 올릴 수 있습니다. 구성안에서 섹션마다 어느 제품을 그릴지 고를 수 있습니다.
+- 모델 단추 옆의 「기본」 표시와 단추 아래에 늘 보이던 설명 줄을 뺐습니다. 모델 설명은 단추에 마우스를 올리면 뜨는 안내 칸 하나로만 보입니다.
+- 안내 칸을 더 넓히고 글자를 키워 읽기 쉽게 했습니다.
 
-**운영 배포 25회**
+**운영 배포 26회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -550,8 +552,9 @@
 - 10/8 `20261008T101621Z-cbcdf325` · [#312](https://github.com/junginsu-make/fixup-image-agent/pull/312)
 - 10/8 `20261008T120413Z-78f0c29e` · [#314](https://github.com/junginsu-make/fixup-image-agent/pull/314)
 - 10/8 `20261008T122806Z-7e47833a` · [#316](https://github.com/junginsu-make/fixup-image-agent/pull/316)
+- 10/8 `20261008T131209Z-a343ba06` · [#318](https://github.com/junginsu-make/fixup-image-agent/pull/318)
 
-<details><summary>이 주의 작업 묶음 41개</summary>
+<details><summary>이 주의 작업 묶음 42개</summary>
 
 
 **10/6**
@@ -603,6 +606,7 @@
 - [#312](https://github.com/junginsu-make/fixup-image-agent/pull/312) feat: 그림 모델 세 개로 정리 (표준형·디테일형·속도형) <sub>기타 · +2,642 / −630 · 운영 반영 10/8</sub>
 - [#314](https://github.com/junginsu-make/fixup-image-agent/pull/314) feat: 라이브러리 「전체」에 캐릭터도 — 시스템이 만든 것은 모두 생성 결과 <sub>캐릭터 · 라이브러리 · +243 / −11 · 운영 반영 10/8</sub>
 - [#316](https://github.com/junginsu-make/fixup-image-agent/pull/316) feat(pdp): 첨부 제품 보존 — 원본 사진·여러 각도·여러 제품 <sub>이미지 만들기 · 상세페이지 · 캐릭터 · +8,466 / −136 · 운영 반영 10/8</sub>
+- [#318](https://github.com/junginsu-make/fixup-image-agent/pull/318) fix: 모델 고르기 「기본」·설명 줄 삭제, 말풍선 넓히기 <sub>기타 · +32 / −25 · 운영 반영 10/8</sub>
 
 </details>
 
