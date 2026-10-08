@@ -63,15 +63,27 @@ describe("소개 문서가 실제 목록과 같다", () => {
 
   /**
    * **가중치는 돈이다.** 틀리게 적으면 값을 묻는 사람마다 틀린 답을 얻는다.
+   *
+   * 숨긴 모델은 이름이 모두 「이전 방식」이라 한 줄을 나눠 쓴다. 그래서 같은
+   * 이름의 가중치를 모아 한 줄의 칸(쉼표로 나열)에 다 있는지 본다.
    */
-  it.each(IMAGE_MODELS.map((model) => [model.label, model.creditWeight]))(
+  const 이름별가중치 = new Map<string, Set<number>>();
+  for (const model of IMAGE_MODELS) {
+    const set = 이름별가중치.get(model.label) ?? new Set<number>();
+    이름별가중치.set(model.label, new Set([...set, model.creditWeight]));
+  }
+
+  it.each([...이름별가중치.entries()].map(([label, weights]) => [label, [...weights]]))(
     "**%s 의 가중치가 %s 로 적혀 있다**",
-    (label, weight) => {
+    (label, weights) => {
       const 줄 = 모델표.split("\n").find((line) => line.includes(String(label)));
       expect(줄, `${label} 줄을 못 찾았다`).toBeTruthy();
 
       const 칸 = 줄!.split("|").map((cell) => cell.trim());
-      expect(칸).toContain(String(weight));
+      const 적힌 = new Set(칸.flatMap((cell) => cell.split(/\s*,\s*/)));
+      for (const weight of weights as number[]) {
+        expect(적힌, `${label} 줄에 가중치 ${weight} 가 없다`).toContain(String(weight));
+      }
     },
   );
 

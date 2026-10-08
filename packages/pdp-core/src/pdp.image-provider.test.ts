@@ -11,6 +11,7 @@ import {
   DEFAULT_IMAGE_MODEL,
   IMAGE_MODELS,
   IMAGE_MODEL_CREDIT_WEIGHT,
+  VISIBLE_PDP_MODELS,
   type ImageModelId,
   type ReferenceImage,
 } from "./types";
@@ -211,6 +212,7 @@ describe("묶음 크기", () => {
       "gpt-image-2.5-flare": 49 * 6,
       "gpt-image-2": 288,
       "nano-banana-pro": 112,
+      "nano-banana-2.1": 112, // 실측 전 — 디테일형 값을 그대로 둔다
       "nano-banana-2": 100,
       "nano-banana": 90,
       "seedream-5-pro": 95 * 6,
@@ -246,9 +248,8 @@ describe("묶음 크기", () => {
     const 장당비 = 49 / 125; // 2026-09-10 실측, 1088×1360
     expect(flare.expectedBatchSeconds).toBe(Math.round(gpt.expectedBatchSeconds * 장당비 / 5) * 5);
 
-    // 설명 문구가 숫자와 같이 움직여야 한다. 6장 = 두 묶음 = 약 2분.
+    // 6장 = 두 묶음 = 약 2분. 설명 문구는 이제 정본(@fixup/shared)이라 시간을 적지 않는다.
     expect(flare.expectedBatchSeconds * 2).toBeLessThan(150);
-    expect(flare.description).toContain("2분");
   });
 
   /**
@@ -385,5 +386,26 @@ describe("결에 맞는 모델", () => {
   it("옛 boolean 호출을 그대로 받는다", () => {
     expect(selectCharacterModel(true)).toBe("nano-banana-pro");
     expect(selectCharacterModel(false)).not.toBe("nano-banana-pro");
+  });
+});
+
+describe("속도형(nano-banana-2.1)", () => {
+  it("google 경로·2K·system_prompt 를 쓴다", () => {
+    const input = { prompt: "p", systemPrompt: "s", aspectRatio: "3:4" as const, references: [] };
+    expect(resolveEndpoint("nano-banana-2.1", [])).toBe("google/nano-banana-2.1");
+    expect(resolveEndpoint("nano-banana-2.1", [anchor])).toBe("google/nano-banana-2.1/edit");
+    expect(buildFalPayload("nano-banana-2.1", input)).toMatchObject({
+      resolution: "2K",
+      system_prompt: "s",
+      aspect_ratio: "3:4",
+    });
+  });
+
+  it("보이는 목록은 셋이고 차례가 정본과 같다", () => {
+    expect(VISIBLE_PDP_MODELS.map((m) => m.label)).toEqual(["표준형", "디테일형", "속도형"]);
+  });
+
+  it("숨긴 모델은 이전 방식으로 읽히되 목록에 남는다", () => {
+    expect(IMAGE_MODELS.find((m) => m.id === "gpt-image-2")?.label).toBe("이전 방식");
   });
 });
