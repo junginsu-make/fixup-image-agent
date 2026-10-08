@@ -105,8 +105,8 @@ export function EasyClient({
   const [messages, setMessages] = React.useState<EasyMessage[]>(initialMessages);
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
   /*
-    라이브러리 목록. **화면이 한 번 읽어 두 곳이 나눠 쓴다** — 시작 화면의
-    「라이브러리에서」와 입력창의 폴더 단추다.
+    라이브러리 목록. **화면이 한 번 읽어 두 곳이 나눠 쓴다** — 사진 물음 줄의
+    고르기와 입력창의 폴더 단추다.
   */
   const library = useEasyLibrary();
   const [draft, setDraft] = React.useState("");
@@ -667,8 +667,7 @@ export function EasyClient({
                   turn.busy ? "답을 기다리는 중입니다"
                     // 사진 물음이 떠 있으면 친 말은 처음 말에 이어진다(설계 §2-5).
                     : asks.photo ? "위 사진 물음에 대한 답으로 보냅니다. 예: 1번은 우리 원두 봉투야"
-                    : turn.canSend ? "무엇이든 물어보거나, 만들 것을 적어 주세요"
-                      : "위에서 먼저 골라 주세요"
+                    : "무엇이든 물어보거나, 만들 것을 적어 주세요"
                 }
                 disabled={!turn.canSend}
                 rows={1}

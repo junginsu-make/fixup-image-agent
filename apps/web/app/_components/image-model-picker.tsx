@@ -66,7 +66,11 @@ function useFloatingTip() {
   const handlers = (text: string) => {
     const show = (event: { currentTarget: { getBoundingClientRect: () => Box } }) =>
       setTip({ text, place: tipPosition(event.currentTarget.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }) });
-    return { onMouseEnter: show, onFocus: show, onMouseLeave: hide, onBlur: hide };
+    // 포커스로는 키보드로 옮겨 갔을 때만 띄운다. 누르거나 탭해서 생긴 포커스로 띄우면 휴대폰에서 내용을 덮고 남는다.
+    const focus = (event: { currentTarget: { getBoundingClientRect: () => Box; matches: (q: string) => boolean } }) => {
+      if (event.currentTarget.matches(":focus-visible")) show(event);
+    };
+    return { onMouseEnter: show, onFocus: focus, onMouseLeave: hide, onBlur: hide };
   };
 
   const floating = tip

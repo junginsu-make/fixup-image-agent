@@ -47,3 +47,13 @@ describe("로봇 그림", () => {
     expect(existsSync(join(web, "public/easy/assistant.webp"))).toBe(false);
   });
 });
+
+describe("칸 사이 선", () => {
+  /** 입력칸 위 구분선(`border-t border-border`)과 같은 색이다. */
+  it("대화와 입력칸 사이 선과 같은 옅은 색이다", () => {
+    const handle = read("app/easy/_components/split-handle.tsx");
+    expect(handle).not.toContain("bg-subtle-foreground/45");
+    expect(handle).toContain("w-px -translate-x-1/2 bg-border");
+    expect(read("app/easy/easy-client.tsx")).toContain('className="border-t border-border bg-background"');
+  });
+});

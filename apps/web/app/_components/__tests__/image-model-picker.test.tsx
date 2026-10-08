@@ -144,9 +144,18 @@ describe("공용 그림 모델 고르기", () => {
 
   it("키보드로 옮겨 가도 뜨고, 떠나면 사라진다", () => {
     const root = mount({ value: "nano-banana-pro" });
-    act(() => speedButton(root).props.onFocus({ currentTarget: { getBoundingClientRect: () => rect(200, 100) } }));
+    const keyboard = { getBoundingClientRect: () => rect(200, 100), matches: (q: string) => q === ":focus-visible" };
+    act(() => speedButton(root).props.onFocus({ currentTarget: keyboard }));
     expect(floating(root)).toHaveLength(1);
     act(() => speedButton(root).props.onBlur());
+    expect(floating(root)).toHaveLength(0);
+  });
+
+  /** 예전처럼 키보드로 옮겨 갈 때만 뜬다 — 휴대폰에서 누르면 말풍선이 내용을 덮고 남는다. */
+  it("누르거나 탭해서 생긴 포커스로는 뜨지 않는다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    const tapped = { getBoundingClientRect: () => rect(200, 100), matches: () => false };
+    act(() => speedButton(root).props.onFocus({ currentTarget: tapped }));
     expect(floating(root)).toHaveLength(0);
   });
 
