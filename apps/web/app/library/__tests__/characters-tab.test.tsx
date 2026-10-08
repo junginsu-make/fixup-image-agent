@@ -3,7 +3,9 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const gallery = vi.hoisted(() => ({ open: vi.fn() }));
-vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: { children: React.ReactNode } & Record<string, unknown>) => <a {...props}>{children}</a>,
+}));
 vi.mock("../../_components/image-viewer", () => ({ openImageGallery: gallery.open }));
 vi.mock("../../_components/thumb-image", () => ({
   ThumbImage: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
@@ -50,8 +52,11 @@ async function open() {
   await act(async () => { view = create(<CharactersTab />); });
   await flush();
 }
-const card = (name: string) => view.root.find((node) => node.type === "button"
-  && node.props["aria-label"] === `${name} 크게 보기`);
+/** 카드 본문. 작업물 카드처럼 **어디를 눌러도** 큰 창이 열린다. */
+const card = (name: string) => view.root.find((node) => typeof node.type === "string"
+  && typeof node.props.onClick === "function"
+  && String(node.props.className ?? "").includes("cursor-pointer")
+  && node.findAll((child) => child.children.includes(name)).length > 0);
 
 describe("라이브러리 캐릭터", () => {
   it("전체 회원 범위로 묻는다 — 서버가 관리자에게만 넓힌다", async () => {
@@ -88,5 +93,59 @@ describe("라이브러리 캐릭터", () => {
     await open();
     const badges = view.root.findAll((node) => typeof node.type === "string" && node.children.join("") === "3장");
     expect(badges.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * **작업물 카드와 같은 느낌**(2026-10-08 사용자 보고 — 「누르면 새 페이지가 열리는 것 같다」).
+ * 전에는 그림만 눌렸고 아래 「과정 보기」 글자를 누르면 상세 페이지로 넘어갔다. 이제 카드 어디를
+ * 눌러도 큰 창이고, 「과정 보기」는 작업물처럼 모서리 아이콘이다.
+ */
+describe("작업물 카드와 같은 모양", () => {
+  it("카드 이름 쪽을 눌러도 큰 창이 열린다", async () => {
+    await open();
+    await act(async () => { card("남의 고양이").props.onClick(); });
+    expect(gallery.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("「과정 보기」는 모서리 아이콘이고, 누르면 카드의 큰 창은 안 열린다", async () => {
+    await open();
+    const steps = view.root.find((node) => node.props["aria-label"] === "호랑이 과정 보기");
+    expect(steps.props.href).toBe("/characters/c1");
+    // 이 렌더러는 이벤트를 위로 흘리지 않는다. 그래서 흘림을 막는지를 직접 본다.
+    const stopPropagation = vi.fn();
+    await act(async () => { steps.props.onClick({ stopPropagation }); });
+    expect(stopPropagation).toHaveBeenCalled();
+    expect(gallery.open).not.toHaveBeenCalled();
+  });
+
+  it("아래쪽 글자 단추 「과정 보기」는 없다", async () => {
+    await open();
+    const texts = view.root.findAll((node) => node.type === "a" && node.children.join("") === "과정 보기");
+    expect(texts).toEqual([]);
+  });
+});
+
+/** 키보드로도 연다(독립 리뷰). 전에는 그림이 진짜 단추라 Tab·Enter 로 열렸다. */
+describe("키보드", () => {
+  it("카드에 닿아 Enter·Space 로 큰 창을 연다", async () => {
+    await open();
+    const target = card("호랑이");
+    expect(target.props.tabIndex).toBe(0);
+    expect(target.props.role).toBe("button");
+    await act(async () => { target.props.onKeyDown({ key: "Enter", preventDefault() {} }); });
+    await act(async () => { target.props.onKeyDown({ key: " ", preventDefault() {} }); });
+    expect(gallery.open).toHaveBeenCalledTimes(2);
+  });
+
+  /** 남의 캐릭터는 보기 전용이다. 「다시 만들 수 있다」 는 내 것에만 맞는 말이다. */
+  it("남의 캐릭터 말풍선은 다시 만들기를 약속하지 않는다", async () => {
+    await open();
+    const other = view.root.find((node) => node.props["aria-label"] === "남의 고양이 과정 보기");
+    const words = other.findAll((node) => node.type === "span")
+      .flatMap((node) => node.children.filter((child): child is string => typeof child === "string"))
+      .join("");
+    expect(words).toContain("만들 때 쓴 설정과 각도를 봅니다.");
+    expect(words).not.toContain("다시 만들 수 있습니다");
   });
 });

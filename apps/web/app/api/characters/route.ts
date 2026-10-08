@@ -10,6 +10,7 @@ import {
   MAX_CANDIDATES,
   MIN_CANDIDATES,
   characterCreditCost,
+  countCharacters,
   countRecentCharacters,
   createCharacter,
   deleteCharacter,
@@ -110,6 +111,17 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const wantsAll = new URL(req.url).searchParams.get("scope") === "all";
   const allMembers = wantsAll && hasFullScope(viewerFrom(auth.member), "read");
+
+  // **개수만**(라이브러리 「캐릭터」 단추의 숫자). 목록·그림 주소를 만들지 않는다.
+  if (new URL(req.url).searchParams.get("count") === "1") {
+    try {
+      const teamId = await teamIdOf(auth.member.userId);
+      return Response.json({ ok: true, count: await countCharacters(auth.member.userId, teamId, allMembers ? { allMembers: true } : {}) });
+    } catch (error) {
+      console.error("[characters:count]", error instanceof Error ? error.message : error);
+      return Response.json({ ok: false, message: "캐릭터 수를 세지 못했습니다." }, { status: 500 });
+    }
+  }
 
   try {
     return Response.json({

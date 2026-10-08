@@ -75,6 +75,18 @@ describe("한 줄 거르기", () => {
     expect(text()).not.toContain("쉽게와 다양하게를 가를 수 없습니다");
   });
 
+  /** 「캐릭터」 옆에도 몇 개인지 적는다(2026-10-08 사용자 요청). 참고 이미지는 아직 숫자가 없다. */
+  it("캐릭터 개수를 받으면 단다", () => {
+    render({ characterCount: 12 });
+    expect(textOf(button("캐릭터"))).toBe("캐릭터12");
+    expect(textOf(button("참고 이미지"))).toBe("참고 이미지");
+  });
+
+  it("캐릭터 개수를 아직 모르면 이름만", () => {
+    render({ characterCount: null });
+    expect(textOf(button("캐릭터"))).toBe("캐릭터");
+  });
+
   it("작업물을 아직 못 읽었으면 개수 없이 단추만", () => {
     render({ summary: null });
     expect(textOf(button("다양하게"))).toBe("다양하게");
