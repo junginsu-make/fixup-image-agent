@@ -24,7 +24,7 @@ export type SearchVerificationCodes = { google: string; naver: string; daumPin: 
  * 비어 있으면 그 태그·줄을 만들지 않는다. 넣는 법은 `docs/SEO.md`.
  */
 export const SEARCH_VERIFICATION: SearchVerificationCodes = {
-  google: "",
+  google: "PU2RGhUapDAvAYeduNewUKJFQrKLHwO_2lc1n47sm5g",
   naver: "71bcc9f01c1627643f6ea41d7cabef997708066f",
   daumPin: "",
 };
