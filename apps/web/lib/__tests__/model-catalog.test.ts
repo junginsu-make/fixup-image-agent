@@ -23,7 +23,7 @@ describe("대조표", () => {
     const standard = rows.find((row) => row.label === "표준형");
 
     expect(standard?.id).toBe("gpt-image-2.5-flare");
-    expect(rows.find((row) => row.label === "경제형")?.id).toBe("nano-banana");
+    expect(rows.find((row) => row.id === "nano-banana")?.label).toBe("이전 방식");
   });
 
   /** 기본값이 무엇인지 화면에서 바로 보여야 한다. */

@@ -181,6 +181,27 @@ describe("격리 자물쇠 — 모델 능력", () => {
         batchMax: 4,
       },
       {
+        id: "nano-banana-pro",
+        isDefault: false,
+        supportedRatios: ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
+        pixelSizeLimits: null,
+        fixedResolution: "2K",
+        maxReferenceImages: 14,
+        batchMax: 4,
+      },
+      {
+        id: "nano-banana-2.1",
+        isDefault: false,
+        supportedRatios: [
+          "auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16",
+          "4:1", "1:4", "8:1", "1:8",
+        ],
+        pixelSizeLimits: null,
+        fixedResolution: "2K",
+        maxReferenceImages: 14,
+        batchMax: 4,
+      },
+      {
         id: "gpt-image-2.5-sunburst",
         isDefault: false,
         supportedRatios: null,
@@ -200,15 +221,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
         },
         fixedResolution: null,
         maxReferenceImages: 16,
-        batchMax: 4,
-      },
-      {
-        id: "nano-banana-pro",
-        isDefault: false,
-        supportedRatios: ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
-        pixelSizeLimits: null,
-        fixedResolution: "2K",
-        maxReferenceImages: 14,
         batchMax: 4,
       },
       {

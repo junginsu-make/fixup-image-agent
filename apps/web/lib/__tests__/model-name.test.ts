@@ -265,8 +265,8 @@ describe("회원 화면에 모델 이름이 없다", () => {
 
 describe("저장된 작업의 모델 이름", () => {
   it("아는 id 는 우리가 붙인 이름으로 나온다", () => {
-    expect(modelDisplayName("gpt-image-2")).toBe("정밀형");
-    expect(modelDisplayName("nano-banana")).toBe("경제형");
+    expect(modelDisplayName("gpt-image-2")).toBe("이전 방식");
+    expect(modelDisplayName("nano-banana")).toBe("이전 방식");
   });
 
   /** 은퇴한 모델로 만든 옛 작업이 남아 있다. 모른다고 원본을 내보내면 안 된다. */

@@ -67,6 +67,6 @@ describe("모델 대조표", () => {
 
     expect(rows.length).toBeGreaterThanOrEqual(6);
     expect(rows.map((row) => row.label)).toContain("표준형");
-    expect(rows.map((row) => row.label)).toContain("경제형");
+    expect(rows.map((row) => row.label)).toContain("이전 방식");
   });
 });

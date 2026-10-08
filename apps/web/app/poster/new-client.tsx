@@ -249,7 +249,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 죽어 있었다** — 사용자는 광고와 상관없어 보이는 문구만 봤다.
    */
   const submitRatio = effectiveRatio(adMode, ratio);
-  const choice = chooseModelForRatio(submitRatio, modelId, IMAGE_MODELS);
+  const choice = chooseModelForRatio(submitRatio, modelId);
   const estimate = estimatePosterCost({
     modelId: choice.model.id, ratioId: submitRatio, variants,
     hasReferences,

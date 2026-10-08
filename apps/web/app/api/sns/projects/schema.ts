@@ -85,6 +85,7 @@ export const ProjectInputSchema = z.object({
     "gpt-image-2.5-sunburst",
     "gpt-image-2",
     "nano-banana-pro",
+    "nano-banana-2.1",
     "nano-banana-2",
     "nano-banana",
   ]).default("gpt-image-2.5-flare"),

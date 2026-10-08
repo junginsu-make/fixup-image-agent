@@ -180,7 +180,7 @@ async function handlePost(request: Request, context: Context) {
      * (`chooseModelForRatio`)으로 바꾼다. 부모 모델을 모르면(옛 기록) 작업의 모델이다.
      */
     const parentModelId = await stores.requests.modelOf(parent.generationRequestId).catch(() => null);
-    const modelId = chooseModelForRatio(ratioId, parentModelId ?? project.modelId, IMAGE_MODELS).model.id;
+    const modelId = chooseModelForRatio(ratioId, parentModelId ?? project.modelId).model.id;
     /*
      * **새로 붙인 사진은 잘리게 두지 않는다**(2026-10-06 독립 리뷰). 고치기 조립은 한도를
      * 넘으면 뒤에서 자르는데(`edit-job.ts`), 새것은 이번 고치기의 핵심이라 잘리면 값만

@@ -370,7 +370,7 @@ describe("고치기는 처음 만들기와 같은 모델·크기로 값을 낸�
   it("고른 모델이 그 비율을 못 만들면 처음 만들기처럼 만들 수 있는 모델로 고친다", async () => {
     const { chooseModelForRatio, IMAGE_MODELS } = await import("@fixup/sns-core");
     project = { ...project, ratio: "a4-print", modelId: "nano-banana-pro" };
-    const choice = chooseModelForRatio("a4-print", "nano-banana-pro", IMAGE_MODELS);
+    const choice = chooseModelForRatio("a4-print", "nano-banana-pro");
     // 전제: 이 조합은 정말 바뀐다. 안 바뀌면 이 시험은 아무것도 안 잰다.
     expect(choice.switched).toBe(true);
 
@@ -489,7 +489,7 @@ describe("부모 모델이 그 비율을 못 만들면", () => {
     const { chooseModelForRatio, IMAGE_MODELS } = await import("@fixup/sns-core");
     const { creditUnits } = await import("@fixup/shared");
     parentRequestModel = "nano-banana";
-    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    const choice = chooseModelForRatio("a4-print", "nano-banana");
     // 전제: 정말 바뀌는 조합이다.
     expect(choice.switched).toBe(true);
 
