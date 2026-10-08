@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **283개**, 저장 기록(커밋, 합치기 제외) **1,071개**, 배포 꾸러미(릴리스) **238개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **284개**, 저장 기록(커밋, 합치기 제외) **1,073개**, 배포 꾸러미(릴리스) **240개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 35 | 236 | 46 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 36 | 238 | 48 |
 
 <a id="w-2026-08-31"></a>
 
@@ -504,8 +504,11 @@
 - 리디자인은 화면 전체를 덮던 진행 창 대신 위쪽 띠로 바뀌었습니다. 만드는 동안 단계를 옮길 수 없고, 화면을 떠나면 만들던 요청을 멈춥니다.
 - 상세페이지 이미지를 만드는 동안 화면을 아래로 내려도 진행 띠가 계속 보입니다.
 - 구글 서치 콘솔 등록을 위한 확인 값을 사이트에 넣었습니다.
+- 라이브러리 위쪽 탭과 아래 거르기 단추를 한 줄로 합쳤습니다. 캐릭터와 참고 이미지도 같은 줄에서 고릅니다.
+- 그림을 만들기 전에 멈춘 작업(크레딧이 나가지 않은 작업)은 라이브러리에 더 이상 빈 카드로 보이지 않습니다.
+- 광고소재로 뽑은 그림이 한 묶음으로 라이브러리에 저장됩니다. 창을 닫아도 「광고소재」에서 다시 보고 내려받습니다.
 
-**운영 배포 19회**
+**운영 배포 20회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -526,8 +529,9 @@
 - 10/8 `20261007T163905Z-110892a4` · [#298](https://github.com/junginsu-make/fixup-image-agent/pull/298)
 - 10/8 `20261007T170700Z-17550811` · [#302](https://github.com/junginsu-make/fixup-image-agent/pull/302)
 - 10/8 `20261008T013733Z-52126f57` · [#304](https://github.com/junginsu-make/fixup-image-agent/pull/304)
+- 10/8 `20261008T035018Z-b20d346b` · [#306](https://github.com/junginsu-make/fixup-image-agent/pull/306)
 
-<details><summary>이 주의 작업 묶음 35개</summary>
+<details><summary>이 주의 작업 묶음 36개</summary>
 
 
 **10/6**
@@ -573,6 +577,7 @@
 - [#299](https://github.com/junginsu-make/fixup-image-agent/pull/299) feat: 시간이 걸리는 단계 공통 표시 1차 — 카드뉴스·상세페이지 <sub>카드뉴스 · 상세페이지 · +1,249 / −181 · 운영 반영 10/8</sub>
 - [#302](https://github.com/junginsu-make/fixup-image-agent/pull/302) feat: 시간이 걸리는 단계 공통 표시 2차 — 다양하게·리디자인·캐릭터·광고 <sub>리디자인 · 캐릭터 · 광고 규격 · +824 / −218 · 운영 반영 10/8</sub>
 - [#304](https://github.com/junginsu-make/fixup-image-agent/pull/304) feat(seo): 구글 서치 콘솔 소유 확인 값 <sub>검색 노출 · +7 / −1 · 운영 반영 10/8</sub>
+- [#306](https://github.com/junginsu-make/fixup-image-agent/pull/306) feat: 라이브러리 거르기 한 줄·그림 없는 작업 숨김·광고소재 묶음 저장 <sub>광고 규격 · 라이브러리 · +1,042 / −145 · 운영 반영 10/8</sub>
 
 </details>
 
