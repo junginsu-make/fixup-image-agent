@@ -2,7 +2,7 @@ import { API_BASE_URL } from "./pdp-utils";
 import { randomId } from "../../lib/browser-safe";
 import type { CreateMode } from "./create-steps";
 import { productFactsFrom, type LandingPageBlueprint, type PageProduct } from "@fixup/pdp-core";
-import { productsKey, type PdpProductDraft } from "./products";
+import { keyDescribesSeveral, productsKey, type PdpProductDraft } from "./products";
 
 /**
  * **제품 원본은 한 번 올리고 주소로 쓴다**(설계 2026-10-08 §4).
@@ -69,10 +69,24 @@ async function keyOf(bytes: Uint8Array) {
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+/*
+  **도는 올리기를 나눈다**(최종 리뷰 I5). 캐시는 끝난 것만 안다 — 단건 생성을 거듭 누르거나
+  두 길이 겹치면 같은 사진이 동시에 두 번 올라갔다. 같은 열쇠는 도는 약속을 함께 기다린다.
+  실패한 약속은 끝나면 바로 빼므로 다음 물음이 다시 올린다.
+*/
 export function createProductPhotoUploader(deps: { post?: PostProductPhoto; now?: () => number } = {}) {
   const post = deps.post ?? postProductPhoto;
   const now = deps.now ?? Date.now;
   let cache: ReadonlyMap<string, { url: string; expiresAt: number }> = new Map();
+  let pending: ReadonlyMap<string, Promise<string>> = new Map();
+
+  const upload = async (key: string, bytes: Uint8Array, mimeType: string): Promise<string> => {
+    const result = await post(bytes, mimeType);
+    if (!result.ok) throw new ProductPhotoUploadError(result.message);
+    const expiresAt = result.expiresInMs !== undefined ? now() + result.expiresInMs : (result.expiresAt ?? now());
+    cache = new Map([...cache, [key, { url: result.url, expiresAt }]]);
+    return result.url;
+  };
 
   return {
     async urlFor(source: ProductPhotoSource): Promise<string> {
@@ -80,11 +94,13 @@ export function createProductPhotoUploader(deps: { post?: PostProductPhoto; now?
       const key = `${source.mimeType}:${await keyOf(bytes)}`;
       const cached = cache.get(key);
       if (cached && cached.expiresAt - now() > RENEW_BEFORE_MS) return cached.url;
-      const result = await post(bytes, source.mimeType);
-      if (!result.ok) throw new ProductPhotoUploadError(result.message);
-      const expiresAt = result.expiresInMs !== undefined ? now() + result.expiresInMs : (result.expiresAt ?? now());
-      cache = new Map([...cache, [key, { url: result.url, expiresAt }]]);
-      return result.url;
+      const inFlight = pending.get(key);
+      if (inFlight) return inFlight;
+      const started = upload(key, bytes, source.mimeType).finally(() => {
+        pending = new Map([...pending].filter(([each]) => each !== key));
+      });
+      pending = new Map([...pending, [key, started]]);
+      return started;
     },
   };
 }
@@ -195,20 +211,24 @@ export async function productRequestFields(input: ProductRequestInput): Promise<
   if (startMode === "text") return { originalImageBase64: fallbackBase64 };
   const filled = input.products.filter((product) => product.photos.length > 0);
   const known = input.analyzedProductsKey;
-  const matches = known !== undefined && known === productsKey(input.products);
-  if (isSingle(filled)) {
+  /*
+    분석이 여럿을 봤으면 지금 하나·한 장이어도 한 장 길로 가지 않는다(최종 리뷰 I1). 구성안의
+    섹션 배정이 뺀 제품을 가리키는데 남은 사진으로 그리게 된다 — 아래에서 멈춘다.
+  */
+  if (isSingle(filled) && !(known !== undefined && keyDescribesSeveral(known))) {
     /*
-      2단계 몸통 그대로. 바뀌었으면 원본을 넘기지 않아 분석한 1024 사본으로 만든다(R4).
-      열쇠가 없는 옛 작업은 2단계처럼 분석한 사진과 견준다(`photoForEditor`).
+      2단계 몸통 그대로. 분석한 사진(1024 사본)과 지금 사진을 직접 견준다(`photoForEditor`) —
+      같으면 원본, 바뀌었으면 원본을 넘기지 않아 분석한 1024 사본으로 만든다(R4). 열쇠 모양과
+      상관없이 견주므로 이름만 고쳤거나 열쇠 모양이 바뀐 옛 작업도 원본을 잃지 않는다(I2).
     */
-    const productPhoto = known === undefined || matches ? photoForEditor(filled[0]?.photos[0], fallbackBase64) : undefined;
+    const productPhoto = photoForEditor(filled[0]?.photos[0], fallbackBase64);
     return productImageFields({ startMode, productPhoto, fallbackBase64, uploader });
   }
   /*
     새 사진과 옛 구성안·판독이 섞이면 안 된다. 열쇠가 없으면 분석이 이 제품들을 못 봤다(옛 작업에
     사진을 더한 경우). 생성 전이라 크레딧은 안 나간다.
   */
-  if (!matches) throw new ProductPhotoUploadError(PRODUCTS_CHANGED_MESSAGE);
+  if (known === undefined || known !== productsKey(input.products)) throw new ProductPhotoUploadError(PRODUCTS_CHANGED_MESSAGE);
   const products = await pageProductsFor(filled, input.readings, uploader);
   const primary = products.find((product) => product.id === "p1") ?? products[0]!;
   return { productImageUrl: primary.imageUrls[0]!, products };

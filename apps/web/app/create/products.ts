@@ -149,16 +149,40 @@ export function productsReady(products: readonly PdpProductDraft[]): boolean {
  *
  * 사진마다 1024 사본 base64 의 길이와 끝 32자만 본다 — 만들 때마다 부르므로 해시를 돌리지
  * 않는다. 같은 크기로 다시 줄인 다른 사진이 끝 32자까지 같을 일은 사실상 없다.
- * 이름은 기획이 보는 값이라 넣는다(앞뒤 공백만 무시).
+ *
+ * **사진이 있는 칸의 id 와 사진만 넣는다**(최종 리뷰 I2). 이름을 넣었더니 분석 뒤 이름만 고쳐도
+ * 「사진이 바뀌었습니다」로 생성이 막혔고, 사진 없는 칸을 더하기만 해도 그랬다. 이름은 생성 요청에
+ * 지금 값으로 실린다(`pageProductsFor`). 모양: `[[id, [[길이, 끝32자], …]], …]`.
  */
 export function productsKey(products: readonly PdpProductDraft[]): string {
   return JSON.stringify(
-    products.map((product) => [
-      product.id,
-      product.name.trim(),
-      product.photos.map((photo) => [photo.base64.length, photo.base64.slice(-32)]),
-    ]),
+    products
+      .filter((product) => product.photos.length > 0)
+      .map((product) => [product.id, product.photos.map((photo) => [photo.base64.length, photo.base64.slice(-32)])]),
   );
+}
+
+/**
+ * 분석이 본 것이 **제품 둘 이상이거나 사진 둘 이상**이었는가 — 열쇠에서 읽는다(최종 리뷰 I1).
+ * 그랬다면 지금 목록이 하나·한 장이어도 한 장 길(R4)로 내려가면 안 된다. 섹션 배정이
+ * 사라진 제품을 가리키는데 남은 사진으로 그린다.
+ *
+ * 칸마다 사진 목록은 맨 끝 칸이다 — 이름을 넣던 옛 열쇠(`[id, 이름, 사진]`)도 같이 읽는다.
+ * 읽을 수 없는 열쇠는 「아니다」 — 그때는 한 장 길이 분석한 사진과 직접 견준다(`photoForEditor`).
+ */
+export function keyDescribesSeveral(key: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(key);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(parsed)) return false;
+  const photoCounts = parsed.map((entry) => {
+    const photos = Array.isArray(entry) ? entry[entry.length - 1] : undefined;
+    return Array.isArray(photos) ? photos.length : 0;
+  });
+  return photoCounts.filter((count) => count > 0).length > 1 || photoCounts.some((count) => count > 1);
 }
 
 /**

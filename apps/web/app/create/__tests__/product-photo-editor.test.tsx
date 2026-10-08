@@ -149,6 +149,56 @@ describe("제품 원본 올리기와 생성 요청", () => {
   });
 });
 
+/**
+ * **단건 생성도 올리는 동안 「만드는 중」이다**(최종 리뷰 I5). 원본 올리기는 수 초 걸린다 —
+ * 그동안 잠금·표시가 없으면 다시 누르거나 다른 섹션을 눌러 같은 사진을 또 올렸다.
+ */
+describe("단건 생성 — 원본을 올리는 동안", () => {
+  it("올리기를 기다리는 동안 만드는 중이고, 올리기가 실패하면 만드는 중이 남지 않는다", async () => {
+    let 대답!: (response: Response) => void;
+    vi.stubGlobal("fetch", () => new Promise<Response>((resolve) => { 대답 = resolve; }));
+    await act(async () => {
+      renderer = create(
+        <PdpEditor
+          initialResult={결과를(2)}
+          characterAngles={[]}
+          aspectRatio="3:4"
+          desiredTone=""
+          onReset={() => {}}
+          onSectionsChange={() => {}}
+          products={한제품}
+          analyzedProductsKey={productsKey(한제품)}
+        />,
+      );
+    });
+    const 생성 = renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "생성");
+    expect(생성[0], "단건 생성 단추를 못 찾았다").toBeTruthy();
+    await act(async () => {
+      생성[0]!.props.onClick();
+    });
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    // 아직 올리는 중 — 카드의 「생성」 단추가 모두 잠겨 있어야 한다(만드는 중 표시와 같은 기준).
+    const 카드생성 = () => renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "생성");
+    expect(카드생성().map((button) => button.props.disabled), "올리는 동안 만드는 중이 아니다").toEqual([true, true]);
+
+    await act(async () => {
+      대답(new Response(JSON.stringify({ ok: false, message: "이미지 용량이 너무 큽니다." }), { status: 413, headers: { "content-type": "application/json" } }));
+    });
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    expect(captured.calls.filter((call) => call.path.startsWith("/pdp/images"))).toEqual([]);
+    expect(그려진글()).toContain("이미지 용량이 너무 큽니다.");
+    expect(카드생성().map((button) => Boolean(button.props.disabled))).toEqual([false, false]);
+  });
+});
+
 describe("여러 제품 작업의 생성 요청과 뺀 장수(설계 §6.1·§6.2)", () => {
   const 두제품: PdpProductDraft[] = [
     { id: "p1", name: "레몬맛", photos: [사진칸("QUJD"), 사진칸("QUJE")] },

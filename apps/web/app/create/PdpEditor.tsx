@@ -1691,6 +1691,9 @@ export function PdpEditor({
       return { ok: false, stopBatch: true };
     }
 
+    // 원본 올리기(수 초)부터 「만드는 중」이다(최종 리뷰 I5) — 그동안 다른 생성을 막고 카드에 보인다.
+    setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
+    setInFlightKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     let productRequest: Awaited<ReturnType<typeof productRequestFields>>;
     try {
       productRequest = await productRequestFields({
@@ -1703,13 +1706,13 @@ export function PdpEditor({
       });
     } catch (error) {
       // 조용히 낮은 화질로 내려가지 않는다(설계 §4.6). 생성 전이라 크레딧은 안 나갔다.
+      setGeneratingKeys((current) => current.filter((key) => key !== sectionKey));
+      setInFlightKeys((current) => current.filter((key) => key !== sectionKey));
       setErrorMessage(productPhotoErrorMessage(error));
       return { ok: false, stopBatch: true };
     }
     // 제품이 여럿이면 `products` 는 페이지 칸으로 간다(설계 §4.5).
     const { products: pageProducts, ...productFields } = productRequest;
-    setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
-    setInFlightKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
     const requestKey = retryRequestKeysRef.current[sectionKey] ?? randomId();
     retryRequestKeysRef.current[sectionKey] = requestKey;

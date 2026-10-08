@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addPhotos,
   addProduct,
+  keyDescribesSeveral,
   makePrimary,
   normalizeProducts,
   primaryPhoto,
@@ -136,14 +137,30 @@ describe("만들 준비", () => {
 });
 
 describe("분석 일치 열쇠", () => {
-  it("같은 목록이면 같고, 이름·사진·차례가 바뀌면 다르다", () => {
+  it("같은 목록이면 같고, 사진·차례가 바뀌면 다르다", () => {
     const { products } = addPhotos(one, "p1", [photo("b")]);
     const key = productsKey(products);
     expect(productsKey(structuredClone(products))).toBe(key);
-    expect(productsKey(renameProduct(products, "p1", "레몬"))).not.toBe(key);
     expect(productsKey(makePrimary(products, "p1", 1))).not.toBe(key);
     expect(productsKey(removePhoto(products, "p1", 1))).not.toBe(key);
-    expect(productsKey(addProduct(products))).not.toBe(key);
+    expect(productsKey(addPhotos(products, "p1", [photo("c")]).products)).not.toBe(key);
+  });
+  // 최종 리뷰 I2: 이름을 고치거나 빈 칸을 더했다고 「사진이 바뀌었다」며 생성을 막지 않는다.
+  it("이름을 고치거나 사진 없는 칸을 더해도 같다", () => {
+    const { products } = addPhotos(one, "p1", [photo("b")]);
+    const key = productsKey(products);
+    expect(productsKey(renameProduct(products, "p1", "레몬"))).toBe(key);
+    expect(productsKey(addProduct(products))).toBe(key);
+  });
+  it("사진이 몇 장·몇 제품이었는지 열쇠에서 읽는다 — 옛 열쇠(이름 포함)도", () => {
+    const two: PdpProductDraft[] = [...one, { id: "p2", name: "", photos: [photo("z")] }];
+    expect(keyDescribesSeveral(productsKey(one))).toBe(false);
+    expect(keyDescribesSeveral(productsKey(addProduct(one)))).toBe(false);
+    expect(keyDescribesSeveral(productsKey(two))).toBe(true);
+    expect(keyDescribesSeveral(productsKey(addPhotos(one, "p1", [photo("b")]).products))).toBe(true);
+    expect(keyDescribesSeveral(JSON.stringify([["p1", "레몬", [[8, "a"]]], ["p2", "", []]]))).toBe(false);
+    expect(keyDescribesSeveral(JSON.stringify([["p1", "레몬", [[8, "a"]]], ["p2", "", [[8, "b"]]]]))).toBe(true);
+    expect(keyDescribesSeveral("옛 열쇠")).toBe(false);
   });
   it("길이가 같아도 사진 base64 끝이 다르면 다르다", () => {
     const other: PdpProductDraft[] = [{ id: "p1", name: "", photos: [{ ...photo("a"), base64: "a-BASE6Y" }] }];

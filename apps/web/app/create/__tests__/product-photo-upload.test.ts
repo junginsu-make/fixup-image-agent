@@ -82,6 +82,45 @@ describe("제품 원본 올리기", () => {
     }
   });
 
+  // 최종 리뷰 I5: 단건 생성을 두 번 누르거나 편집기·일괄이 겹치면 같은 사진이 동시에 두 번 올라갔다.
+  it("같은 사진을 동시에 물으면 한 번만 올리고 같은 주소를 나눈다", async () => {
+    let 올린수 = 0;
+    let 끝내기!: () => void;
+    const 문 = new Promise<void>((resolve) => { 끝내기 = resolve; });
+    const uploader = createProductPhotoUploader({
+      post: async () => { 올린수 += 1; await 문; return { ok: true as const, url: "https://v3.fal.media/files/1.jpg", expiresInMs: 3600000 }; },
+    });
+    const 둘 = Promise.all([uploader.urlFor(사진), uploader.urlFor(사진)]);
+    // 둘 다 지문을 다 잴 때까지 첫 올리기를 붙잡아 둔다 — 먼저 끝나 캐시에 들어가면 겹침이 아니다.
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    끝내기();
+    expect(await 둘).toEqual(["https://v3.fal.media/files/1.jpg", "https://v3.fal.media/files/1.jpg"]);
+    expect(올린수).toBe(1);
+  });
+
+  it("실패한 올리기는 붙잡아 두지 않는다 — 다음 물음이 다시 올린다", async () => {
+    let 올린수 = 0;
+    let 끝내기!: () => void;
+    const 문 = new Promise<void>((resolve) => { 끝내기 = resolve; });
+    const uploader = createProductPhotoUploader({
+      post: async () => {
+        올린수 += 1;
+        await 문;
+        return 올린수 === 1
+          ? { ok: false as const, message: "잠시 뒤 다시" }
+          : { ok: true as const, url: "https://v3.fal.media/files/2.jpg", expiresInMs: 3600000 };
+      },
+    });
+    const 겹친둘 = Promise.allSettled([uploader.urlFor(사진), uploader.urlFor(사진)]);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    끝내기();
+    const 동시 = await 겹친둘;
+    expect(동시.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    expect(올린수).toBe(1);
+    expect(await uploader.urlFor(사진)).toBe("https://v3.fal.media/files/2.jpg");
+    expect(올린수).toBe(2);
+  });
+
   it("서버가 거절하면 그 문구로 멈춘다", async () => {
     const uploader = createProductPhotoUploader({ post: async () => ({ ok: false as const, message: "이미지 용량이 너무 큽니다." }) });
     await expect(uploader.urlFor(사진)).rejects.toThrow(ProductPhotoUploadError);
@@ -221,6 +260,72 @@ describe("생성 요청의 제품 칸 — 여러 제품·여러 각도(설계 §
       .toEqual({ productImageUrl: "https://v3.fal.media/files/BIG" });
     expect(await productRequestFields({ startMode: "image", products: same, fallbackBase64: "OTHER", uploader }))
       .toEqual({ productImageUrl: "https://v3.fal.media/files/OTHER" });
+  });
+
+  /*
+    최종 리뷰 I1: 여럿을 분석한 뒤 제품 하나·사진 하나로 줄였다. 지금 목록만 보면 R4 한 장 길로
+    가서 `page.products` 를 안 보내고, product_ids:["p2"] 섹션이 p1 사진으로 그려진다.
+  */
+  it("제품 둘을 분석한 뒤 제품 하나·사진 하나로 줄이면 멈춘다", async () => {
+    const { uploader, seen } = 기록();
+    const 분석때 = [
+      { id: "p1" as const, name: "", photos: [사진칸("L1", "L1BIG")] },
+      { id: "p2" as const, name: "", photos: [사진칸("G1")] },
+    ];
+    const 지금 = [분석때[0]!];
+    await expect(productRequestFields({
+      startMode: "image", products: 지금, analyzedProductsKey: productsKey(분석때), fallbackBase64: "L1", uploader,
+    })).rejects.toThrow(PRODUCTS_CHANGED_MESSAGE);
+    expect(seen).toEqual([]);
+  });
+
+  it("사진 둘을 분석한 뒤 한 장으로 줄여도 멈춘다", async () => {
+    const { uploader, seen } = 기록();
+    const 분석때 = [{ id: "p1" as const, name: "", photos: [사진칸("L1", "L1BIG"), 사진칸("L2")] }];
+    const 지금 = [{ ...분석때[0]!, photos: [분석때[0]!.photos[0]!] }];
+    await expect(productRequestFields({
+      startMode: "image", products: 지금, analyzedProductsKey: productsKey(분석때), fallbackBase64: "L1", uploader,
+    })).rejects.toThrow(PRODUCTS_CHANGED_MESSAGE);
+    expect(seen).toEqual([]);
+  });
+
+  // 최종 리뷰 I2: 열쇠는 사진만 본다 — 이름을 고치거나 빈 칸을 더한 것으로 멈추지 않는다.
+  it("제품 둘 — 분석 뒤 이름만 고치거나 빈 칸을 더해도 만든다", async () => {
+    const { uploader } = 기록();
+    const 분석때 = [
+      { id: "p1" as const, name: "레몬맛", photos: [사진칸("L1", "L1BIG")] },
+      { id: "p2" as const, name: "", photos: [사진칸("G1")] },
+    ];
+    const key = productsKey(분석때);
+    const 이름고침 = [{ ...분석때[0]!, name: "레몬 에이드" }, 분석때[1]!];
+    const renamed = await productRequestFields({ startMode: "image", products: 이름고침, analyzedProductsKey: key, fallbackBase64: "L1", uploader });
+    expect(renamed.products?.map((product) => product.name)).toEqual(["레몬 에이드", undefined]);
+    const 빈칸 = [...분석때, { id: "p3" as const, name: "", photos: [] }];
+    const withEmpty = await productRequestFields({ startMode: "image", products: 빈칸, analyzedProductsKey: key, fallbackBase64: "L1", uploader });
+    expect(withEmpty.products?.map((product) => product.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("제품 둘 — 분석 뒤 사진을 바꾸면 멈춘다", async () => {
+    const { uploader } = 기록();
+    const 분석때 = [
+      { id: "p1" as const, name: "", photos: [사진칸("L1")] },
+      { id: "p2" as const, name: "", photos: [사진칸("G1")] },
+    ];
+    const 사진바꿈 = [분석때[0]!, { ...분석때[1]!, photos: [사진칸("G2")] }];
+    await expect(productRequestFields({
+      startMode: "image", products: 사진바꿈, analyzedProductsKey: productsKey(분석때), fallbackBase64: "L1", uploader,
+    })).rejects.toThrow(PRODUCTS_CHANGED_MESSAGE);
+  });
+
+  it("제품 하나·사진 하나 — 이름을 고쳐도, 옛 모양 열쇠(이름 포함)여도 원본을 쓴다", async () => {
+    const { uploader } = 기록();
+    const 지금 = [{ id: "p1" as const, name: "레몬 에이드", photos: [사진칸("SMALL", "BIG")] }];
+    const 옛열쇠 = JSON.stringify([["p1", "레몬맛", [[5, "SMALL"]]]]);
+    expect(await productRequestFields({ startMode: "image", products: 지금, analyzedProductsKey: 옛열쇠, fallbackBase64: "SMALL", uploader }))
+      .toEqual({ productImageUrl: "https://v3.fal.media/files/BIG" });
+    const 분석때 = [{ ...지금[0]!, name: "레몬맛" }];
+    expect(await productRequestFields({ startMode: "image", products: 지금, analyzedProductsKey: productsKey(분석때), fallbackBase64: "SMALL", uploader }))
+      .toEqual({ productImageUrl: "https://v3.fal.media/files/BIG" });
   });
 
   it("묶음용은 사용자 문구로 바꿔 던진다", async () => {
