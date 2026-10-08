@@ -377,3 +377,47 @@ describe("제품 사실", () => {
     expect(options.productFacts).toEqual(facts);
   });
 });
+
+describe("섹션 제품을 페이지 값에서 고른다", () => {
+  const p1 = { id: "p1" as const, imageUrls: ["https://fal/a.jpg"] };
+  const p2 = { id: "p2" as const, imageUrls: ["https://fal/b.jpg"] };
+  const secWith = (product_ids?: string[]) => ({ ...section("s1"), product_ids }) as unknown as SectionBlueprint;
+
+  it("섹션 product_ids 가 [p2] 면 옵션 products 는 p2 하나다", () => {
+    const options = buildSectionImageOptions({ products: [p1, p2] }, target({ section: secWith(["p2"]) }));
+    expect(options.products).toEqual([p2]);
+  });
+
+  it("배정이 없으면 모든 제품이다", () => {
+    const options = buildSectionImageOptions({ products: [p1, p2] }, target({ section: secWith(undefined) }));
+    expect(options.products).toEqual([p1, p2]);
+  });
+
+  it("페이지에 products 가 없으면 옵션 products 도 없다", () => {
+    const options = buildSectionImageOptions({}, target({ section: secWith(["p2"]) }));
+    expect(options.products).toBeUndefined();
+  });
+
+  it("페이지 products 가 없는데 클라이언트가 options.products 를 끼워 보내도 버린다", () => {
+    const smuggled = [{ id: "p1", imageUrls: ["https://evil/x.jpg"] }];
+    const options = buildSectionImageOptions(
+      {},
+      target({ options: { products: smuggled } as unknown as SectionImageTarget["options"] }),
+    );
+    expect(options.products).toBeUndefined();
+  });
+
+  it("페이지 products 가 있으면 클라이언트가 보낸 options.products 는 무시한다", () => {
+    const smuggled = [{ id: "p1", imageUrls: ["https://evil/x.jpg"] }];
+    const options = buildSectionImageOptions(
+      { products: [p1, p2] },
+      target({ section: secWith(["p2"]), options: { products: smuggled } as unknown as SectionImageTarget["options"] }),
+    );
+    expect(options.products).toEqual([p2]);
+  });
+
+  it("전선 값의 products 가 페이지 입력으로 건너간다", () => {
+    expect(pageInputsFromWire({ products: [p1] }).products).toEqual([p1]);
+    expect(pageInputsFromWire({}).products).toBeUndefined();
+  });
+});
