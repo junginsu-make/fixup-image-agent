@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitProductPhotos, normalizeProductIds, productLabel, productsForSection } from "./pdp.products";
+import { anchorsFromProducts, fitProductPhotos, normalizeProductIds, productLabel, productsForSection } from "./pdp.products";
 
 const p = (id: "p1" | "p2" | "p3", n: number) => ({ id, imageUrls: Array.from({ length: n }, (_, i) => `${id}-${i}`) });
 
@@ -50,5 +50,17 @@ describe("이름", () => {
   it("비면 제품 N", () => {
     expect(productLabel({ id: "p2" })).toBe("제품 2");
     expect(productLabel({ id: "p1", name: " 레몬맛 " })).toBe("레몬맛");
+  });
+});
+
+/** 이름표는 코어도 30자(코드 포인트)로 자른다 — 서버 검증을 거치지 않은 호출도 길게 싣지 않는다(보안 리뷰 L3). */
+describe("제품 이름표 길이", () => {
+  it("31자 이름은 30자로 잘라 이름표에 싣는다", () => {
+    const refs = anchorsFromProducts([
+      { id: "p1", name: "가".repeat(31), imageUrls: ["u1"] },
+      { id: "p2", name: "😀".repeat(31), imageUrls: ["u2"] },
+    ]);
+    expect(refs[0]!.product!.label).toBe(`PRODUCT 1 ${JSON.stringify("가".repeat(30))}`);
+    expect(refs[1]!.product!.label).toBe(`PRODUCT 2 ${JSON.stringify("😀".repeat(30))}`);
   });
 });

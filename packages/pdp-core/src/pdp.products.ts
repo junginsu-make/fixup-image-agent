@@ -94,7 +94,8 @@ export function fitSectionProducts(
 export function anchorsFromProducts(products: readonly PageProduct[], intent?: string): ReferenceImage[] {
   const single = products.length === 1 && products[0]!.imageUrls.length === 1;
   return products.flatMap((product, productIndex) => {
-    const name = product.name?.trim();
+    // 서버가 30자로 묶지만 코어도 자른다(보안 리뷰 L3 — 이중 잠금). 이모지가 반으로 갈리지 않게 코드 포인트로.
+    const name = Array.from(product.name?.trim() ?? "").slice(0, PRODUCT_LIMITS.nameChars).join("");
     // 이름은 따옴표로 감싼다(JSON) — 줄바꿈·따옴표가 섞여도 이름표 밖으로 새지 않는다.
     const label = `PRODUCT ${productIndex + 1}${name ? ` ${JSON.stringify(name)}` : ""}`;
     return product.imageUrls.map((url, viewIndex): ReferenceImage => ({

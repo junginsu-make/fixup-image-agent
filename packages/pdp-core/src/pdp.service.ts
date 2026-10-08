@@ -1033,8 +1033,8 @@ ${analyzePrompt}`
         // 적힌 번호와 실제 첨부 순서가 갈라진다 — 한쪽만 고치는 날 조용히 어긋난다.
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
           prompt,
-          // 제품이 실릴 때만 한 줄. Nano Banana Pro 는 이 문장을 system_prompt 로 받는다.
-          systemPrompt: [buildImageSystemPrompt(promptOptions), groups.length ? productFidelitySystemLine(anchorRole) : ""]
+          // 제품이 실릴 때만 한 줄. Nano Banana Pro 는 이 문장을 system_prompt 로 받는다. 제품이 여럿이면 여럿을 말한다.
+          systemPrompt: [buildImageSystemPrompt(promptOptions), groups.length ? productFidelitySystemLine(anchorRole, groups.length) : ""]
             .filter(Boolean)
             .join(" "),
           aspectRatio: request.aspectRatio,

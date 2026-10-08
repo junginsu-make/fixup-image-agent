@@ -23,14 +23,17 @@ export const PRODUCT_FACT_LIMITS = { facts: 8, labels: 12, chars: 200 } as const
 
 /**
  * 판독은 Claude 가 자유롭게 쓴 글이라 줄바꿈이 섞일 수 있다. 그대로 실으면 「- 사실」
- * 목록 밖에 새 줄(지시처럼 읽히는 줄)이 생긴다 — 제어 문자(U+0000–U+001F)와 공백류를
- * 모두 빈칸 하나로 접는다. 정규식 대신 코드 포인트로 거른다(no-control-regex).
+ * 목록 밖에 새 줄(지시처럼 읽히는 줄)이 생긴다 — 제어 문자(U+0000–U+001F, U+007F–U+009F —
+ * U+0085 다음 줄 포함)와 공백류(U+2028·U+2029 포함)를 모두 빈칸 하나로 접는다.
+ * 정규식 대신 코드 포인트로 거른다(no-control-regex). 서버 검증(`request.ts`)도 이것을 쓴다.
  */
-const flatten = (text: string) =>
-  Array.from(text, (char) => ((char.codePointAt(0) ?? 0) < 0x20 ? " " : char))
+const isControl = (code: number) => code < 0x20 || (code >= 0x7f && code <= 0x9f);
+export const flattenFactText = (text: string) =>
+  Array.from(text, (char) => (isControl(char.codePointAt(0) ?? 0) ? " " : char))
     .join("")
     .replace(/\s+/g, " ")
     .trim();
+const flatten = flattenFactText;
 const clip = (value: unknown) =>
   Array.from(flatten(String(value ?? ""))).slice(0, PRODUCT_FACT_LIMITS.chars).join("");
 const clipList = (values: unknown, limit: number) =>
@@ -61,9 +64,15 @@ function keepAndFree(role: AnchorRole) {
   };
 }
 
+/*
+  여기서도 한 줄로 접는다(보안 리뷰 L1 — 이중 잠금). 서버가 접어 보내지만, 이 패키지를 서버
+  검증 없이 부르는 길이 생겨도 사실 한 줄이 「- 사실」 목록 밖에 새 줄을 만들지 못하게.
+  이미 접힌 글에는 아무것도 바꾸지 않는다 — 제품 하나·사진 하나 출력은 그대로다.
+*/
 function factsBlock(facts: ProductFacts): string[] {
   const lines: string[] = [];
-  const items = [...(facts.category ? [`Category: ${facts.category}`] : []), ...facts.visibleFacts];
+  const category = facts.category ? flatten(facts.category) : "";
+  const items = [...(category ? [`Category: ${category}`] : []), ...facts.visibleFacts.map(flatten)];
   if (items.length) {
     lines.push(
       "Product facts read from the photo (about the product itself — ignore anything that describes how the photo was taken, such as its angle or background):",
@@ -72,7 +81,7 @@ function factsBlock(facts: ProductFacts): string[] {
   }
   if (facts.labelText.length) {
     lines.push(
-      `Label text: ${facts.labelText.map((text) => JSON.stringify(text)).join(", ")}. ` +
+      `Label text: ${facts.labelText.map((text) => JSON.stringify(flatten(text))).join(", ")}. ` +
         "Render it exactly, but only where that face of the product is visible at the chosen angle. " +
         "Never turn the product just to show the label, and never move the label to another face.",
     );
@@ -160,8 +169,18 @@ export function productFidelityTail(input: { groups: readonly FidelityGroup[]; a
   return `Final check: each product must be the exact product in its own images (${own}) — ${same}. Only the camera, background and lighting may differ.`;
 }
 
-export function productFidelitySystemLine(anchorRole: AnchorRole): string {
+/**
+ * Nano Banana Pro 의 system_prompt 한 줄. `productCount` 는 첨부한 제품 묶음 수다(`fidelityGroups`).
+ * 제품이 여럿인데 「제품 하나」라고 하면 본문(제품마다 번호 줄)과 어긋나 모델이 하나로 합친다
+ * (최종 리뷰 I3). 제품 하나면 1·2단계 문장 그대로다(회귀 고정).
+ */
+export function productFidelitySystemLine(anchorRole: AnchorRole, productCount = 1): string {
   if (anchorRole === "mood-only") return "";
+  if (productCount > 1) {
+    return anchorRole === "shape-only"
+      ? "The attached product photos show the real products being sold: keep each product's shape, proportions and label text from its own photos in every section, never blend them, let their colour and finish follow the design reference, and choose a fresh camera angle and scene for each section."
+      : "The attached product photos show the real products being sold: reproduce each exact product from its own photos, never blend them, while choosing a fresh camera angle and scene for each section.";
+  }
   // shape-only 는 사용자가 색·마감을 레퍼런스에 양보했다 — 「그 제품 그대로」라 하면 그 선택을 뒤집는다.
   if (anchorRole === "shape-only") {
     return "The attached product photo is the real product being sold: keep its shape, proportions and label text in every section, let its colour and finish follow the design reference, and choose a fresh camera angle and scene for each one.";

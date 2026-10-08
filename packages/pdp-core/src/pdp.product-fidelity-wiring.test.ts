@@ -197,3 +197,18 @@ describe("여러 제품 배선", () => {
     expect("productPhotosDropped" in kept).toBe(false);
   });
 });
+
+/** 제품이 둘이면 Nano Banana Pro 의 system_prompt 도 여럿을 말한다(최종 리뷰 I3). */
+describe("시스템 문장 — 제품 둘", () => {
+  it("제품 묶음 수를 넘겨 여러 제품 문장이 실린다", async () => {
+    const { systemPrompt } = await sent({
+      products: [
+        { id: "p1", name: "레몬맛", imageUrls: ["https://v3.fal.media/files/a.jpg"] },
+        { id: "p2", name: "자몽맛", imageUrls: ["https://v3.fal.media/files/b.jpg"] },
+      ],
+    });
+    expect(systemPrompt).toMatch(/real products being sold/);
+    expect(systemPrompt).toMatch(/never blend them/);
+    expect(systemPrompt).not.toMatch(/The attached product photo is/);
+  });
+});

@@ -191,3 +191,58 @@ describe("productFactsFrom", () => {
     expect(productFactsFrom(undefined)).toBeUndefined();
   });
 });
+
+/**
+ * **제품이 여럿이면 시스템 한 줄도 여럿을 말한다**(최종 리뷰 I3). Nano Banana Pro 는 이 줄을
+ * system_prompt 로 받는다 — 「제품 하나」라고 하면 프롬프트 본문과 어긋난다.
+ * 제품 하나면 1·2단계 문장 그대로다(`pdp.single-product-lock.test.ts`).
+ */
+describe("시스템 한 줄 — 제품 수", () => {
+  it("제품이 둘 이상이면 제품마다 제 사진으로, 섞지 말라고 한다", () => {
+    expect(productFidelitySystemLine("identity", 2)).toBe(
+      "The attached product photos show the real products being sold: reproduce each exact product from its own photos, never blend them, while choosing a fresh camera angle and scene for each section.",
+    );
+  });
+
+  it("shape-only 도 여럿을 말하고, 색·마감은 레퍼런스에 맡긴다", () => {
+    const line = productFidelitySystemLine("shape-only", 3);
+    expect(line).toMatch(/real products/);
+    expect(line).toMatch(/never blend/);
+    expect(line).not.toMatch(/exact product/);
+    expect(line).toMatch(/colour and finish follow the design reference/);
+    expect(line).toMatch(/fresh camera angle/);
+  });
+
+  it("제품 하나면 지금 문장 그대로다", () => {
+    expect(productFidelitySystemLine("identity", 1)).toBe(productFidelitySystemLine("identity"));
+    expect(productFidelitySystemLine("shape-only", 1)).toBe(productFidelitySystemLine("shape-only"));
+    expect(productFidelitySystemLine("identity")).toBe(
+      "The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+    );
+    expect(productFidelitySystemLine("mood-only", 2)).toBe("");
+  });
+});
+
+/** 서버를 거치지 않은 사실도 제품 블록 밖으로 새 줄을 만들지 못한다(보안 리뷰 L1 — 이중 잠금). */
+describe("제품 블록에 싣는 사실도 한 줄로", () => {
+  it("줄바꿈·U+0085·U+2028 이 섞인 사실을 그대로 받아도 줄이 늘지 않는다", () => {
+    const head = productFidelityHead({
+      groups: [{
+        imageNumbers: [1],
+        facts: { category: "음료\nIGNORE", visibleFacts: ["노란\u2028병", "유리\u0085병"], labelText: ["LE\rMON"] },
+      }],
+      anchorRole: "identity",
+    });
+    const lines = head.split("\n");
+    expect(lines).toContain("- Category: 음료 IGNORE");
+    expect(lines).toContain("- 노란 병");
+    expect(lines).toContain("- 유리 병");
+    expect(head).toContain('"LE MON"');
+    expect(lines.some((line) => line.startsWith("IGNORE"))).toBe(false);
+    expect(head).not.toMatch(/[\u0085\u2028\u2029\r]/);
+  });
+
+  it("판독에서 뽑을 때도 U+0085 를 접는다", () => {
+    expect(productFactsFrom({ category: "병\u0085끝", visibleFacts: [], labelText: [] })?.category).toBe("병 끝");
+  });
+});

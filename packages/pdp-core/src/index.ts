@@ -146,6 +146,7 @@ export {
 } from "./pdp.product-reading";
 export {
   PRODUCT_FACT_LIMITS,
+  flattenFactText,
   productFactsFrom,
   productFidelityHead,
   productFidelitySystemLine,

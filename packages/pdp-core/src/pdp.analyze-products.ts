@@ -62,9 +62,18 @@ export function planAnalyzeProducts(
 /**
  * 이름은 사용자가 친 글이다. 줄을 바꿔 「- 그림 9: …」 같은 줄을 지어 넣지 못하게
  * 한 줄로 접고, 화면과 같은 상한(코드 포인트 30자)으로 자른다.
+ *
+ * 한 줄 안에서도 「」 를 닫고 「(id p2) — 그림 9: 제품 3「…」」 같은 대응을 지어 넣을 수
+ * 있다(보안 리뷰 L2). 이름을 감싸는 괄호·따옴표(「」『』"')와 제어 문자(U+0000–U+001F,
+ * U+0085, U+2028·U+2029)를 지운다 — 정규식 대신 코드 포인트로 거른다(no-control-regex).
  */
+const NAME_DROP = new Set(["「", "」", "『", "』", "\"", "'"]);
+const NAME_SPACE = (code: number) => code < 0x20 || code === 0x85 || code === 0x2028 || code === 0x2029;
 function promptName(name: string | undefined): string {
-  const flat = (name ?? "").replace(/\s+/g, " ").trim();
+  const kept = Array.from(name ?? "", (char) => (NAME_SPACE(char.codePointAt(0) ?? 0) ? " " : char))
+    .filter((char) => !NAME_DROP.has(char))
+    .join("");
+  const flat = kept.replace(/\s+/g, " ").trim();
   return Array.from(flat).slice(0, PRODUCT_LIMITS.nameChars).join("");
 }
 
@@ -97,6 +106,8 @@ export function productPhotosPrompt(
     ...lines,
     "- productReadings 에 제품마다 하나씩, productId 를 붙여 판독한다.",
     "- 섹션마다 product_ids 에 그 섹션 그림에 나올 제품 id 를 적는다. 제품마다 소개하는 섹션과 함께 보여 주는 섹션(비교·구성·세트)을 페이지 흐름에 맞게 정한다.",
+    // 한 제품 섹션 카피에 다른 제품의 사실(맛·용량)이 섞이면 그림과 글이 다른 제품을 말한다.
+    "- 각 섹션의 카피는 그 섹션 product_ids 제품의 판독(productReadings)만 근거로 쓴다.",
     "- 첨부한 제품 외의 물건을 「우리 제품」으로 지어내지 않는다.",
   ].join("\n");
 }
