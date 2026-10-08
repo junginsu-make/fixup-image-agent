@@ -1,3 +1,4 @@
+import { VISIBLE_IMAGE_MODEL_IDS, imageModelSummary } from "@fixup/shared";
 import { IMAGE_MODELS, unitPrice, type ImageModel } from "@fixup/sns-core";
 
 /**
@@ -54,13 +55,16 @@ export interface ModelChoice {
 
 const DEFAULT_SIZE = { width: 1024, height: 1536 };
 
+const [표준ID, 디테일ID, 속도ID] = VISIBLE_IMAGE_MODEL_IDS;
+const 요약 = { 표준: imageModelSummary(표준ID!), 디테일: imageModelSummary(디테일ID!), 속도: imageModelSummary(속도ID!) };
+
 const NOTES: Record<string, string> = {
   // 빠진 모델은 LLM 에게 성질 없이 이름과 값만 간다 — 안 골라지거나 잘못 골라진다.
-  "gpt-image-2.5-flare": "표준형. 어떤 그림이든 고르게 잘 만들고, 글자가 많은 그림에서 한글을 정확하게 그립니다. 픽셀 크기를 직접 지정할 수 있어 인쇄용·비표준 규격에 쓸 수 있습니다. 참고 그림을 가장 많이(16장) 받습니다.",
+  [표준ID!]: `${요약.표준} 픽셀 크기를 직접 지정할 수 있어 인쇄용·비표준 규격에 쓸 수 있습니다. 참고 그림을 가장 많이(16장) 받습니다.`,
   "gpt-image-2.5-sunburst": "flare 와 같은 화질·값이지만 글자 배치 지시를 더 잘 지킵니다. 대신 두 배 느립니다. 장수가 많으면 flare 를 쓰세요.",
   "gpt-image-2": "픽셀 크기를 직접 지정할 수 있어 인쇄용·비표준 규격에 쓸 수 있습니다. 참고 그림을 가장 많이(16장) 받습니다.",
-  "nano-banana-pro": "디테일형. 질감과 인물 표현이 섬세하고, 여러 장에서 같은 인물을 일관되게 유지합니다. 값이 한 장에 고정이라 큰 그림에서 유리합니다.",
-  "nano-banana-2.1": "속도형. 고른 품질로 여러 장을 빠르게 만듭니다. 참고 그림을 많이 받을 수 있습니다.",
+  [디테일ID!]: `${요약.디테일} 값이 한 장에 고정이라 큰 그림에서 유리합니다.`,
+  [속도ID!]: 요약.속도,
   "nano-banana-2": "지원하는 비율이 가장 넓습니다(4:1, 8:1 같은 띠 모양 포함).",
   "nano-banana": "가장 쌉니다. 대신 참고 그림 7장까지, 한 번에 한 장씩입니다.",
 };

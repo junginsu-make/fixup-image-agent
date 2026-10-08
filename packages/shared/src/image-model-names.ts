@@ -15,30 +15,35 @@ export interface ImageModelName {
   name: string;
   /** 마우스를 올리면 보이는 한 문장. 다른 모델과 견주지 않는다. */
   summary: string;
+  /** 이름 옆 괄호에 들어갈 짧은 말. 숨긴 모델은 빈 문자열. */
+  strength: string;
   visible: boolean;
 }
 
 export const RETIRED_MODEL_NAME = "이전 방식";
 
-const retired = (id: string): ImageModelName => ({ id, name: RETIRED_MODEL_NAME, summary: "", visible: false });
+const retired = (id: string): ImageModelName => ({ id, name: RETIRED_MODEL_NAME, summary: "", strength: "", visible: false });
 
 export const IMAGE_MODEL_NAMES: readonly ImageModelName[] = [
   {
     id: "gpt-image-2.5-flare",
     name: "표준형",
     summary: "어떤 그림이든 고르게 잘 만드는 기본 모델입니다. 특히 글자가 많은 그림에서 한글을 정확하게 그립니다.",
+    strength: "글자가 많은 그림의 한글",
     visible: true,
   },
   {
     id: "nano-banana-pro",
     name: "디테일형",
     summary: "질감과 인물 표현이 섬세합니다. 특히 여러 장에서 같은 인물을 일관되게 유지하는 데 뛰어납니다.",
+    strength: "질감과 인물 표현, 같은 인물 유지",
     visible: true,
   },
   {
     id: "nano-banana-2.1",
     name: "속도형",
     summary: "고른 품질로 그림을 만들고, 특히 여러 장을 빠르게 만드는 데 뛰어납니다. 참고 그림을 많이 받을 수 있습니다.",
+    strength: "여러 장을 빠르게",
     visible: true,
   },
   retired("gpt-image-2.5-sunburst"),
@@ -60,6 +65,10 @@ export function imageModelName(id: string | null | undefined): string {
 
 export function imageModelSummary(id: string): string {
   return BY_ID.get(id)?.summary ?? "";
+}
+
+export function imageModelStrength(id: string): string {
+  return BY_ID.get(id)?.strength ?? "";
 }
 
 export function isVisibleImageModel(id: string | null | undefined): boolean {

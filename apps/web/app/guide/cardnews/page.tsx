@@ -1,6 +1,7 @@
 import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { CARD_RATIOS, MAX_CARDS, VISIBLE_IMAGE_MODELS } from "@fixup/sns-core";
+import { VISIBLE_IMAGE_MODEL_IDS, imageModelName, imageModelStrength } from "@fixup/shared";
 import {
   ATTACHMENT_ROLE_HINT,
   ATTACHMENT_ROLE_LABEL,
@@ -518,7 +519,7 @@ export default function CardNewsGuidePage() {
             },
             {
               q: "만든 그림의 글자가 원고와 다릅니다",
-              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 표준형을 쓰세요. 한글을 정확하게 그립니다.",
+              a: `05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 ${imageModelName(VISIBLE_IMAGE_MODEL_IDS[0]!)}을 쓰세요. ${imageModelStrength(VISIBLE_IMAGE_MODEL_IDS[0]!)}에 강합니다.`,
             },
             {
               q: "만드는 중에 다른 화면으로 가도 되나요",

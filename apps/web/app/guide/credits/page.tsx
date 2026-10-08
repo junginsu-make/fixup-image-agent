@@ -3,7 +3,7 @@ import { CreditWallet } from "../../_components/credit-wallet";
 import { isCreditLedgerEnabled } from "../../../lib/membership/credit-ledger";
 import { guideMetadata } from "../../../lib/seo/metadata";
 import { VISIBLE_IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
-import { creditUnits, imageModelSummary } from "@fixup/shared";
+import { VISIBLE_IMAGE_MODEL_IDS, creditUnits, imageModelName, imageModelSummary } from "@fixup/shared";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -29,6 +29,8 @@ export const metadata = guideMetadata("/guide/credits");
  *
  * 그래서 숫자를 안 적는다. 쓰는 그 함수로 그 자리에서 셈한다.
  */
+const [STANDARD_ID, DETAIL_ID, SPEED_ID] = VISIBLE_IMAGE_MODEL_IDS as readonly [string, string, string];
+
 const NOTES: Record<string, string> = Object.fromEntries(
   VISIBLE_IMAGE_MODELS.map((model) => [model.id, imageModelSummary(model.id)]),
 );
@@ -174,13 +176,13 @@ export default async function CreditsGuidePage() {
               적어 뒀는데, 차감이 원가에서 나오게 바뀐 뒤로 실제는 30장이었다.
               값 안내가 틀리면 없는 것만 못하다(2026-09-21).
             */
-            const 정밀 = VISIBLE_IMAGE_MODELS.find((model) => model.id === "gpt-image-2.5-flare")!;
-            const 경제 = VISIBLE_IMAGE_MODELS.find((model) => model.id === "nano-banana-2.1")!;
+            const 표준 = VISIBLE_IMAGE_MODELS.find((model) => model.id === STANDARD_ID)!;
+            const 속도 = VISIBLE_IMAGE_MODELS.find((model) => model.id === SPEED_ID)!;
             return (
               <>
-                {정밀.label}으로 카드 6장을 만들면{" "}
-                <strong className="text-foreground">6 × {한장당(정밀)} = {6 * 한장당(정밀)}장</strong>이
-                차감됩니다. {경제.label}으로 같은 6장을 만들면 {6 * 한장당(경제)}장입니다.
+                {표준.label}으로 카드 6장을 만들면{" "}
+                <strong className="text-foreground">6 × {한장당(표준)} = {6 * 한장당(표준)}장</strong>이
+                차감됩니다. {속도.label}으로 같은 6장을 만들면 {6 * 한장당(속도)}장입니다.
               </>
             );
           })()}
@@ -191,11 +193,11 @@ export default async function CreditsGuidePage() {
         <ChoiceTable
           head={["이런 결과물이면", "이 모델", "왜"]}
           rows={[
-            ["카드뉴스 · 글자가 많다", "표준형", "한글을 정확하게 그립니다. 여기서 아끼면 다시 만들게 됩니다"],
-            ["포스터 · 헤드라인이 크다", "표준형", "큰 글자가 틀리면 바로 눈에 띕니다"],
-            ["A4 인쇄용", "표준형", "픽셀을 직접 지정해야 해서 다른 방식은 이 비율을 못 만듭니다"],
-            ["인물 · 질감이 중요하다", "디테일형", "질감과 인물이 섬세하고, 여러 장에서 같은 인물을 유지합니다"],
-            ["여러 안을 빠르게 보고 싶다", "속도형", "여러 장을 빠르게 만드는 데 뛰어납니다"],
+            ["카드뉴스 · 글자가 많다", imageModelName(STANDARD_ID), imageModelSummary(STANDARD_ID)],
+            ["포스터 · 헤드라인이 크다", imageModelName(STANDARD_ID), "큰 글자가 틀리면 바로 눈에 띕니다"],
+            ["A4 인쇄용", imageModelName(STANDARD_ID), "픽셀을 직접 지정해야 해서 다른 방식은 이 비율을 못 만듭니다"],
+            ["인물 · 질감이 중요하다", imageModelName(DETAIL_ID), imageModelSummary(DETAIL_ID)],
+            ["여러 안을 빠르게 보고 싶다", imageModelName(SPEED_ID), imageModelSummary(SPEED_ID)],
             ["모르겠다", "기본값 그대로", "기본은 표준형입니다. 가장 안전합니다"],
           ]}
         />

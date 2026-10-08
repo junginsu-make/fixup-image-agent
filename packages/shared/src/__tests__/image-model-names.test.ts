@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   IMAGE_MODEL_NAMES, VISIBLE_IMAGE_MODEL_IDS, RETIRED_MODEL_NAME,
-  imageModelName, imageModelSummary, isVisibleImageModel,
+  imageModelName, imageModelStrength, imageModelSummary, isVisibleImageModel,
 } from "../image-model-names";
 
 describe("그림 모델 이름표", () => {
@@ -28,6 +28,12 @@ describe("그림 모델 이름표", () => {
       expect(text).toContain("특히");
       expect(text).not.toMatch(/보다|에 비해|느립|약합|못 /);
     }
+  });
+
+  it("짧은 말은 보이는 셋에만 있다", () => {
+    for (const id of VISIBLE_IMAGE_MODEL_IDS) expect(imageModelStrength(id)).not.toBe("");
+    for (const entry of IMAGE_MODEL_NAMES.filter((e) => !e.visible)) expect(imageModelStrength(entry.id)).toBe("");
+    expect(imageModelStrength("unknown")).toBe("");
   });
 
   it("한 id 는 한 번만 적힌다", () => {

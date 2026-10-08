@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IMAGE_MODELS as PDP_MODELS } from "@fixup/pdp-core";
 import { IMAGE_MODELS as STUDIO_MODELS } from "@fixup/sns-core";
+import { IMAGE_MODEL_NAMES } from "@fixup/shared";
 import { RETIRED_MODEL_NAME, modelDisplayName } from "../model-name";
 
 /**
@@ -233,6 +234,22 @@ describe("회원 화면에 모델 이름이 없다", () => {
         .filter((s) => 사라진.some((n) => s.includes(n)))
         .map((s) => `${path}: ${s}`),
     );
+    expect(걸린).toEqual([]);
+  });
+
+  /**
+   * 이름 옆에 붙는 설명과 짧은 말은 정본(`image-model-names.ts`) 한 곳에만 적는다.
+   * 화면 글에 같은 문장을 다시 적으면 정본이 바뀔 때 한쪽만 낡는다.
+   */
+  it("정본의 설명·짧은 말을 손으로 다시 적지 않는다", () => {
+    const 정본 = "packages/shared/src/image-model-names.ts";
+    const 문장들 = IMAGE_MODEL_NAMES.filter((e) => e.visible).flatMap((e) => [e.summary, e.strength]);
+    expect(문장들.every((t) => t.length > 0)).toBe(true);
+    const 걸린 = 화면들
+      .filter((file) => !file.path.endsWith(정본))
+      .flatMap(({ path, source }) =>
+        문자열들(source).filter((s) => 문장들.some((t) => s.includes(t))).map((s) => `${path}: ${s}`),
+      );
     expect(걸린).toEqual([]);
   });
 

@@ -2,7 +2,7 @@ import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { POSTER_RATIOS, VISIBLE_IMAGE_MODELS } from "@fixup/sns-core";
 import {
-  IMAGE_CREDIT_POLICY, IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, withJosa,
+  IMAGE_CREDIT_POLICY, IMAGE_LOOKS, VISIBLE_IMAGE_MODEL_IDS, imageModelName, imageModelStrength, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, withJosa,
 } from "@fixup/shared";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
@@ -382,7 +382,7 @@ export default function ImageGuidePage() {
               `약 290dpi로 나옵니다. ${withJosa(PIXEL_MODEL_NAMES, "으로로")} 만들고, 한 장에 ${큰그림크레딧}크레딧입니다`,
             ],
             ["화면으로만 볼 시안", "A4 비율 시안", `인쇄 해상도가 필요 없으면 이쪽이면 됩니다. 한 장에 ${보통크레딧}크레딧입니다`],
-            ["글자가 많이 들어간다", "표준형", "한글을 정확하게 그립니다"],
+            ["글자가 많이 들어간다", imageModelName(VISIBLE_IMAGE_MODEL_IDS[0]!), `${imageModelStrength(VISIBLE_IMAGE_MODEL_IDS[0]!)}에 강합니다`],
             ["제품이 실물 그대로 나와야 한다", "「제품 그대로 지키기」 추가", "형태·색·라벨이 유지됩니다"],
           ]}
         />

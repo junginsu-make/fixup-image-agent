@@ -10,7 +10,11 @@
 //   있었는데 실제는 5장 · 5.4배였고, 가중치 방식 자체를 2026-09-08 에 그만둔
 //   뒤였습니다. 로그인도 필요 없는 화면이라 **틀린 값이 가장 멀리 가는 자리**입니다.
 
+import { VISIBLE_IMAGE_MODEL_IDS, imageModelName, imageModelStrength } from "@fixup/shared";
 import { LANDING_COST_SPREAD, LANDING_CREDITS } from "./credit-facts";
+
+/** 모델 이름과 짧은 말은 정본(`image-model-names.ts`)에서 받는다. 손으로 다시 적지 않는다. */
+const 모델강점목록 = VISIBLE_IMAGE_MODEL_IDS.map((id) => `${imageModelName(id)}(${imageModelStrength(id)})`).join(", ");
 
 export type Locale = "ko" | "en";
 
@@ -106,7 +110,7 @@ export const KO = {
     { kicker: "품질 장치 ②", title: "심사는 만든 호출과 다른 호출이 합니다", desc: "같은 호출 안에서 매기는 점수는 방금 쓴 글을 스스로 칭찬하는 것에 가깝습니다. 심사자에게는 구성안과 판매 원칙만 주고 브리프 원문은 주지 않습니다. 사는 사람은 브리프를 못 보기 때문입니다." },
     { kicker: "심사 항목", title: "대상 · 문제 · 차별점 · 반론 · 흐름 · 행동 유도", desc: "여섯 항목 중 fail 이 하나라도 있으면 지적사항을 담아 다시 만듭니다(최대 2회). 끝까지 남은 지적은 숨기지 않고 화면에 띄웁니다." },
     { kicker: "레퍼런스", title: "참고 이미지를 어떻게 쓸지 말로 못박습니다", desc: "따라 만들기 / 제품 그대로 지키기 / 인물 그대로 지키기 / 원본 그대로 넣기. 네 가지 역할로 통일했습니다. 상세페이지 스타일 레퍼런스는 통일이 깨지지 않게 페이지당 한 장만 씁니다." },
-    { kicker: "모델 선택", title: "글자 정확도와 단가를 저울질합니다", desc: `표준형(글자가 많아도 한글을 정확하게), 디테일형(질감과 인물이 섬세, 같은 인물 유지), 속도형(여러 장을 빠르게). 모델마다 원가는 ${LANDING_COST_SPREAD}배까지 벌어지지만, 차감은 어느 모델이든 한 장에 ${LANDING_CREDITS.표준형}크레딧입니다.` },
+    { kicker: "모델 선택", title: "글자 정확도와 단가를 저울질합니다", desc: `${모델강점목록}. 모델마다 원가는 ${LANDING_COST_SPREAD}배까지 벌어지지만, 차감은 어느 모델이든 한 장에 ${LANDING_CREDITS.표준형}크레딧입니다.` },
     { kicker: "동시성", title: "만드는 도중에 화면을 옮겨도 됩니다", desc: "생성 목록을 셸(사이드바)이 들고 있어 화면을 옮겨도 받아 오는 일이 멈추지 않습니다. 무엇이 돌고 있고 얼마나 됐는지 보이고 중지할 수 있습니다. 다만 중지는 되돌리기가 아니라는 것도 그 자리에 적어 뒀습니다." },
     { kicker: "보관", title: "파일은 비공개 버킷에만 둡니다", desc: "짧은 수명의 서명 URL 로만 열립니다. 경로 첫 칸이 소유자이고, 버킷 정책이 그 칸으로 남의 것을 막습니다. 회원은 AI 키를 브라우저에 입력하지 않습니다." }
   ],
@@ -222,7 +226,7 @@ export const EN: LandingCopy = {
     { kicker: "Quality gate ②", title: "Judging is done by a different call than making", desc: "A score given inside the same call is close to praising your own writing. The judge receives only the structure and the selling principles, never the original brief, because the buyer never sees the brief either." },
     { kicker: "Judging criteria", title: "Audience · problem · differentiation · objection · flow · call to action", desc: "If any of the six fails, the structure is rebuilt with the criticism attached, up to twice. Criticism that survives to the end is shown on screen rather than hidden." },
     { kicker: "References", title: "How a reference gets used is stated in words", desc: "Follow it / keep the product as-is / keep the person as-is / place the original untouched. Four roles, one vocabulary. A detail page uses a single style reference per page so consistency does not break." },
-    { kicker: "Model choice", title: "Text accuracy weighed against unit cost", desc: `Standard (accurate Korean even in text-heavy images), Detail (fine texture and people, keeps a character consistent), Speed (many images, quickly). Costs differ by up to ${LANDING_COST_SPREAD}×, but every model uses ${LANDING_CREDITS.표준형} credit per image.` },
+    { kicker: "Model choice", title: "Text accuracy weighed against unit cost", desc: `Choose between Standard, Detail and Speed. Costs differ by up to ${LANDING_COST_SPREAD}×, but every model uses ${LANDING_CREDITS.표준형} credit per image.` },
     { kicker: "Concurrency", title: "You can move around while it generates", desc: "The running-job list is held by the shell, so navigating away never stops collection. You can see what is running and how far along it is, and stop it, with a note that stopping is not undoing." },
     { kicker: "Storage", title: "Files live only in a private bucket", desc: "They open only through short-lived signed URLs. The first path segment is the owner, and bucket policy blocks anyone else. Members never type an AI key into the browser." }
   ],
