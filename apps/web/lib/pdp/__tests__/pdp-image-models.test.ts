@@ -12,7 +12,7 @@ vi.mock("../../membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true, member: { userId: "u1", profile: { id: "u1", status: "active" } } }),
 }));
 
-const { PDP_IMAGE_MODELS, pdpImageModelOrDefault } = await import("../image-models");
+const { PDP_IMAGE_MODELS, PDP_RETIRED_MODEL_MESSAGE, pdpImageModelOrDefault } = await import("../image-models");
 const { readPdpRequest } = await import("../request");
 
 const post = (body: unknown) =>
@@ -20,6 +20,10 @@ const post = (body: unknown) =>
 const section = { section_id: "S1", prompt_en: "scene" };
 
 describe("상세페이지 모델 목록", () => {
+  it("상세페이지도 세 모델·등급 이름", () => {
+    expect(PDP_IMAGE_MODELS.map((m) => m.label)).toEqual(["표준형", "디테일형", "속도형"]);
+  });
+
   it("나노바나나 일반판과 캐릭터 전용 모델은 빠진다", () => {
     const ids = PDP_IMAGE_MODELS.map((model) => model.id);
     expect(ids).not.toContain("nano-banana");
@@ -35,7 +39,9 @@ describe("상세페이지 모델 목록", () => {
     expect(pdpImageModelOrDefault("nano-banana")).toBe(DEFAULT_IMAGE_MODEL);
     expect(pdpImageModelOrDefault(undefined)).toBe(DEFAULT_IMAGE_MODEL);
     expect(pdpImageModelOrDefault("없는-모델")).toBe(DEFAULT_IMAGE_MODEL);
-    // 2026-10-08 사용자 결정: 상세페이지는 GPT Image 2.5·Nano Banana Pro 둘만 — 정밀형도 기본 모델로 연다.
+    // 2026-10-08 오후 사용자 결정: 상세페이지는 보이는 셋만 — 정밀형·속도형 라이트(nano-banana-2)는 기본 모델로 연다.
+    expect(pdpImageModelOrDefault("nano-banana-2")).toBe(DEFAULT_IMAGE_MODEL);
+    expect(pdpImageModelOrDefault("nano-banana-2.1")).toBe("nano-banana-2.1");
     expect(pdpImageModelOrDefault("gpt-image-2")).toBe(DEFAULT_IMAGE_MODEL);
     expect(pdpImageModelOrDefault("nano-banana-pro")).toBe("nano-banana-pro");
   });
@@ -57,17 +63,19 @@ describe("서버도 나노바나나 일반판 상세페이지 그림 요청을 �
       expect((await result.response.json()).message).toContain("새로고침");
     });
 
-    it(`${kind}: 두 모델(GPT Image 2.5·Nano Banana Pro)은 받는다`, async () => {
-      for (const model of ["gpt-image-2.5-flare", "nano-banana-pro"]) {
+    it(`${kind}: 보이는 셋(표준형·디테일형·속도형)은 받는다`, async () => {
+      for (const model of ["gpt-image-2.5-flare", "nano-banana-pro", "nano-banana-2.1"]) {
         const result = await readPdpRequest(post(body(model)), kind);
         expect(result.ok).toBe(true);
       }
     });
 
-    it(`${kind}: 두 모델 밖(정밀형·속도형 라이트)도 거절한다`, async () => {
+    it(`${kind}: 보이는 셋 밖(정밀형·속도형 라이트)도 거절한다`, async () => {
       for (const model of ["gpt-image-2", "nano-banana-2"]) {
         const result = await readPdpRequest(post(body(model)), kind);
         expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect((await result.response.json()).message).toBe(PDP_RETIRED_MODEL_MESSAGE);
       }
     });
   }

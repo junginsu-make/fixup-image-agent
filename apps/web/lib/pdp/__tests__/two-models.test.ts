@@ -3,20 +3,19 @@ import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 import { PDP_IMAGE_MODELS, isRetiredPdpModel, pdpImageModelOrDefault } from "../image-models";
 
 /**
- * **상세페이지 그림 모델은 둘 — GPT Image 2.5(기본)와 Nano Banana Pro**(2026-10-08 사용자 결정).
+ * **상세페이지 그림 모델은 셋 — 표준형(기본)·디테일형·속도형**(2026-10-08 오후 사용자 결정).
  *
- * 나노바나나 일반판은 그림 만들기 오류(품질 검사 탈락)가 잦았다. 고를 수 있는 것을 둘로 줄이고,
- * 이름은 등급(경제형·표준형)이 아니라 실제 모델 이름으로 보인다. 크레딧은 그대로(한 장 1크레딧).
+ * 다른 화면과 같은 등급 이름을 쓴다. 이름표 정본은 packages/shared/src/image-model-names.ts.
  */
-describe("상세페이지 모델 두 개", () => {
-  it("고를 수 있는 것은 GPT Image 2.5 와 Nano Banana Pro 뿐이고, 기본이 먼저다", () => {
-    expect(PDP_IMAGE_MODELS.map((model) => model.id)).toEqual(["gpt-image-2.5-flare", "nano-banana-pro"]);
+describe("상세페이지 모델 셋", () => {
+  it("고를 수 있는 것은 표준형·디테일형·속도형 뿐이고, 기본이 먼저다", () => {
+    expect(PDP_IMAGE_MODELS.map((model) => model.id)).toEqual(["gpt-image-2.5-flare", "nano-banana-pro", "nano-banana-2.1"]);
     expect(DEFAULT_IMAGE_MODEL).toBe("gpt-image-2.5-flare");
   });
 
-  it("실제 모델 이름으로 보인다 — 등급 이름(경제형·표준형 등)을 쓰지 않는다", () => {
-    expect(PDP_IMAGE_MODELS.map((model) => model.label)).toEqual(["GPT Image 2.5", "Nano Banana Pro"]);
-    for (const model of PDP_IMAGE_MODELS) expect(model.label).not.toMatch(/형/);
+  it("등급 이름으로 보인다 — 실제 모델 이름을 쓰지 않는다", () => {
+    expect(PDP_IMAGE_MODELS.map((model) => model.label)).toEqual(["표준형", "디테일형", "속도형"]);
+    for (const model of PDP_IMAGE_MODELS) expect(model.label).not.toMatch(/GPT|Nano|Banana/);
   });
 
   it("다른 모델로 저장된 작업은 기본 모델로 연다", () => {
@@ -24,12 +23,12 @@ describe("상세페이지 모델 두 개", () => {
       expect(pdpImageModelOrDefault(old)).toBe("gpt-image-2.5-flare");
     }
     expect(pdpImageModelOrDefault("nano-banana-pro")).toBe("nano-banana-pro");
+    expect(pdpImageModelOrDefault("nano-banana-2.1")).toBe("nano-banana-2.1");
   });
 
-  it("두 모델 말고는 그림 만들기 요청을 받지 않는다 — 안 보낸 것은 기본 모델이라 괜찮다", () => {
+  it("셋 말고는 그림 만들기 요청을 받지 않는다 — 안 보낸 것은 기본 모델이라 괜찮다", () => {
     for (const old of ["nano-banana", "nano-banana-2", "gpt-image-2"]) expect(isRetiredPdpModel(old)).toBe(true);
-    expect(isRetiredPdpModel("gpt-image-2.5-flare")).toBe(false);
-    expect(isRetiredPdpModel("nano-banana-pro")).toBe(false);
+    for (const ok of ["gpt-image-2.5-flare", "nano-banana-pro", "nano-banana-2.1"]) expect(isRetiredPdpModel(ok)).toBe(false);
     expect(isRetiredPdpModel(undefined)).toBe(false);
   });
 });
@@ -48,9 +47,10 @@ describe("상세페이지 크레딧 안내", () => {
     expect(gallery).not.toMatch(/imageCreditUnits\([^)]*\)\}장 차감/);
   });
 
-  it("image-v2 에서는 두 모델 모두 한 장 1크레딧이다", async () => {
+  it("image-v2 에서는 세 모델 모두 한 장 1크레딧이다", async () => {
     const { imageCreditUnits } = await import("../../credit-cost");
     expect(imageCreditUnits("gpt-image-2.5-flare", 6, { policy: "image-v2" })).toBe(6);
     expect(imageCreditUnits("nano-banana-pro", 6, { policy: "image-v2" })).toBe(6);
+    expect(imageCreditUnits("nano-banana-2.1", 6, { policy: "image-v2" })).toBe(6);
   });
 });
