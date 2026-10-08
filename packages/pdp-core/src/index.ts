@@ -144,6 +144,14 @@ export {
   type ProductReading,
   type ProductReadingStatus,
 } from "./pdp.product-reading";
+export {
+  PRODUCT_FACT_LIMITS,
+  productFactsFrom,
+  productFidelityHead,
+  productFidelitySystemLine,
+  productFidelityTail,
+  type ProductFacts,
+} from "./pdp.product-fidelity";
 import type { PdpPlanStage } from "./pdp.plan-stage";
 export {
   ALWAYS_PASSED,
