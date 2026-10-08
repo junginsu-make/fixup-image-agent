@@ -13,7 +13,16 @@ const text = z.string();
   **제품 원본은 주소로 온다**(설계 2026-10-08 §4.5). 우리가 fal 에 올린 주소만 받는다.
   옛 화면·글 경로는 여전히 그림을 몸통에 싣는다 — 둘 중 하나는 있어야 한다.
 */
-const productImageUrl = text.refine(isFalStorageUrl, "제품 사진 주소가 올바르지 않습니다.");
+// 검사한 모양 그대로 넘긴다 — 날 글자는 파서가 탭을 지우고 호스트를 낮추기 전 모양이라 검사와 어긋날 수 있다.
+const productImageUrl = text
+  .max(2048)
+  .refine(isFalStorageUrl, "제품 사진 주소가 올바르지 않습니다.")
+  .transform((value) => new URL(value).href);
+// 화면은 코드 포인트(`Array.from`)로 자른다. zod 의 `.max` 는 UTF-16 단위라 이모지를 두 번 센다.
+const factText = text.refine(
+  (value) => Array.from(value).length <= PRODUCT_FACT_LIMITS.chars,
+  `${PRODUCT_FACT_LIMITS.chars}자 이하로 적어 주세요.`,
+);
 const hasProductImage = (body: { productImageUrl?: string; originalImageBase64?: string }) =>
   Boolean(body.productImageUrl || body.originalImageBase64);
 /*
@@ -102,9 +111,9 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
     묶는다. 수는 코어에 한 벌이다 — 화면(`productFactsFrom`)이 같은 수로 자른다.
   */
   productFacts: z.object({
-    category: text.max(PRODUCT_FACT_LIMITS.chars).optional(),
-    visibleFacts: z.array(text.max(PRODUCT_FACT_LIMITS.chars)).max(PRODUCT_FACT_LIMITS.facts),
-    labelText: z.array(text.max(PRODUCT_FACT_LIMITS.chars)).max(PRODUCT_FACT_LIMITS.labels),
+    category: factText.optional(),
+    visibleFacts: z.array(factText).max(PRODUCT_FACT_LIMITS.facts),
+    labelText: z.array(factText).max(PRODUCT_FACT_LIMITS.labels),
   }).strict().optional(),
   look: z.enum(IMAGE_LOOKS).optional(),
   /*
