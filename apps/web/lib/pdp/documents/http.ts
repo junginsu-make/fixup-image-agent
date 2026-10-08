@@ -27,11 +27,13 @@ export function documentResponseError(error:unknown):Response{
   return Response.json({ok:false,message:error instanceof DocumentError?error.message:status===400?"요청 형식이 올바르지 않습니다.":"작업을 처리하지 못했습니다.",
     ...(error instanceof DocumentError && error.current?{current:error.current}:{})},{status,headers:{"cache-control":"no-store"}});
 }
+/** 지우기를 마친다 — 연결된 옛 라이브러리 그림, 문서 그림 파일을 지우고 문서를 비운다. 관리자의 지우기도 쓴다(2026-10-09). */
+export async function completeDocumentDelete(deps:DocumentDependencies,userId:string,row:Pick<DocumentRecord,"id"|"sourceDraftId">){
+  await deps.cleanupLegacy?.(userId,[row.id,...(row.sourceDraftId?[row.sourceDraftId]:[])]);
+  await deps.storage.removeAll(userId,row.id);await deps.repo.finishDelete(userId,row.id);
+}
 export function documentHandlers(deps:DocumentDependencies){
-  const completeDelete=async(userId:string,row:Pick<DocumentRecord,"id"|"sourceDraftId">)=>{
-    await deps.cleanupLegacy?.(userId,[row.id,...(row.sourceDraftId?[row.sourceDraftId]:[])]);
-    await deps.storage.removeAll(userId,row.id);await deps.repo.finishDelete(userId,row.id);
-  };
+  const completeDelete=(userId:string,row:Pick<DocumentRecord,"id"|"sourceDraftId">)=>completeDocumentDelete(deps,userId,row);
   const run=(fn:(userId:string)=>Promise<unknown>)=>async()=>{
     try{
       if(!deps.enabled())throw notFound();
