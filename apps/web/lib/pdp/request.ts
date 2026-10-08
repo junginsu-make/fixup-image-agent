@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, PRODUCT_FACT_LIMITS, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_IDS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, PRODUCT_FACT_LIMITS, PRODUCT_LIMITS, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
@@ -23,8 +23,18 @@ const factText = text.refine(
   (value) => Array.from(value).length <= PRODUCT_FACT_LIMITS.chars,
   `${PRODUCT_FACT_LIMITS.chars}자 이하로 적어 주세요.`,
 );
-const hasProductImage = (body: { productImageUrl?: string; originalImageBase64?: string }) =>
-  Boolean(body.productImageUrl || body.originalImageBase64);
+// 여러 제품 화면은 주소를 `page.products` 로만 보낸다 — 그것만 있어도 제품 사진은 있는 것이다.
+const hasProductImage = (body: { productImageUrl?: string; originalImageBase64?: string; page?: { products?: unknown[] } }) =>
+  Boolean(body.productImageUrl || body.originalImageBase64 || body.page?.products?.length);
+const productId = z.enum(PRODUCT_IDS);
+// 제품 이름도 코드 포인트로 센다 — 화면이 같은 수로 자른다.
+const productName = text.refine((value) => Array.from(value).length <= PRODUCT_LIMITS.nameChars, "제품 이름이 너무 깁니다.");
+const uniqueProductIds = (list: Array<{ id: string }>) => new Set(list.map((entry) => entry.id)).size === list.length;
+/**
+  **사진에서 읽은 제품 사실**(설계 2026-10-08 §7). 프롬프트에 그대로 실리므로 길이를
+  묶는다. 수는 코어에 한 벌이다 — 화면(`productFactsFrom`)이 같은 수로 자른다.
+  제품이 여럿이면 제품마다 하나씩 같은 모양이 온다(`page.products[].facts`).
+*/
 /*
   **첨부 지시는 힘이 세다**(D-8).
 
@@ -94,9 +104,16 @@ const section = z.object({
   headline: text.optional(), subheadline: text.optional(), bullets: z.array(text).default([]),
   prompt_ko: text.optional(), layout_notes: text.optional(),
   evidenceVersion: z.literal(1).optional(),
+  // 이 섹션에 그릴 제품. 화면이 매긴 id 만 온다 — 모르는 값은 거절한다.
+  product_ids: z.array(productId).max(PRODUCT_LIMITS.products).optional(),
   evidence: z.array(z.object({ target, value: text, kind: z.enum(["quoted", "rhetoric", "sample", "user", "ask"]),
     quote: text.optional(), note: text.optional(), acknowledgedAt: text.optional() })).optional(),
 }).passthrough();
+const productFactsSchema = z.object({
+  category: factText.optional(),
+  visibleFacts: z.array(factText).max(PRODUCT_FACT_LIMITS.facts),
+  labelText: z.array(factText).max(PRODUCT_FACT_LIMITS.labels),
+}).strict();
 const page = z.object({ imageModel: model.optional(), styleReference: image.optional(), referenceModel: image.optional(),
   referenceModelUsage: z.enum(["hero-only", "all-sections"]).nullable().optional(),
   preserveProduct: z.boolean().optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
@@ -106,15 +123,15 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   conceptOnly: z.boolean().optional(),
   // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
   personSource: z.enum(["uploaded", "character"]).optional(),
+  productFacts: productFactsSchema.optional(),
   /*
-    **사진에서 읽은 제품 사실**(설계 2026-10-08 §7). 프롬프트에 그대로 실리므로 길이를
-    묶는다. 수는 코어에 한 벌이다 — 화면(`productFactsFrom`)이 같은 수로 자른다.
+    **제품이 여럿이면 여기로 온다**(설계 2026-10-08 다중 제품). 주소만 — 그림은 싣지 않는다.
   */
-  productFacts: z.object({
-    category: factText.optional(),
-    visibleFacts: z.array(factText).max(PRODUCT_FACT_LIMITS.facts),
-    labelText: z.array(factText).max(PRODUCT_FACT_LIMITS.labels),
-  }).strict().optional(),
+  products: z.array(z.object({
+    id: productId, name: productName.optional(),
+    imageUrls: z.array(productImageUrl).min(1).max(PRODUCT_LIMITS.photos),
+    facts: productFactsSchema.optional(),
+  }).strict()).min(1).max(PRODUCT_LIMITS.products).refine(uniqueProductIds, "제품 id 가 겹칩니다.").optional(),
   look: z.enum(IMAGE_LOOKS).optional(),
   /*
     **옆 칸과 같은 상한을 쓴다**(D-8).
@@ -158,6 +175,11 @@ const schemas = {
     .refine(hasProductImage, "제품 사진이 없습니다.")
     .refine((body) => body.sections.length <= maxBatchSizeFor(body.page?.imageModel ?? DEFAULT_IMAGE_MODEL), "한 번에 생성할 수 있는 장수를 초과했습니다."),
   analyze: z.object({ ...common, imageBase64: imagePayload, mimeType: imageMime,
+    // 옛 `imageBase64` 는 `products[0].photos[0]` 와 같다 — 옛 경로를 위해 계속 요구한다.
+    products: z.array(z.object({
+      id: productId, name: productName.optional(),
+      photos: z.array(z.object({ imageBase64: imagePayload, mimeType: imageMime })).min(1).max(PRODUCT_LIMITS.photos),
+    }).strict()).min(1).max(PRODUCT_LIMITS.products).refine(uniqueProductIds, "제품 id 가 겹칩니다.").optional(),
     modelImageBase64: text.optional(), modelImageMimeType: text.optional(),
     /*
       **기획과 이미지 생성이 같은 상한을 쓴다**(U-08).

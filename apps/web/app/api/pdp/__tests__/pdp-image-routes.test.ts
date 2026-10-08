@@ -17,6 +17,7 @@ vi.mock("server-only", () => ({}));
 
 type Captured = { section: { section_id: string }; options: Record<string, unknown> };
 const calls: Captured[] = [];
+let dropped: number | undefined;
 const reserved: number[] = [];
 const finalized: Array<{ success: boolean; units: number }> = [];
 
@@ -26,7 +27,7 @@ vi.mock("@fixup/pdp-core", async () => {
     ...actual,
     generateSectionImage: async (request: Captured) => {
       calls.push(request);
-      return { imageBase64: "IMG", mimeType: "image/png", generatedImages: 1, qa: undefined };
+      return { imageBase64: "IMG", mimeType: "image/png", generatedImages: 1, qa: undefined, ...(dropped === undefined ? {} : { productPhotosDropped: dropped }) };
     },
   };
 });
@@ -110,6 +111,7 @@ const post = (body: unknown) =>
 
 beforeEach(() => {
   calls.length = 0;
+  dropped = undefined;
   reserved.length = 0;
   finalized.length = 0;
   character = null;
@@ -520,5 +522,40 @@ describe("제품 사진 주소", () => {
     const response = await single(post({ originalImageBase64: "AAAA", section: section("s1"), aspectRatio: "3:4" }));
     expect(response.status).toBe(200);
     expect(calls[0]).toMatchObject({ originalImageBase64: "AAAA" });
+  });
+});
+
+describe("뺀 장수 productPhotosDropped", () => {
+  const 주소 = "https://v3.fal.media/files/a/b.jpg";
+  const 제품들 = [{ id: "p1", imageUrls: [주소] }, { id: "p2", imageUrls: [주소] }];
+
+  it("page.products 만으로 통과하고 코어에 products 가 간다", async () => {
+    const response = await single(post({ section: { ...section("s1"), product_ids: ["p2"] }, page: { products: 제품들 } }));
+    expect(response.status).toBe(200);
+    expect((calls[0] as { section: { product_ids?: string[] } }).section.product_ids).toEqual(["p2"]);
+  });
+
+  it("단건: 코어가 양수를 주면 최상위에 실린다", async () => {
+    dropped = 2;
+    const body = await (await single(post({ originalImageBase64: "AAAA", section: section("s1") }))).json();
+    expect(body.productPhotosDropped).toBe(2);
+  });
+
+  it("단건: 0 이거나 없으면 칸이 없다", async () => {
+    dropped = 0;
+    const zero = await (await single(post({ originalImageBase64: "AAAA", section: section("s1") }))).json();
+    expect("productPhotosDropped" in zero).toBe(false);
+    dropped = undefined;
+    const none = await (await single(post({ originalImageBase64: "AAAA", section: section("s1") }))).json();
+    expect("productPhotosDropped" in none).toBe(false);
+  });
+
+  it("일괄: 섹션별 결과에 양수일 때만 실린다", async () => {
+    dropped = 1;
+    const body = await (await batch(post({ originalImageBase64: "AAAA", sections: [section("s1")] }))).json();
+    expect(body.results[0].productPhotosDropped).toBe(1);
+    dropped = 0;
+    const zero = await (await batch(post({ originalImageBase64: "AAAA", sections: [section("s1")] }))).json();
+    expect("productPhotosDropped" in zero.results[0]).toBe(false);
   });
 });

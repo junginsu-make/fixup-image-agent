@@ -30,6 +30,7 @@ import { syncDocumentLibraryLater } from "../../../../../lib/pdp/jobs/library-sy
 import { librarySyncFromBody } from "../../../../../lib/pdp/jobs/library-sync-request";
 import { readPdpRequest } from "../../../../../lib/pdp/request";
 import { logQaRejection } from "../../../../../lib/pdp/qa-reject-log";
+import { droppedField } from "../../../../../lib/pdp/dropped-field";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -267,6 +268,7 @@ async function handlePost(req: Request) {
         mimeType: outcome.value.mimeType,
         generatedImages: outcome.value.generatedImages,
         qa: outcome.value.qa,
+        ...droppedField(outcome.value.productPhotosDropped),
       };
     }
     const envelope = toPdpErrorResponse(outcome.reason);

@@ -61,6 +61,7 @@ import { fingerprintOf, isPdpJobsEnabled } from "../../../../lib/pdp/jobs";
 import { syncDocumentLibraryLater } from "../../../../lib/pdp/jobs/library-sync";
 import { librarySyncFromBody } from "../../../../lib/pdp/jobs/library-sync-request";
 import { logQaRejection } from "../../../../lib/pdp/qa-reject-log";
+import { droppedField } from "../../../../lib/pdp/dropped-field";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -186,7 +187,7 @@ async function handlePost(req: Request) {
 
     await jobs?.started();
     await markCreditStarted(reservation);
-    const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
+    const { imageBase64, mimeType, generatedImages, qa, productPhotosDropped } = await generateSectionImage(
       {
         ...(body.productImageUrl
           ? { productImageUrl: body.productImageUrl }
@@ -212,7 +213,8 @@ async function handlePost(req: Request) {
     if (librarySync && jobs?.jobId && sectionId) {
       void syncDocumentLibraryLater({ ...librarySync, images: [{ sectionId, image: { base64: imageBase64, mimeType } }] });
     }
-    return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
+    // 사진 상한 때문에 뺀 장이 있을 때만 알린다 — 없으면 응답 모양은 전과 같다.
+    return Response.json({ ok: true, imageBase64, mimeType, usage, qa, ...droppedField(productPhotosDropped) });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
     logQaRejection(sectionId, envelope);
