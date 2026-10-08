@@ -9,6 +9,7 @@ import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
   carriedIdentityLine,
+  carriedSubjectNoun,
   userInstructionHead,
   userInstructionTail,
   resolveLook,
@@ -41,6 +42,7 @@ import {
   buildImageSystemPrompt,
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
+import { productFidelityHead, productFidelitySystemLine, productFidelityTail } from "./pdp.product-fidelity";
 import { anchorRoleFor, shouldSendAnchor } from "./pdp.product-anchor";
 import type { AnchorKind } from "./pdp.product-anchor";
 import { resolvePersonSource } from "./pdp.person-source";
@@ -934,8 +936,22 @@ ${analyzePrompt}`
       // 사용자가 직접 친 말은 **맨 앞과 맨 뒤에 두 번** 넣는다. 2026-09-04 실측에서
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 — 긴
       // 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
+      //
+      // **제품 보존을 양 끝에서 한 번 더**(설계 2026-10-08 §6). 역할 지시(중간)는 그대로
+      // 두고, 앞에서 「무엇을 지키고 무엇은 바꿔도 되는지」를, 뒤에서 「같은 제품인지」를
+      // 말한다. 사용자 지시가 여전히 맨 앞·맨 뒤다.
+      const anchorNumber = references.findIndex((reference) => reference.kind === "anchor") + 1;
+      const companion = references.some((reference) => reference.kind === "person")
+        ? carried ? carriedSubjectNoun(carried.kind) : "person"
+        : undefined;
+      const fidelityHead = anchorNumber
+        ? productFidelityHead({ imageNumber: anchorNumber, anchorRole, facts: options.productFacts, companion })
+        : "";
+      const fidelityTail = anchorNumber ? productFidelityTail({ imageNumber: anchorNumber, anchorRole }) : "";
+
       const prompt = [
         userInstructionHead(options.userInstruction, { identityFirst: true }),
+        fidelityHead,
         buildImageJson(section, promptOptions),
         buildReferenceRoleDirective(references, {
           hasUserInstruction: Boolean(options.userInstruction),
@@ -945,6 +961,7 @@ ${analyzePrompt}`
         }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",
+        fidelityTail,
         userInstructionTail(options.userInstruction),
       ]
         .filter(Boolean)
@@ -967,7 +984,10 @@ ${analyzePrompt}`
         // 적힌 번호와 실제 첨부 순서가 갈라진다 — 한쪽만 고치는 날 조용히 어긋난다.
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
           prompt,
-          systemPrompt: buildImageSystemPrompt(promptOptions),
+          // 제품이 실릴 때만 한 줄. Nano Banana Pro 는 이 문장을 system_prompt 로 받는다.
+          systemPrompt: [buildImageSystemPrompt(promptOptions), anchorNumber ? productFidelitySystemLine(anchorRole) : ""]
+            .filter(Boolean)
+            .join(" "),
           aspectRatio: request.aspectRatio,
           references
         });

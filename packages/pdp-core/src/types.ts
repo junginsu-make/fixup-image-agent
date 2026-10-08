@@ -7,6 +7,7 @@ import type { PersonSource } from "./pdp.person-source";
 import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
+import type { ProductFacts } from "./pdp.product-fidelity";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -478,6 +479,11 @@ export interface ImageGenOptions {
    * 지어낸 물건이 **실제 제품처럼 보이지 않게** 한다.
    */
   conceptOnly?: boolean;
+  /**
+   * **사진에서 읽은 제품 사실**(설계 2026-10-08 §7). 구성안의 `productReading` 에서
+   * 화면이 뽑아 보낸다(`productFactsFrom`). 글 경로에는 없다.
+   */
+  productFacts?: ProductFacts;
 }
 
 /** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
