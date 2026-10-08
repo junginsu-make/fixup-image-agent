@@ -10,6 +10,7 @@ import {
   MAX_CANDIDATES,
   MIN_CANDIDATES,
   characterCreditCost,
+  countRecentCharacters,
   createCharacter,
   deleteCharacter,
   generateCandidates,
@@ -21,6 +22,8 @@ import {
 } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { teamIdOf } from "../../../lib/teams/store";
+import { hasFullScope, viewerFrom } from "../../../lib/access/core";
+import { sniffImageMime } from "../../../lib/image-encoding";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,14 +99,26 @@ function rawBase64(value: string): string {
   return value.replace(/^data:[^;]+;base64,/, "");
 }
 
-export async function GET() {
+/**
+ * `?scope=all` — **최고 관리자는 모든 회원의 캐릭터를 본다**(2026-10-08, 사용자가 여러 번 말함).
+ *
+ * 라이브러리의 캐릭터 화면만 이것을 보낸다. 만들기 화면·불러오기 창은 안 보낸다 — 관리자도 거기서는
+ * 자기 것만 봐야 남의 캐릭터를 잘못 불러 쓰지 않는다. 회원이 보내면 무시한다.
+ */
+export async function GET(req?: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+  const wantsAll = req ? new URL(req.url).searchParams.get("scope") === "all" : false;
+  const allMembers = wantsAll && hasFullScope(viewerFrom(auth.member), "read");
 
   try {
     return Response.json({
       ok: true,
-      characters: await listCharacters(auth.member.userId, await teamIdOf(auth.member.userId)),
+      characters: await listCharacters(
+        auth.member.userId,
+        await teamIdOf(auth.member.userId),
+        allMembers ? { allMembers: true } : {},
+      ),
       candidateCount: DEFAULT_CANDIDATES,
       minCandidates: MIN_CANDIDATES,
       maxCandidates: MAX_CANDIDATES,
@@ -225,12 +240,19 @@ async function handlePost(req: Request) {
         result.candidates.length > 0 ? undefined : "candidates_failed",
         { model: result.model, billableImages: result.candidates.length, deliveredImages: result.candidates.length, completionConfirmed: true, llmUsd: llmSettleCost().llmUsd },
       );
+      const front = result.candidates[0];
+      const saved = front
+        ? await saveFront({
+          userId: auth.member.userId, body, modelId, identityPrompt: brief.identity, front,
+        })
+        : undefined;
       return Response.json({
         ok: result.candidates.length > 0,
         candidates: result.candidates,
         requested: result.requested,
         usage,
         brief: { identity: brief.identity, refined: brief.refined },
+        ...(saved ?? {}),
         message: result.candidates.length ? undefined : "후보를 만들지 못했습니다.",
       });
     } catch (error) {
@@ -247,9 +269,38 @@ async function handlePost(req: Request) {
     return Response.json({ ok: false, message: "고른 후보가 없습니다." }, { status: 400 });
   }
 
+  /*
+    **그림만 받는다**(2026-10-08 보안 리뷰). 이 정면은 화면이 보낸 바이트다 — 딱지(`chosenMimeType`)를
+    믿지 않고 바이트를 본다. 그림이 아닌 것이 캐릭터·관리자 라이브러리에 쌓이면 안 된다.
+  */
+  const chosenMimeType = sniffImageMime(Buffer.from(chosenBase64, "base64"), "");
+  if (!FRONT_FORMATS.has(chosenMimeType)) {
+    return Response.json({ ok: false, message: "PNG, JPG, WEBP 그림만 저장할 수 있습니다." }, { status: 400 });
+  }
+
   const angles = (body.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
   // 만드는 것은 고른 각도와 다각도 한 장뿐이다. 정면은 이미 있다.
   const extraImages = angles.length + (body.sheet ? 1 : 0);
+  /*
+    **각도 없는 저장은 공짜다**(0장 예약). 지금은 자동 저장이 실패했을 때의 「다시 저장하기」뿐이라
+    시간당 상한을 건다. 못 세면 저장하지 않는다. 각도를 함께 만들면 그 값을 장부가 막는다.
+  */
+  if (extraImages === 0) {
+    // 못 세면 저장하지 않는다. 그때 「상한」을 말하면 사실이 아니라 다른 말을 한다.
+    const recent = await countRecentCharacters(auth.member.userId, new Date(Date.now() - 3_600_000)).catch((error: unknown) => {
+      console.error("[characters:create] 저장 수를 세지 못했습니다", error instanceof Error ? error.message : error);
+      return null;
+    });
+    if (recent === null) {
+      return Response.json({ ok: false, message: "지금은 저장할 수 없습니다. 잠시 뒤 다시 눌러 주세요." }, { status: 503 });
+    }
+    if (recent >= FREE_SAVES_PER_HOUR) {
+      return Response.json(
+        { ok: false, message: `캐릭터는 한 시간에 ${FREE_SAVES_PER_HOUR}개까지 이렇게 저장할 수 있습니다. 잠시 뒤 다시 눌러 주세요.` },
+        { status: 429 },
+      );
+    }
+  }
   const reservation = await reserveAiUsage(
     req, "pdp_image",
     characterCreditCost(body.look, modelId, { candidates: 0, extraAngles: extraImages }),
@@ -280,7 +331,8 @@ async function handlePost(req: Request) {
       look: body.look,
       modelId,
       chosenBase64,
-      chosenMimeType: body.chosenMimeType || "image/png",
+      // 바이트로 판정한 형식이다. 화면이 보낸 딱지는 믿지 않는다(재리뷰).
+      chosenMimeType,
     });
 
     // 정면은 이미 만든 것이라 차감하지 않는다.
@@ -302,6 +354,63 @@ async function handlePost(req: Request) {
       { status: 500 },
     );
   }
+}
+
+/** 옛 저장 단계가 받는 정면 형식(바이트로 판정). */
+const FRONT_FORMATS = new Set(["image/png", "image/jpeg", "image/webp"]);
+/** 각도 없는(0크레딧) 저장의 회원당 시간당 상한. 자동 저장이 실패했을 때만 쓰는 길이라 넉넉하다. */
+const FREE_SAVES_PER_HOUR = 30;
+
+/** 저장이 실패했을 때 화면에 보이는 말. 저장소 원문(주소·표 이름)은 서버 기록에만 남긴다. */
+const FRONT_SAVE_FAILED = "정면은 만들었지만 저장하지 못했습니다. 「다시 저장하기」를 눌러 주세요.";
+
+/**
+ * **정면이 나오면 그 자리에서 캐릭터로 저장한다**(2026-10-08 사용자 요청).
+ *
+ * 전에는 정면이 화면에만 있다가 「캐릭터 저장하기」를 눌러야 저장됐다. 정면에도 크레딧이 나가는데
+ * 누르지 않고 나가면 그림이 어디에도 안 남았다(운영 10-06 실제로 그랬다). 다른 기능처럼 만들어지는
+ * 순간 저장한다. 다시 뽑으면 뽑을 때마다 새 캐릭터가 된다(사용자 결정).
+ *
+ * 화면이 다시 보낸 그림이 아니라 **서버가 방금 만든 그 바이트**로 저장한다. **던지지 않는다** —
+ * 저장이 실패해도 돈을 낸 정면은 돌려주고, 화면이 「다시 저장하기」(옛 `create` 단계)로 살린다.
+ */
+async function saveFront(input: {
+  userId: string;
+  body: z.infer<typeof BodySchema>;
+  modelId: Parameters<typeof createCharacter>[0]["modelId"];
+  identityPrompt: string;
+  front: { base64: string; mimeType: string };
+}): Promise<{ character: { id: string; name: string }; referenceIssue?: string } | { saveError: string }> {
+  const { body } = input;
+  // 빈칸뿐인 이름은 없는 것과 같다. 저장 단계(`create`)와 같은 규칙이다.
+  const name = (body.name?.trim() || body.description).slice(0, 80);
+  try {
+    const result = await createCharacter({
+      angles: [],
+      sheet: false,
+      userId: input.userId,
+      name,
+      description: body.description,
+      identityPrompt: input.identityPrompt,
+      aspectRatio: body.aspectRatio,
+      kind: body.kind,
+      look: body.look,
+      modelId: input.modelId,
+      chosenBase64: input.front.base64,
+      chosenMimeType: input.front.mimeType || "image/png",
+    });
+    // 참고 이미지 창고에 못 넣었으면 조용히 넘어가지 않는다 — 옛 저장 단계가 그랬듯 화면이 알린다.
+    if (result.ok && result.id) {
+      return {
+        character: { id: result.id, name: result.name ?? name },
+        ...(result.referenceIssue ? { referenceIssue: result.referenceIssue } : {}),
+      };
+    }
+    console.error("[characters:auto-save]", result.ok ? "id 없음" : result.message);
+  } catch (error) {
+    console.error("[characters:auto-save]", error instanceof Error ? error.message : error);
+  }
+  return { saveError: FRONT_SAVE_FAILED };
 }
 
 export async function DELETE(req: Request) {

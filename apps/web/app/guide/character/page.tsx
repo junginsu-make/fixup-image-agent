@@ -232,8 +232,9 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           먼저 <strong className="text-foreground">정면</strong>이 나옵니다. 그 정면을 기준으로 나머지 다섯 면을
-          만듭니다. 여섯 면을 다 만들 필요는 없습니다. 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
-          빈 각도를 채울 수 있습니다. 다만 각도가 많을수록 다른 도구에서 쓸 때 자연스럽습니다.
+          만듭니다. <strong className="text-foreground">정면이 나오면 그 자리에서 저장됩니다.</strong> 저장 단추를
+          따로 누르지 않습니다. 더 만든 각도는 그 캐릭터에 더해집니다. 여섯 면을 다 만들 필요는 없고, 나중에
+          「내 캐릭터」에서 빈 각도를 채울 수 있습니다. 다만 각도가 많을수록 다른 도구에서 쓸 때 자연스럽습니다.
         </p>
         <p className="text-sm leading-6 text-muted-foreground">
           <strong className="text-foreground">시작할 때는 아무 각도도 켜져 있지 않습니다.</strong> 만들 것만
@@ -280,7 +281,7 @@ export default function CharacterGuidePage() {
           items={[
             {
               q: "정면이 생각과 다르게 나옵니다",
-              a: "「무엇을 만들까요」가 두루뭉술해서 그렇습니다. 나이·머리 모양·옷·인상까지 적어 보세요. 참고할 그림을 붙이면 더 좁혀집니다. 같은 설정으로 한 장 더 보려면 「다시 뽑기」를 누르세요. 앞의 정면은 새것으로 바뀝니다.",
+              a: "「무엇을 만들까요」가 두루뭉술해서 그렇습니다. 나이·머리 모양·옷·인상까지 적어 보세요. 참고할 그림을 붙이면 더 좁혀집니다. 같은 설정으로 한 장 더 보려면 「다시 뽑기」를 누르세요. 앞의 정면도 캐릭터로 저장돼 남습니다. 필요 없으면 「내 캐릭터」에서 지우세요.",
             },
             {
               q: "각도를 만들었는데 다른 사람 같습니다",

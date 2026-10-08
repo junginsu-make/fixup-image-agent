@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2, UserRound } from "lucide-react";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { ThumbImage } from "../_components/thumb-image";
+import { openImageGallery } from "../_components/image-viewer";
 
 /**
  * 캐릭터.
@@ -14,6 +15,12 @@ import { ThumbImage } from "../_components/thumb-image";
  * 올린 그림들 사이에 낱장으로 섞여, 한 명 만들 때마다 여섯 장이 흩어졌다.
  * **만든 사람은 "누구"를 찾지 "그림 여섯 장"을 찾지 않는다** — 여기서는
  * 한 명을 한 덩어리로 묶어 보여 준다.
+ *
+ * **카드에는 정면 한 장만**, 누르면 큰 창에서 옆으로 넘겨 각도·다각도를 본다(2026-10-08 사용자
+ * 요청). 작업물·상세페이지와 같은 모양이다 — 전에는 카드마다 각도를 작게 늘어놓아 이 화면만 달랐다.
+ *
+ * **최고 관리자는 모든 회원의 캐릭터를 본다**(사용자가 여러 번 말함). `scope=all` 로 묻고,
+ * 서버가 관리자에게만 넓힌다 — 회원에게는 자기 것만 온다.
  *
  * 보는 곳이다. 각도를 다시 만들거나 지우는 것은 캐릭터 만들기 화면이 한다 —
  * 두 곳에 두면 한쪽만 고쳐지고 서로 어긋난다.
@@ -33,6 +40,10 @@ interface Character {
   look: string;
   createdAt: string;
   views: CharacterView[];
+  /** 내가 만든 것인가. 서버가 정한다. */
+  mine?: boolean;
+  /** 만든 사람. 관리자가 전체를 볼 때 남의 것에만 온다. */
+  ownerEmail?: string | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -48,6 +59,34 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(date);
 }
 
+/** 서명 주소의 경로 쪽 확장자. 내려받을 이름에 쓴다(없으면 png). */
+function extensionOf(url: string): string {
+  return url.split("?")[0]!.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "png";
+}
+
+/** 큰 창을 연다. 정면이 먼저다 — 서버가 각도 순서로 준다. */
+function openCharacter(character: Character, labels: Record<string, string>) {
+  const meta: Array<[string, string]> = [
+    ["만든 때", formatDate(character.createdAt)],
+    ["종류", KIND_LABEL[character.kind] ?? character.kind],
+    ["그림체", LOOK_LABEL[character.look] ?? character.look],
+    ...(character.mine === false ? ([["만든 사람", character.ownerEmail ?? "다른 회원"]] as Array<[string, string]>) : []),
+  ];
+  openImageGallery({
+    images: character.views
+      .filter((view): view is CharacterView & { url: string } => Boolean(view.url))
+      .map((view) => {
+        const label = labels[view.angle] ?? view.angle;
+        return {
+          src: view.url,
+          alt: `${character.name} · ${label}`,
+          name: `${character.name} ${label}.${extensionOf(view.url)}`,
+          meta,
+        };
+      }),
+  });
+}
+
 export function CharactersTab() {
   const [items, setItems] = React.useState<Character[] | null>(null);
   /** 각도 이름표는 서버가 준다. 화면에 박아 두면 각도가 늘 때 여기만 옛말이 된다. */
@@ -58,16 +97,20 @@ export function CharactersTab() {
     let alive = true;
     void (async () => {
       try {
-        const body = await (await fetch("/api/characters", { cache: "no-store" })).json() as {
+        const body = await (await fetch("/api/characters?scope=all", { cache: "no-store" })).json() as {
           ok?: boolean;
           characters?: Character[];
           angles?: Array<{ id: string; label: string }>;
+          /** 다각도 한 장. 각도 목록 밖이라 따로 온다 — 안 실으면 「sheet」 가 그대로 찍혔다. */
+          sheet?: { id: string; label: string };
           message?: string;
         };
         if (!alive) return;
         if (!body.ok) return setMessage(body.message ?? "캐릭터를 불러오지 못했습니다.");
         setItems(body.characters ?? []);
-        setAngleLabels(Object.fromEntries((body.angles ?? []).map((angle) => [angle.id, angle.label])));
+        setAngleLabels(Object.fromEntries(
+          [...(body.angles ?? []), ...(body.sheet ? [body.sheet] : [])].map((angle) => [angle.id, angle.label]),
+        ));
       } catch {
         if (alive) setMessage("캐릭터를 불러오지 못했습니다.");
       }
@@ -97,7 +140,7 @@ export function CharactersTab() {
         <div>
           <h2 className="text-xl font-semibold">캐릭터</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            각도를 고정해 둔 인물·동물·사물입니다. 도구에서 「라이브러리에서 불러오기」를 누르면 캐릭터 칸에 이 목록이 나옵니다.
+            각도를 고정해 둔 인물·동물·사물입니다. 눌러서 각도를 넘겨 봅니다. 도구에서 「라이브러리에서 불러오기」를 누르면 캐릭터 칸에 이 목록이 나옵니다.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -112,51 +155,46 @@ export function CharactersTab() {
           <Button asChild size="sm"><Link href="/characters">캐릭터 만들러 가기</Link></Button>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {items.map((character) => {
             const shown = character.views.filter((view) => view.url);
+            // 정면이 없는 옛 캐릭터는 처음 장으로 대신한다.
+            const cover = shown.find((view) => view.angle === "front") ?? shown[0];
             return (
-              <Card key={character.id}>
-                <CardContent className="grid gap-3 pt-6">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate font-semibold">{character.name}</p>
-                    {/* 「과정 보기」 — 무엇으로 만들었는지와 각도를 본다.
-                        작업물 카드와 같은 자리·같은 뜻이다. */}
+              <Card key={character.id} className="overflow-hidden">
+                {/* 칸은 작업물과 같은 정사각형, 그림은 잘라 내지 않는다. */}
+                <button
+                  type="button"
+                  aria-label={`${character.name} 크게 보기`}
+                  disabled={!cover}
+                  onClick={() => openCharacter(character, angleLabels)}
+                  className="flex aspect-square w-full items-center justify-center overflow-hidden bg-muted p-1 enabled:cursor-zoom-in"
+                >
+                  {cover ? (
+                    <ThumbImage
+                      src={(cover.thumbUrl ?? cover.url) as string}
+                      alt={`${character.name} · ${angleLabels[cover.angle] ?? cover.angle}`}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">저장된 각도가 없습니다</span>
+                  )}
+                </button>
+                <CardContent className="grid gap-2 p-3">
+                  <p className="truncate text-sm font-bold">{character.name}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="secondary">{KIND_LABEL[character.kind] ?? character.kind}</Badge>
+                    <Badge variant="secondary">{LOOK_LABEL[character.look] ?? character.look}</Badge>
+                    <Badge variant="secondary">{shown.length}장</Badge>
+                    {character.mine === false ? <Badge variant="secondary">{character.ownerEmail ?? "다른 회원"}</Badge> : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-meta text-subtle-foreground">{formatDate(character.createdAt)}</p>
+                    {/* 「과정 보기」 — 무엇으로 만들었는지와 각도를 본다. 작업물 카드와 같은 뜻이다. */}
                     <Button asChild variant="ghost" size="sm">
                       <Link href={`/characters/${character.id}`}>과정 보기</Link>
                     </Button>
-                    <Badge variant="secondary">{KIND_LABEL[character.kind] ?? character.kind}</Badge>
-                    <Badge variant="secondary">{LOOK_LABEL[character.look] ?? character.look}</Badge>
                   </div>
-
-                  {shown.length === 0 ? (
-                    <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                      저장된 각도가 없습니다. 캐릭터 만들기 화면에서 다시 만들어 주세요.
-                    </p>
-                  ) : (
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {shown.map((view) => (
-                        <figure key={view.angle} className="w-20 shrink-0">
-                          <span className="block aspect-[3/4] overflow-hidden rounded-md border bg-muted">
-                            <ThumbImage
-                              src={(view.thumbUrl ?? view.url) as string}
-                              data-viewer-src={(view.url as string) ?? undefined}
-                              alt={`${character.name} · ${angleLabels[view.angle] ?? view.angle}`}
-                              data-zoomable
-                              className="h-full w-full cursor-zoom-in object-cover"
-                            />
-                          </span>
-                          <figcaption className="mt-1 truncate text-center text-[11px] text-subtle-foreground">
-                            {angleLabels[view.angle] ?? view.angle}
-                          </figcaption>
-                        </figure>
-                      ))}
-                    </div>
-                  )}
-
-                  <p className="text-meta text-subtle-foreground">
-                    {shown.length}장 · {formatDate(character.createdAt)}
-                  </p>
                 </CardContent>
               </Card>
             );

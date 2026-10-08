@@ -14,6 +14,13 @@ function body(start: string): string {
 }
 
 describe("이름이 바뀌었을 때", () => {
+  /** 자동 저장(2026-10-08)도 같은 규칙이다. 정면을 만들 때 저장되므로 그때 알린다. */
+  it("자동 저장된 이름이 보낸 이름과 다르면 그 이름을 알린다", () => {
+    const make = body("const handleCandidates = async () => {");
+    expect(make).toMatch(/body\.character\.name !== requestedName/);
+    expect(make).toContain("같은 이름의 캐릭터가 있어");
+  });
+
   it("저장 결과의 이름이 보낸 이름과 다르면 그 이름을 알린다", () => {
     const create = body("const handleCreate = async (withExtras: boolean) => {");
     expect(create).toContain("name?: string");
