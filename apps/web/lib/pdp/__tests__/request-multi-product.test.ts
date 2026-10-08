@@ -109,7 +109,7 @@ describe("analyze.products 사진 크기", () => {
  */
 describe("page.products[].facts 줄바꿈", () => {
   it("줄바꿈·U+0085·U+2028 을 빈칸 하나로 접고, 접은 길이로 잰다", async () => {
-    const 긴사실 = `${"가".repeat(99)}\r\n ${"나".repeat(100)}`;
+    const 긴사실 = `${"가".repeat(99)}\r\n\u2028${"나".repeat(100)}`;
     const r = await 단건({
       products: [{
         id: "p1", imageUrls: [주소],
