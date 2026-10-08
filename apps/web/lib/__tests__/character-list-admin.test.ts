@@ -16,8 +16,6 @@ const ROWS = [
 ];
 const seen = { limits: [] as number[], profileQueries: 0, viewChunks: [] as number[], signChunks: [] as number[] };
 let rows: Array<Record<string, unknown>> = ROWS;
-/** 붙은 회원 조건. 개수 시험이 본다. */
-const filters: unknown[][] = [];
 
 /** 부른 메서드를 다 받아 넘기고, 기다리면 표마다 정한 값을 준다. */
 function chain(table: string) {
@@ -27,8 +25,7 @@ function chain(table: string) {
         : [];
   if (table === "profiles") seen.profileQueries += 1;
   const builder: Record<string, unknown> = {};
-  for (const name of ["select", "order", "is", "filter"]) builder[name] = () => builder;
-  for (const name of ["eq", "or"]) builder[name] = (...args: unknown[]) => { filters.push([name, ...args]); return builder; };
+  for (const name of ["select", "order", "eq", "or", "is", "filter"]) builder[name] = () => builder;
   builder.in = (_column: string, values: unknown[]) => {
     if (table === "character_views") seen.viewChunks.push(values.length);
     return builder;
@@ -45,7 +42,7 @@ vi.mock("../supabase/admin", () => ({
   }),
 }));
 
-const { countCharacters, listCharacters } = await import("../characters");
+const { listCharacters } = await import("../characters");
 
 beforeEach(() => {
   seen.limits.length = 0;
@@ -96,17 +93,3 @@ describe("많을 때", () => {
   });
 });
 
-/** 「캐릭터」 단추의 숫자는 목록과 같은 범위로 센다. */
-describe("개수", () => {
-  it("관리자 전체 보기는 회원 조건 없이 센다", async () => {
-    filters.length = 0;
-    await countCharacters("admin", null, { allMembers: true });
-    expect(filters).toEqual([]);
-  });
-
-  it("회원은 자기 것으로 좁혀 센다", async () => {
-    filters.length = 0;
-    await countCharacters("member", null);
-    expect(filters).toEqual([["eq", "user_id", "member"]]);
-  });
-});

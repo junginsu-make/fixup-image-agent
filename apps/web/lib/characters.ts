@@ -747,26 +747,6 @@ function chunksOf<T>(items: readonly T[], size: number): T[][] {
 }
 
 /**
- * 목록과 같은 범위로 **개수만** 센다(2026-10-08, 라이브러리 「캐릭터」 단추의 숫자).
- *
- * 목록을 읽으면 그림 주소까지 서명해 라이브러리를 열 때마다 무겁다. 범위 규칙은 목록과 같다 —
- * 회원은 자기(와 팀) 것, 관리자가 전체를 달라고 하면 전부.
- */
-export async function countCharacters(
-  userId: string,
-  teamId: string | null = null,
-  options: { allMembers?: boolean } = {},
-): Promise<number> {
-  if (isLocalStoreEnabled()) return (await listLocalCharacters(userId)).length;
-  const { count, error } = await scopedRead(
-    createSupabaseAdminClient().from("characters").select("id", { count: "exact", head: true }),
-    { userId, teamId, isAdmin: options.allMembers === true },
-  );
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
-/**
  * 이 회원이 `since` 뒤로 만든 캐릭터 수.
  *
  * 옛 저장 단계(`create`)를 각도 없이 부르면 0크레딧이라 장부가 막지 않는다. 지금 그 길은 자동 저장이

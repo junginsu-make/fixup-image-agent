@@ -5,16 +5,16 @@
  * 자기가 만든 작업을 가리켜 두므로(`easy_messages.work_id`, `/api/easy/works`) 그 목록에
  * 있으면 쉽게다.
  *
- * 2026-10-08: 위 탭 [작업물·참고 이미지·캐릭터] 과 **한 줄로 합쳤다**(사용자 요청). 「캐릭터」는
- * 캐릭터 화면 단추 하나다 — 작업물 안의 캐릭터 거르기는 없앴다.
+ * 2026-10-08: 위 탭 [작업물·참고 이미지·캐릭터] 과 **한 줄로 합쳤다**(사용자 요청). 「캐릭터」도 같은
+ * 목록에서 거른다 — 별도 캐릭터 화면으로 바꿔 보였더니 「다른 페이지 같다」고 했다(사용자 보고).
  *
  * 순수한 규칙이라 값으로 잰다(`__tests__/work-filter.test.ts`).
  */
 
 export type WorkOrigin = "easy" | "poster" | "sns" | "character" | "ad" | "create" | "redesign";
-export type WorkFilterId = "all" | Exclude<WorkOrigin, "character">;
-/** 한 줄 거르기의 단추 하나. 작업물 거르기에 캐릭터·참고 이미지 화면이 붙는다. */
-export type LibraryView = WorkFilterId | "characters" | "references";
+export type WorkFilterId = "all" | WorkOrigin;
+/** 한 줄 거르기의 단추 하나. 작업물 거르기에 참고 이미지 화면이 붙는다. */
+export type LibraryView = WorkFilterId | "references";
 
 export interface FilterableWork {
   id: string;
@@ -35,22 +35,18 @@ export const WORK_FILTERS: { id: WorkFilterId; label: string; unavailable?: stri
   { id: "ad", label: "광고소재" },
   { id: "create", label: "상세페이지" },
   { id: "redesign", label: "리디자인" },
+  // 캐릭터도 생성 결과다 — 캐릭터 목록 카드(`character-works.ts`)와 예전 라이브러리 줄.
+  { id: "character", label: "캐릭터" },
 ];
 
-/** 작업물 거르기 뒤에 붙는 다른 화면. 개수를 달지 않는다 — 작업물이 아니다. */
+/** 작업물 거르기 뒤에 붙는 다른 화면. 개수를 달지 않는다 — 직접 올린 것이라 생성 결과가 아니다. */
 export const LIBRARY_VIEWS: { id: LibraryView; label: string; unavailable?: string }[] = [
   ...WORK_FILTERS,
-  { id: "characters", label: "캐릭터" },
   { id: "references", label: "참고 이미지" },
 ];
 
-/**
- * 카드에 붙는 이름표. 거르기 단추와 같은 말을 쓴다 — 둘이 다르면 어느 단추로 찾을지 모른다.
- *
- * 캐릭터는 작업물 거르기 단추가 없다(「캐릭터」 단추는 캐릭터 화면이다). 「전체」에서 보이고 이름표는 「캐릭터」다.
- */
+/** 카드에 붙는 이름표. 거르기 단추와 같은 말을 쓴다 — 둘이 다르면 어느 단추로 찾을지 모른다. */
 export function originLabel(origin: WorkOrigin): string {
-  if (origin === "character") return "캐릭터";
   return WORK_FILTERS.find((filter) => filter.id === origin)!.label;
 }
 
@@ -86,8 +82,8 @@ function hasPicture(work: FilterableWork): boolean {
 }
 
 /**
- * **전체에는 캐릭터도 넣는다**(2026-10-08 — 캐릭터 목록 카드도 같은 `origin`). 「캐릭터」 단추가 캐릭터 화면이 되어, 빼면 어디서도
- * 안 보인다(운영 1건 — 원본 캐릭터는 이미 지워져 캐릭터 화면에 없다).
+ * **전체에는 캐릭터도 넣는다**(2026-10-08 — 시스템이 만든 것은 모두 생성 결과). 캐릭터 목록 카드와
+ * 예전 라이브러리 줄이 같은 `origin` 이라 「캐릭터」 단추가 둘 다 거른다.
  */
 export function filterWorks<T extends FilterableWork>(works: readonly T[], filter: WorkFilterId, easyWorkIds: ReadonlySet<string>): T[] {
   const shown = works.filter(hasPicture);
@@ -98,8 +94,7 @@ export function filterWorks<T extends FilterableWork>(works: readonly T[], filte
 export function countByOrigin(works: readonly FilterableWork[], easyWorkIds: ReadonlySet<string>): Record<WorkFilterId, number> {
   const counts = Object.fromEntries(WORK_FILTERS.map((filter) => [filter.id, 0])) as Record<WorkFilterId, number>;
   for (const work of works.filter(hasPicture)) {
-    const origin = originOf(work, easyWorkIds);
-    if (origin !== "character") counts[origin] += 1;
+    counts[originOf(work, easyWorkIds)] += 1;
     counts.all += 1;
   }
   return counts;
