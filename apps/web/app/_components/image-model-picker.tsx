@@ -20,8 +20,11 @@ const DEFAULT_ID = IMAGE_MODELS.find((m) => m.isDefault)?.id;
 
 // 말풍선은 CSS 만으로 보이고 숨긴다. absolute 라 줄 높이를 바꾸지 않는다.
 const TIP_CLASS =
-  "pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-56 rounded-md border bg-background p-2 " +
+  "pointer-events-none absolute top-full z-20 mt-1 hidden w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-background p-2 " +
   "whitespace-normal text-left text-meta font-normal text-foreground shadow-lg group-hover:block group-focus-visible:block";
+
+// 맨 끝 버튼의 말풍선은 오른쪽 끝에 붙인다 — 좁은 화면에서 왼쪽에 붙이면 화면 밖으로 나간다.
+const tipClass = (last: boolean) => `${TIP_CLASS} ${last ? "right-0 left-auto" : "left-0"}`;
 
 export function ImageModelPicker({
   value,
@@ -52,10 +55,10 @@ export function ImageModelPicker({
             className="group relative"
           >
             {auto.label}
-            <span id={`${uid}-auto`} role="tooltip" className={TIP_CLASS}>{auto.hint}</span>
+            <span id={`${uid}-auto`} role="tooltip" className={tipClass(ids.length === 0)}>{auto.hint}</span>
           </Button>
         ) : null}
-        {ids.map((id) => {
+        {ids.map((id, index) => {
           const checked = !autoActive && id === value;
           return (
             <Button
@@ -72,7 +75,7 @@ export function ImageModelPicker({
             >
               {imageModelName(id)}
               {id === DEFAULT_ID ? <span className="ml-1 text-[11px] opacity-80">기본</span> : null}
-              <span id={`${uid}-${id}`} role="tooltip" className={TIP_CLASS}>{imageModelSummary(id)}</span>
+              <span id={`${uid}-${id}`} role="tooltip" className={tipClass(index === ids.length - 1)}>{imageModelSummary(id)}</span>
             </Button>
           );
         })}

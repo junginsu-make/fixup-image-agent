@@ -86,4 +86,20 @@ describe("공용 그림 모델 고르기", () => {
     expect(tips.length).toBe(3);
     for (const t of tips) expect(t.props.className).toContain("whitespace-normal");
   });
+
+  it("좁은 화면에서 말풍선이 화면 밖으로 나가지 않는다 — 맨 끝 것은 오른쪽에 붙는다", () => {
+    const root = mount({ value: "nano-banana-pro", auto: { label: "자동", hint: "알아서 고릅니다", active: false, onPick: () => {} } });
+    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
+    expect(tips.length).toBe(4);
+    const classes = (t: (typeof tips)[number]) => String(t.props.className).split(/\s+/);
+    for (const t of tips) expect(classes(t)).toContain("max-w-[calc(100vw-2rem)]");
+    for (const t of tips.slice(0, -1)) {
+      expect(classes(t)).toContain("left-0");
+      expect(classes(t)).not.toContain("right-0");
+    }
+    const last = classes(tips[tips.length - 1]!);
+    expect(last).toContain("right-0");
+    expect(last).toContain("left-auto");
+    expect(last).not.toContain("left-0");
+  });
 });
