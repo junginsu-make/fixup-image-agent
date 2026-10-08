@@ -10,7 +10,6 @@ import {
   MAX_CANDIDATES,
   MIN_CANDIDATES,
   characterCreditCost,
-  countCharacters,
   countRecentCharacters,
   createCharacter,
   deleteCharacter,
@@ -103,7 +102,7 @@ function rawBase64(value: string): string {
 /**
  * `?scope=all` — **최고 관리자는 모든 회원의 캐릭터를 본다**(2026-10-08, 사용자가 여러 번 말함).
  *
- * 라이브러리의 캐릭터 화면만 이것을 보낸다. 만들기 화면·불러오기 창은 안 보낸다 — 관리자도 거기서는
+ * 라이브러리의 작업물 목록(캐릭터 카드)만 이것을 보낸다. 만들기 화면·불러오기 창은 안 보낸다 — 관리자도 거기서는
  * 자기 것만 봐야 남의 캐릭터를 잘못 불러 쓰지 않는다. 회원이 보내면 무시한다.
  */
 export async function GET(req: Request) {
@@ -111,17 +110,6 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const wantsAll = new URL(req.url).searchParams.get("scope") === "all";
   const allMembers = wantsAll && hasFullScope(viewerFrom(auth.member), "read");
-
-  // **개수만**(라이브러리 「캐릭터」 단추의 숫자). 목록·그림 주소를 만들지 않는다.
-  if (new URL(req.url).searchParams.get("count") === "1") {
-    try {
-      const teamId = await teamIdOf(auth.member.userId);
-      return Response.json({ ok: true, count: await countCharacters(auth.member.userId, teamId, allMembers ? { allMembers: true } : {}) });
-    } catch (error) {
-      console.error("[characters:count]", error instanceof Error ? error.message : error);
-      return Response.json({ ok: false, message: "캐릭터 수를 세지 못했습니다." }, { status: 500 });
-    }
-  }
 
   try {
     return Response.json({

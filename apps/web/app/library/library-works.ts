@@ -125,9 +125,8 @@ export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
 /**
  * 예전 캐릭터 만들기 결과. **「전체」에 「캐릭터」 이름표로 보인다**(2026-10-08).
  *
- * 「캐릭터」 단추가 캐릭터 화면이 되어 작업물 안의 캐릭터 거르기는 없앴다. 지금 캐릭터
- * 만들기는 여기 저장하지 않아 옛 줄뿐이고, 그 원본은 캐릭터 화면에 없다 — 빼면 어디서도
- * 안 보인다(`work-filter.ts`).
+ * 지금 캐릭터 만들기는 여기 저장하지 않아 옛 줄뿐이고(운영 1건), 그 원본 캐릭터는 이미 지워졌다 —
+ * 빼면 어디서도 안 보인다. 「캐릭터」 단추가 캐릭터 목록 카드와 함께 거른다(`work-filter.ts`).
  */
 export function libraryCharacterWorks(items: readonly LibraryListItem[]): LibraryWork[] {
   return items

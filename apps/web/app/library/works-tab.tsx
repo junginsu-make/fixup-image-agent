@@ -345,6 +345,8 @@ export function WorksTab({ filter = "all", onSummary }: {
   const [notice, setNotice] = React.useState("");
   /** 쉽게로 만든 작업 id. `null` 이면 못 읽었다 — 쉽게와 다양하게를 못 가른다. */
   const [easyIds, setEasyIds] = React.useState<Set<string> | null>(null);
+  /** 캐릭터가 왔나. 다른 결과를 먼저 그리고 캐릭터는 나중에 더한다 — 그 사이 「캐릭터」가 「없다」고 하면 안 된다. */
+  const [charactersReady, setCharactersReady] = React.useState(false);
   const [easyConversations, setEasyConversations] = React.useState<Map<string, string> | null>(null); // 쉽게 작업 → 대화(설계 C)
   const pending = React.useMemo(
     () => (works ?? []).find((work) => work.id === confirming) ?? null,
@@ -552,6 +554,7 @@ export function WorksTab({ filter = "all", onSummary }: {
     let alive = true;
     setWorks(null);
     setEasyIds(null);
+    setCharactersReady(false);
     setEasyConversations(null);
     /*
       **캐릭터는 기다리지 않는다**(2026-10-08 리뷰). 관리자는 전체 회원 캐릭터를 서명하느라 늦을 수 있다 —
@@ -596,7 +599,9 @@ export function WorksTab({ filter = "all", onSummary }: {
         setWorks(merged.sort(newestFirst));
         // 캐릭터도 생성 결과다 — 「전체」에 섞는다(2026-10-08, `character-works.ts`).
         const arrived = await characters;
-        if (alive && arrived.length) setWorks((current) => [...(current ?? []), ...arrived].sort(newestFirst));
+        if (!alive) return;
+        if (arrived.length) setWorks((current) => [...(current ?? []), ...arrived].sort(newestFirst));
+        setCharactersReady(true);
       } catch (error) {
         // 화면을 통째로 지우지 않는다. 전체 보기가 실패했는데 목록까지
         // 사라지면 「내 것만 보기」로 돌아갈 단추마저 없어진다.
@@ -610,8 +615,8 @@ export function WorksTab({ filter = "all", onSummary }: {
 
   // 단추에 달 개수. 작업물을 다시 읽는 동안은 `null` — 옛 숫자를 남기지 않는다.
   React.useEffect(() => {
-    onSummary?.(works ? { counts: countByOrigin(works, easyIds ?? new Set()), easyKnown: easyIds !== null } : null);
-  }, [works, easyIds, onSummary]);
+    onSummary?.(works ? { counts: countByOrigin(works, easyIds ?? new Set()), easyKnown: easyIds !== null, charactersReady } : null);
+  }, [works, easyIds, charactersReady, onSummary]);
 
   if (message) return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p>;
   if (!works) return <p className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />작업물을 불러오는 중입니다.</p>;
@@ -652,9 +657,11 @@ export function WorksTab({ filter = "all", onSummary }: {
 
       {visible.length ? null : (
         <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          {chosen === "all"
-            ? "아직 만든 작업물이 없습니다."
-            : `「${filters.find((entry) => entry.id === chosen)!.label}」로 만든 작업물이 없습니다.`}
+          {chosen === "character"
+            ? (charactersReady ? "아직 만든 캐릭터가 없습니다." : "캐릭터를 불러오는 중입니다.")
+            : chosen === "all"
+              ? "아직 만든 작업물이 없습니다."
+              : `「${filters.find((entry) => entry.id === chosen)!.label}」로 만든 작업물이 없습니다.`}
         </p>
       )}
 
