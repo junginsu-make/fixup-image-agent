@@ -10,6 +10,7 @@ import type {
 } from "@fixup/pdp-core";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import type { PreparedImageDraft } from "./pdp-drafts";
+import { primaryPhoto, type PdpProductDraft } from "./products";
 
 /**
  * 기획(구성안 짜기) 요청 몸통을 짓는다.
@@ -51,6 +52,24 @@ export interface AnalyzeRequestInputs {
   planInstruction?: string;
   /** 그림체. 설계 §6.3 이 「기획과 생성 양쪽 전달」이라 적은 값이다. */
   look?: ImageLook;
+  /** 화면의 제품 칸(설계 2026-10-08 §3). 없으면 `preparedImage` 한 장 — 지금 그대로다. */
+  products?: readonly PdpProductDraft[];
+}
+
+/**
+ * 제품이 둘 이상이거나 사진이 둘 이상일 때만 `products` 를 싣는다.
+ *
+ * 제품 하나·사진 하나면 몸통이 1·2단계와 **같아야** 한다(칸 자체가 없다) — 서버는 그때
+ * `imageBase64` 한 장으로 지금처럼 가고, 옛 작업이 한꺼번에 다른 구성안을 받지 않는다.
+ */
+function analyzeProducts(products: readonly PdpProductDraft[] | undefined): PdpAnalyzeRequest["products"] {
+  const filled = (products ?? []).filter((product) => product.photos.length > 0);
+  if (filled.length < 2 && !filled.some((product) => product.photos.length > 1)) return undefined;
+  return filled.map((product) => ({
+    id: product.id,
+    ...(product.name.trim() ? { name: product.name.trim() } : {}),
+    photos: product.photos.map((photo) => ({ imageBase64: photo.base64, mimeType: photo.mimeType })),
+  }));
 }
 
 export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequest {
@@ -62,13 +81,17 @@ export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequ
     이미 만들어진 뒤다. 그 경우 레퍼런스는 이미지에만 반영된다.
   */
   const usesStyleReference = Boolean(input.styleReferenceEnabled && input.styleReference);
+  // 대표는 늘 제품 1 첫 사진이다. 제품 칸을 안 주면 지금처럼 `preparedImage`.
+  const primary = (input.products && primaryPhoto(input.products)) || input.preparedImage;
+  const products = analyzeProducts(input.products);
 
   return {
     strategyDirective: input.strategyDirective?.trim() || undefined,
     planInstruction: input.planInstruction?.trim() || undefined,
     look: input.look,
-    imageBase64: input.preparedImage.base64,
-    mimeType: input.preparedImage.mimeType,
+    imageBase64: primary.base64,
+    mimeType: primary.mimeType,
+    ...(products ? { products } : {}),
     modelImageBase64: input.modelImage?.base64,
     modelImageMimeType: input.modelImage?.mimeType,
     modelImageFileName: input.modelImage?.fileName,

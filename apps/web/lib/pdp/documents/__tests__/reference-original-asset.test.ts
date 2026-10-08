@@ -20,3 +20,15 @@ describe("참조의 originalAssetId", () => {
     expect(() => validateDocument(d, user, id)).toThrow("첨부 그림이 누락됐습니다.");
   });
 });
+
+/** 제품 칸(설계 2026-10-08 §3.2): 제품 참조가 `productId`·`productName`·`photoIndex` 를 더 실어도 통과하고 남는다. */
+describe("제품 참조의 제품 칸", () => {
+  it("제품 id·이름·사진 차례를 실은 참조가 저장된다", () => {
+    const references = [
+      { role: "product", assetId: "a", originalAssetId: "o", productId: "p1", productName: "레몬맛", photoIndex: 0, enabled: true, instruction: "라벨 그대로" },
+      { role: "product", assetId: "o", productId: "p2", productName: "", photoIndex: 1, enabled: true },
+    ];
+    const d = doc(references, { a: asset("a"), o: asset("b") });
+    expect(validateDocument(d, user, id).body.references).toEqual(references);
+  });
+});
