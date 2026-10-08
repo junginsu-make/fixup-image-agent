@@ -8,6 +8,7 @@ import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
 import type { ProductFacts } from "./pdp.product-fidelity";
+import type { ProductId } from "./pdp.products";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -128,6 +129,11 @@ export interface SectionBlueprint {
   /** 글기반 생성의 근거 스키마. 없으면 이 기능 도입 전 구성안이다. */
   evidenceVersion?: 1;
   evidence?: CopyEvidence[];
+  /**
+   * 이 섹션에 실을 제품. 기획이 정하고 사용자가 구성안에서 바꾼다.
+   * 없으면 모든 제품이다.
+   */
+  product_ids?: string[];
 }
 
 /**
@@ -152,6 +158,8 @@ export interface LandingPageBlueprint {
    * 선택 필드다 — 저장해 둔 초안과 텍스트 시작 경로에는 없다.
    */
   productReading?: ProductReading;
+  /** 제품이 둘 이상일 때 제품마다 읽은 사실. 하나면 `productReading` 만 쓴다. */
+  productReadings?: Array<ProductReading & { productId: ProductId }>;
   executiveSummary: string;
   scorecard: ScorecardItem[];
   blueprintList: string[];

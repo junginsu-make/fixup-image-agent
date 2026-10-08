@@ -152,6 +152,16 @@ export {
   productFidelityTail,
   type ProductFacts,
 } from "./pdp.product-fidelity";
+export {
+  PRODUCT_IDS,
+  PRODUCT_LIMITS,
+  fitProductPhotos,
+  normalizeProductIds,
+  productLabel,
+  productsForSection,
+  type PageProduct,
+  type ProductId,
+} from "./pdp.products";
 import type { PdpPlanStage } from "./pdp.plan-stage";
 export {
   ALWAYS_PASSED,
