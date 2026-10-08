@@ -204,7 +204,7 @@ export function CsPanel() {
     <>
       {/*
         **다른 단추와 결을 달리한다.** 위는 가는 곳, 이것은 여는 것이다.
-        접힌 사이드바에서는 캐릭터만 남는다.
+        앞의 로봇 그림은 사용자 요청으로 뺐다(2026-10-08).
       */}
       <div className="border-t pt-2">
         <button
@@ -213,8 +213,6 @@ export function CsPanel() {
           aria-label="도움말 대화 열기"
           className="flex w-full items-center gap-2 rounded-md bg-primary-soft px-2 py-2 text-left text-sm font-bold text-foreground transition-colors hover:bg-primary-soft/70"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- 128px 고정 장식. 최적화 서버를 거칠 까닭이 없다. */}
-          <img src="/easy/assistant.webp" alt="" aria-hidden width={28} height={28} className="size-7 flex-none rounded-full" />
           <span className="truncate">무엇이든 물어보세요</span>
         </button>
       </div>

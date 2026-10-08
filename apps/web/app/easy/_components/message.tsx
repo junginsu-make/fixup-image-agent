@@ -64,7 +64,6 @@ export function EasyTypingDots() {
 export function EasyThinkingRow() {
   return (
     <div className="flex items-start gap-2" role="status" aria-live="polite">
-      <AssistantMark />
       <span className="rounded-2xl rounded-bl-md bg-muted px-4 py-2.5">
         <span className="sr-only">답을 기다리는 중입니다</span>
         <EasyTypingDots />
@@ -127,29 +126,6 @@ export function EasyImageWorking({ className }: {
   );
 }
 
-/**
- * AI 쪽 표식. 말풍선 왼쪽에 붙어 누가 한 말인지 알린다.
- *
- * **로봇 캐릭터가 답하는 것처럼**(2026-09-22 사용자 요청). 반짝이 아이콘 대신 캐릭터의
- * 얼굴과 흔드는 손까지만 둥글게 잘라 쓴다 — 온몸이 다 보일 필요는 없다. 원본은
- * `frontend/캐릭터/`, 128px webp 로 줄였다(`public/easy/assistant.webp`).
- *
- * 장식이다. 낭독기가 말풍선마다 「로봇」을 읽으면 대화가 안 들린다.
- */
-function AssistantMark() {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- 128px 고정 장식. 최적화 서버를 거칠 까닭이 없다.
-    <img
-      src="/easy/assistant.webp"
-      alt=""
-      aria-hidden
-      width={36}
-      height={36}
-      className="mt-0.5 size-9 shrink-0 rounded-full border border-border bg-white object-cover"
-    />
-  );
-}
-
 /** 「이미지 N」 · 「카드뉴스 N」(2차 D2). 사용자가 번호로 말할 수 있게 결과물 밑에 작게 적는다. */
 function ResultLabel({ label }: { label?: string }) {
   return label ? <span className="text-meta text-subtle-foreground">{label}</span> : null;
@@ -201,7 +177,6 @@ export function EasyMessageRow({
     const 말풍선 = "whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7";
     return (
       <div className="flex items-start gap-2">
-        <AssistantMark />
         {isDetailPageGuide(message) ? (
           /*
             **상세페이지 안내 줄에만 단추를 단다**(설계 §2-7). 대화 표에 갈래를
@@ -237,7 +212,6 @@ export function EasyMessageRow({
   if (cardnews) {
     return (
       <div className="flex items-start gap-2">
-        <AssistantMark />
         <div className="grid min-w-0 flex-1 gap-1">
           <EasyCardnewsCard {...cardnews} />
           <ResultLabel label={resultLabel} />
@@ -252,7 +226,6 @@ export function EasyMessageRow({
   */
   return (
     <div className="flex items-start gap-2">
-      <AssistantMark />
       <div className="grid gap-1">
       {imageUrl ? (
         /*

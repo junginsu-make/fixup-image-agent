@@ -1,7 +1,17 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ImageModelPicker, type ImageModelPickerProps } from "../image-model-picker";
+import { imageModelSummary } from "@fixup/shared";
+import { ImageModelPicker, tipPosition, type ImageModelPickerProps } from "../image-model-picker";
+
+const portalTargets: unknown[] = [];
+vi.mock("react-dom", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  createPortal: (node: unknown, container: unknown) => {
+    portalTargets.push(container);
+    return node;
+  },
+}));
 
 let renderer: ReactTestRenderer | null = null;
 
@@ -14,7 +24,16 @@ function mount(props: Partial<ImageModelPickerProps> & { value: string }) {
 const text = (node: { children: unknown[] }): string =>
   node.children.map((c) => (typeof c === "string" ? c : text(c as { children: unknown[] }))).join("");
 
-beforeEach(() => vi.stubGlobal("React", React));
+const body = { tag: "body" };
+const listeners = { add: vi.fn(), remove: vi.fn() };
+beforeEach(() => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("window", { innerWidth: 1400, innerHeight: 900, addEventListener: listeners.add, removeEventListener: listeners.remove });
+  vi.stubGlobal("document", { body });
+  portalTargets.length = 0;
+  listeners.add.mockClear();
+  listeners.remove.mockClear();
+});
 afterEach(() => {
   if (renderer) act(() => renderer!.unmount());
   renderer = null;
@@ -78,38 +97,88 @@ describe("공용 그림 모델 고르기", () => {
     expect(onPick).toHaveBeenCalledTimes(1);
   });
 
-  it("말풍선은 버튼의 줄바꿈 금지를 물려받지 않는다", () => {
-    const root = mount({ value: "nano-banana-pro" });
-    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
-    expect(tips.length).toBe(3);
-    for (const t of tips) expect(t.props.className).toContain("whitespace-normal");
+  /*
+    **말풍선은 버튼 안이 아니라 화면 맨 위에 띄운다** (2026-10-08 사용자 — 캐릭터 만들기에서
+    속도형 말풍선이 왼쪽으로 펴지며 잘림). 버튼 안에 absolute 로 두면 스크롤 칸이 잘라 낸다.
+  */
+  const rect = (left: number, top: number) => ({ left, top, bottom: top + 32 });
+  const floating = (root: ReturnType<typeof mount>) => root.findAll((n) => n.props["data-testid"] === "model-tip");
+  const speedButton = (root: ReturnType<typeof mount>) =>
+    root.find((n) => n.type === "button" && n.props.role === "radio" && text(n).startsWith("속도형"));
+
+  it("말풍선은 버튼 왼쪽 끝에서 오른쪽으로 펴진다", () => {
+    expect(tipPosition(rect(200, 100), { width: 1400, height: 900 })).toEqual({ left: 200, top: 136 });
   });
 
-  it("말풍선은 넓고 글자가 읽히는 크기다", () => {
+  it("오른쪽 화면 끝에 닿으면 화면 안으로 당긴다", () => {
+    expect(tipPosition(rect(1300, 100), { width: 1400, height: 900 }).left).toBe(1400 - 320 - 16);
+  });
+
+  it("휴대폰처럼 좁으면 양쪽 16px 을 남긴다", () => {
+    expect(tipPosition(rect(100, 100), { width: 340, height: 700 }).left).toBe(16);
+  });
+
+  it("화면 아래 끝이면 버튼 위로 띄운다", () => {
+    expect(tipPosition(rect(200, 800), { width: 1400, height: 900 })).toEqual({ left: 200, bottom: 104 });
+  });
+
+  it("마우스를 올리기 전에는 말풍선이 없다", () => {
+    expect(floating(mount({ value: "nano-banana-pro" }))).toHaveLength(0);
+  });
+
+  it("마우스를 올리면 그 모델 설명이 화면 맨 위 층에 뜨고, 떼면 사라진다", () => {
     const root = mount({ value: "nano-banana-pro" });
-    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
-    for (const t of tips) {
-      const classes = String(t.props.className).split(/\s+/);
-      expect(classes).toContain("w-80");
-      expect(classes).toContain("text-sm");
-      expect(classes).not.toContain("w-56");
-      expect(classes).not.toContain("text-meta");
+    act(() => speedButton(root).props.onMouseEnter({ currentTarget: { getBoundingClientRect: () => rect(1300, 100) } }));
+    const tips = floating(root);
+    expect(tips).toHaveLength(1);
+    expect(text(tips[0]!)).toBe(imageModelSummary("nano-banana-2.1"));
+    expect(portalTargets).toContain(body);
+    expect(tips[0]!.props.style).toEqual({ left: 1064, top: 136 });
+    const classes = String(tips[0]!.props.className).split(/\s+/);
+    for (const c of ["fixed", "w-80", "max-w-[calc(100vw-2rem)]", "text-sm", "whitespace-normal", "pointer-events-none"]) {
+      expect(classes).toContain(c);
     }
+    act(() => speedButton(root).props.onMouseLeave());
+    expect(floating(root)).toHaveLength(0);
   });
 
-  it("좁은 화면에서 말풍선이 화면 밖으로 나가지 않는다 — 맨 끝 것은 오른쪽에 붙는다", () => {
+  it("키보드로 옮겨 가도 뜨고, 떠나면 사라진다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    const keyboard = { getBoundingClientRect: () => rect(200, 100), matches: (q: string) => q === ":focus-visible" };
+    act(() => speedButton(root).props.onFocus({ currentTarget: keyboard }));
+    expect(floating(root)).toHaveLength(1);
+    act(() => speedButton(root).props.onBlur());
+    expect(floating(root)).toHaveLength(0);
+  });
+
+  /** 예전처럼 키보드로 옮겨 갈 때만 뜬다 — 휴대폰에서 누르면 말풍선이 내용을 덮고 남는다. */
+  it("누르거나 탭해서 생긴 포커스로는 뜨지 않는다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    const tapped = { getBoundingClientRect: () => rect(200, 100), matches: () => false };
+    act(() => speedButton(root).props.onFocus({ currentTarget: tapped }));
+    expect(floating(root)).toHaveLength(0);
+  });
+
+  it("떠 있는 동안 화면을 굴리면 닫힌다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    act(() => speedButton(root).props.onMouseEnter({ currentTarget: { getBoundingClientRect: () => rect(200, 100) } }));
+    const scroll = listeners.add.mock.calls.find((call) => call[0] === "scroll");
+    expect(scroll).toBeTruthy();
+    act(() => (scroll![1] as () => void)());
+    expect(floating(root)).toHaveLength(0);
+  });
+
+  it("「자동」에 올려도 그 설명이 뜬다", () => {
     const root = mount({ value: "nano-banana-pro", auto: { label: "자동", hint: "알아서 고릅니다", active: false, onPick: () => {} } });
-    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
-    expect(tips.length).toBe(4);
-    const classes = (t: (typeof tips)[number]) => String(t.props.className).split(/\s+/);
-    for (const t of tips) expect(classes(t)).toContain("max-w-[calc(100vw-2rem)]");
-    for (const t of tips.slice(0, -1)) {
-      expect(classes(t)).toContain("left-0");
-      expect(classes(t)).not.toContain("right-0");
-    }
-    const last = classes(tips[tips.length - 1]!);
-    expect(last).toContain("right-0");
-    expect(last).toContain("left-auto");
-    expect(last).not.toContain("left-0");
+    const autoButton = root.findAll((n) => n.type === "button" && n.props.role === "radio")[0]!;
+    act(() => autoButton.props.onMouseEnter({ currentTarget: { getBoundingClientRect: () => rect(200, 100) } }));
+    expect(text(floating(root)[0]!)).toBe("알아서 고릅니다");
+  });
+
+  it("제목을 숨기라 하면 낭독기에만 남긴다", () => {
+    const root = mount({ value: "nano-banana-pro", legend: "이미지 모델", legendHidden: true });
+    const legend = root.find((n) => n.type === "legend");
+    expect(String(legend.props.className).split(/\s+/)).toContain("sr-only");
+    expect(text(legend)).toBe("이미지 모델");
   });
 });
