@@ -11,7 +11,7 @@ import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
 import { EasyMessageRow, EasyThinkingRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
-import { easyTurn, type EasyMessage } from "./turn";
+import { EASY_GREETING, easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
 import { STILL_MAKING, collectEasyImage } from "./collect";
@@ -24,7 +24,6 @@ import { plainTyped, withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
 import { keptAfterFailure, lostAfterFailure, typedAfterFailure, unsavedAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
-import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
 import { previousRolesFor, rememberRoles } from "./photo-ask-state";
 import type { CardPhotoRole } from "./photo-roles";
@@ -88,12 +87,6 @@ interface Attachment {
   title: string;
 }
 
-const 인사: EasyMessage = {
-  id: "greeting",
-  role: "system",
-  body: "이미지를 붙이시겠어요? 없어도 만들 수 있습니다.",
-};
-
 export function EasyClient({
   conversationId,
   initialMessages,
@@ -111,7 +104,6 @@ export function EasyClient({
   const router = useRouter();
   const [messages, setMessages] = React.useState<EasyMessage[]>(initialMessages);
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
-  const [startedWithout, setStartedWithout] = React.useState(initialMessages.length > 0);
   /*
     라이브러리 목록. **화면이 한 번 읽어 두 곳이 나눠 쓴다** — 시작 화면의
     「라이브러리에서」와 입력창의 폴더 단추다.
@@ -166,8 +158,8 @@ export function EasyClient({
   const [lost, setLost] = React.useState<Record<string, string>>({});
   const failed = { ...resumed, ...lost };
 
-  const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
-  const shown = messages.length ? messages : [인사];
+  const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending });
+  const shown = messages.length ? messages : [EASY_GREETING];
   // 단추를 달 물음 줄 — 서버가 받아 줄 줄과 같다(마지막 물음, 또는 단추 답이 실패한 짝 바로 앞, 2차 최종 리뷰 2).
   const 답할물음 = answerableAskId(shown);
   const cardHandlers = React.useMemo(() => ({
@@ -542,19 +534,6 @@ export function EasyClient({
             그림이 이미 자리를 잡았으면 안 낸다. 기다리는 표시가 둘이 된다.
           */}
           {turn.busy && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
-
-          {/*
-            붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
-          */}
-          {turn.showsAttachChoice ? (
-            <EasyAttachChoice
-              library={library}
-              selectedIds={attachments.map((one) => one.id)}
-              onUpload={() => file.current?.click()}
-              onPick={pickFromLibrary}
-              onSkip={() => setStartedWithout(true)}
-            />
-          ) : null}
 
           {error ? (
             <div className="mx-auto grid max-w-prose gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">

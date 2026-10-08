@@ -95,10 +95,19 @@ export function SpecPicker({ spec, onChange, attachments }: {
         </div>
       </section>
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <label className="grid gap-2"><Label htmlFor="sns-language">언어</Label><select id="sns-language" className="h-10 rounded-md border bg-background px-3 text-sm" value={spec.language} onChange={(event) => onChange({ ...spec, language: event.target.value as SnsSpec["language"] })}><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
-        <ImageModelPicker legend="이미지 모델" value={spec.modelId} onChange={(id) => onChange({ ...spec, modelId: id })} />
-      </div>
+      {/*
+        언어와 이미지 모델은 칸을 나눈다(2026-10-08 사용자 — 모델이 언어 옆에 끼어 잘 안 보였다).
+        언어는 네 가지뿐이라 좁게, 높이는 모델 버튼(h-8)에 맞춘다.
+      */}
+      <section className="grid gap-3">
+        <h3 className="font-semibold"><Label htmlFor="sns-language" className="text-base font-semibold">언어</Label></h3>
+        <select id="sns-language" className="h-8 w-40 rounded-md border bg-background px-3 text-sm" value={spec.language} onChange={(event) => onChange({ ...spec, language: event.target.value as SnsSpec["language"] })}><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select>
+      </section>
+
+      <section className="grid gap-3">
+        <h3 className="font-semibold">이미지 모델</h3>
+        <ImageModelPicker legend="이미지 모델" legendHidden value={spec.modelId} onChange={(id) => onChange({ ...spec, modelId: id })} />
+      </section>
 
       <section className="grid gap-3">
         <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[shownLook]}</p></div>
