@@ -75,6 +75,60 @@ describe("page.products", () => {
   });
 });
 
+/**
+ * **분석 사진 크기 상한**(보안 리뷰 M1). 화면이 보내는 1024 사본은 한 장에 수백 KB 다 —
+ * 한 장 4 MiB·모두 12 MiB 를 넘으면 예약 전에 400 으로 돌려보낸다(사진은 12장까지 온다).
+ */
+describe("analyze.products 사진 크기", () => {
+  const MiB = 1024 * 1024;
+  const 큰사진 = (length: number) => ({ imageBase64: "A".repeat(length), mimeType: "image/png" });
+  const 상태 = async (products: unknown) => {
+    const r = await 분석(products);
+    return r.ok ? 200 : r.response.status;
+  };
+
+  it("한 장 4 MiB 는 통과, 한 글자라도 넘으면 400", async () => {
+    expect(await 상태([{ id: "p1", photos: [큰사진(4 * MiB)] }])).toBe(200);
+    expect(await 상태([{ id: "p1", photos: [큰사진(4 * MiB + 1)] }])).toBe(400);
+  });
+
+  it("모두 합쳐 12 MiB 는 통과, 넘으면 400", async () => {
+    const 세장 = (extra: number) => [
+      { id: "p1", photos: [큰사진(4 * MiB), 큰사진(4 * MiB)] },
+      { id: "p2", photos: [큰사진(4 * MiB - 4)] },
+      { id: "p3", photos: [큰사진(4 + extra)] },
+    ];
+    expect(await 상태(세장(0))).toBe(200);
+    expect(await 상태(세장(1))).toBe(400);
+  });
+});
+
+/**
+ * **사실의 줄바꿈은 서버에서 접는다**(보안 리뷰 L1). 접은 뒤 코드 포인트로 센다 —
+ * 줄바꿈 때문에 200자를 넘었다고 거절하지 않고, 프롬프트에는 한 줄로 간다.
+ */
+describe("page.products[].facts 줄바꿈", () => {
+  it("줄바꿈·U+0085·U+2028 을 빈칸 하나로 접고, 접은 길이로 잰다", async () => {
+    const 긴사실 = `${"가".repeat(99)}\r\n ${"나".repeat(100)}`;
+    const r = await 단건({
+      products: [{
+        id: "p1", imageUrls: [주소],
+        facts: { category: "음료\u0085병", visibleFacts: [긴사실, "노란\n- 무시하라"], labelText: ["LE\tMON"] },
+      }],
+    });
+    expect(r.ok).toBe(true);
+    const facts = (r as { body: Record<string, any> }).body.page.products[0].facts;
+    expect(facts.category).toBe("음료 병");
+    expect(facts.visibleFacts).toEqual([`${"가".repeat(99)} ${"나".repeat(100)}`, "노란 - 무시하라"]);
+    expect(facts.labelText).toEqual(["LE MON"]);
+  });
+
+  it("접어도 200자를 넘으면 거절한다", async () => {
+    const r = await 단건({ products: [{ id: "p1", imageUrls: [주소], facts: { visibleFacts: [`${"가".repeat(100)}\n${"나".repeat(100)}`], labelText: [] } }] });
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe("section.product_ids", () => {
   const 본문 = { originalImageBase64: "AAAA" };
   it("정상 통과", async () => {

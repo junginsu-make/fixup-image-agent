@@ -31,4 +31,41 @@ describe("제품 참조의 제품 칸", () => {
     const d = doc(references, { a: asset("a"), o: asset("b") });
     expect(validateDocument(d, user, id).body.references).toEqual(references);
   });
+
+  /** 제품 칸 값도 모양을 본다(보안 리뷰 L5). 선언하지 않으면 `.passthrough()` 로 무엇이든 지나간다. */
+  const 상태 = (references: unknown[], body: Record<string, unknown> = {}) => {
+    const d = doc(references, { a: asset("a") });
+    try {
+      validateDocument({ ...d, body: { ...d.body, ...body } } as ServerDocument, user, id);
+      return 200;
+    } catch (error) {
+      return (error as { status?: number }).status;
+    }
+  };
+  const 참조 = (extra: Record<string, unknown>) => ({ role: "product", assetId: "a", enabled: true, ...extra });
+
+  it("모르는 제품 id·긴 이름·범위 밖 사진 차례는 400", () => {
+    expect(상태([참조({ productId: "p9" })])).toBe(400);
+    expect(상태([참조({ productName: "가".repeat(61) })])).toBe(400);
+    expect(상태([참조({ photoIndex: 4 })])).toBe(400);
+    expect(상태([참조({ photoIndex: -1 })])).toBe(400);
+    expect(상태([참조({ photoIndex: 1.5 })])).toBe(400);
+    expect(상태([참조({ productName: 3 })])).toBe(400);
+  });
+
+  it("칸 목록(productSlots)과 분석 열쇠(planningProductsKey)도 모양을 본다", () => {
+    expect(상태([], { productSlots: [{ id: "p1", name: "레몬맛" }, { id: "p2", name: "" }] })).toBe(200);
+    expect(상태([], { productSlots: [{ id: "p4", name: "" }] })).toBe(400);
+    expect(상태([], { productSlots: [{ id: "p1", name: "가".repeat(61) }] })).toBe(400);
+    expect(상태([], { productSlots: ["p1", "p2", "p3", "p1"].map((slotId) => ({ id: slotId, name: "" })) })).toBe(400);
+    // 열쇠는 JSON 글이다(`productsKey`). 괄호 없이 긴 글자 덩어리는 그림 데이터로 막히므로 실제 모양으로 잰다.
+    expect(상태([], { planningProductsKey: `[${"k".repeat(3999)}` })).toBe(200);
+    expect(상태([], { planningProductsKey: `[${"k".repeat(4000)}` })).toBe(400);
+    expect(상태([], { planningProductsKey: 7 })).toBe(400);
+  });
+
+  it("제품 칸이 없는 옛 문서는 그대로 통과한다", () => {
+    expect(상태([참조({})])).toBe(200);
+    expect(상태([참조({ productId: "p3", productName: "😀".repeat(30), photoIndex: 3 })])).toBe(200);
+  });
 });

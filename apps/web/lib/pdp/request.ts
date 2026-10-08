@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_IDS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, PRODUCT_FACT_LIMITS, PRODUCT_LIMITS, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_IDS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, PRODUCT_FACT_LIMITS, PRODUCT_LIMITS, SELLER_BRIEF_MAX_LENGTH, flattenFactText, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
@@ -19,7 +19,9 @@ const productImageUrl = text
   .refine(isFalStorageUrl, "제품 사진 주소가 올바르지 않습니다.")
   .transform((value) => new URL(value).href);
 // 화면은 코드 포인트(`Array.from`)로 자른다. zod 의 `.max` 는 UTF-16 단위라 이모지를 두 번 센다.
-const factText = text.refine(
+// 줄바꿈·제어 문자(U+0085·U+2028 포함)는 먼저 빈칸 하나로 접는다(보안 리뷰 L1) — 사실 한 줄이
+// 프롬프트의 「- 사실」 목록 밖에 새 줄을 만들지 못하게. 길이는 접은 뒤에 센다. 코어와 같은 함수다.
+const factText = text.transform(flattenFactText).refine(
   (value) => Array.from(value).length <= PRODUCT_FACT_LIMITS.chars,
   `${PRODUCT_FACT_LIMITS.chars}자 이하로 적어 주세요.`,
 );
@@ -78,6 +80,18 @@ const image = z.object({
 const imageMime = text.regex(new RegExp(String.raw`^image/[a-z0-9.+-]+$`, "i"), "이미지 파일만 올릴 수 있습니다.");
 const imagePayload = text.trim().min(1)
   .regex(new RegExp(String.raw`^(?:data:[^;]+;base64,)?[A-Za-z0-9+/\s]+=*$`), "이미지 데이터가 올바르지 않습니다.");
+
+/*
+  **분석 사진 크기 상한**(보안 리뷰 M1). 사진이 12장까지 오는데 한 장·모두의 상한이 없었다.
+  화면이 보내는 1024 사본은 한 장에 200–400 KB 라 넉넉히 둔다. 예약 전에 400 으로 돌려보낸다.
+  base64 글자 수로 잰다(앞뒤 공백을 뗀 뒤).
+*/
+const ANALYZE_PHOTO_MAX_CHARS = 4 * 1024 * 1024;
+const ANALYZE_TOTAL_MAX_CHARS = 12 * 1024 * 1024;
+const analyzePhoto = imagePayload.max(ANALYZE_PHOTO_MAX_CHARS, "사진 용량이 너무 큽니다.");
+const withinAnalyzeTotal = (list: Array<{ photos: Array<{ imageBase64: string }> }>) =>
+  list.reduce((sum, product) => sum + product.photos.reduce((acc, photo) => acc + photo.imageBase64.length, 0), 0)
+    <= ANALYZE_TOTAL_MAX_CHARS;
 
 const intents = z.object({ anchor: intent.optional(), person: intent.optional(), style: intent.optional() });
 const options = z.object({
@@ -178,8 +192,9 @@ const schemas = {
     // 옛 `imageBase64` 는 `products[0].photos[0]` 와 같다 — 옛 경로를 위해 계속 요구한다.
     products: z.array(z.object({
       id: productId, name: productName.optional(),
-      photos: z.array(z.object({ imageBase64: imagePayload, mimeType: imageMime })).min(1).max(PRODUCT_LIMITS.photos),
-    }).strict()).min(1).max(PRODUCT_LIMITS.products).refine(uniqueProductIds, "제품 id 가 겹칩니다.").optional(),
+      photos: z.array(z.object({ imageBase64: analyzePhoto, mimeType: imageMime })).min(1).max(PRODUCT_LIMITS.photos),
+    }).strict()).min(1).max(PRODUCT_LIMITS.products).refine(uniqueProductIds, "제품 id 가 겹칩니다.")
+      .refine(withinAnalyzeTotal, "사진 용량이 너무 큽니다.").optional(),
     modelImageBase64: text.optional(), modelImageMimeType: text.optional(),
     /*
       **기획과 이미지 생성이 같은 상한을 쓴다**(U-08).
