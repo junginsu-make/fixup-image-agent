@@ -41,6 +41,7 @@ import { SaveImagesToLibrary } from "../_components/save-to-library";
 import { copyText } from "../../lib/browser-safe";
 import {
   REDESIGN_FAL_MODEL,
+  projectImageModel,
   projectImageModelName,
   type Model,
   type Project,
@@ -226,6 +227,7 @@ export function Results({
                 onEditSection={onEditSection}
                 editing={editingSectionId === section.id}
                 disabled={generating}
+                defaultImageModel={projectImageModel(project)}
               />
             ))}
           </CardContent>
@@ -278,7 +280,8 @@ export function SectionResultCard({
   projectTitle,
   onEditSection,
   editing,
-  disabled
+  disabled,
+  defaultImageModel
 }: {
   section: SectionResult;
   index: number;
@@ -287,13 +290,15 @@ export function SectionResultCard({
   onEditSection: (sectionId: string, editRequest: string, imageModel: string) => void;
   editing: boolean;
   disabled: boolean;
+  /** 이 작업을 그린 그림 모델. 고치기 칸이 이것으로 시작한다(`projectImageModel`). */
+  defaultImageModel?: string;
 }) {
   const 단위 = useCreditUnit();
   const [editRequest, setEditRequest] = React.useState("");
   // 수정 칸을 펼쳤는가. 카드가 들고 있어야 수정이 끝나거나 실패해도 그대로 남는다.
   const [editOpen, setEditOpen] = React.useState(false);
-  // 기본은 표준형 — 전의 기본(openai)이 그리던 모델과 같다.
-  const [editModel, setEditModel] = React.useState<string>(REDESIGN_FAL_MODEL);
+  // 기본은 이 작업을 그린 모델. 모르면 표준형 — 전의 기본(openai)이 그리던 모델과 같다.
+  const [editModel, setEditModel] = React.useState<string>(defaultImageModel ?? REDESIGN_FAL_MODEL);
   const revisions = React.useMemo(() => ensureSectionRevisions(section), [section]);
   const currentIndex = Math.max(0, revisions.findIndex((revision) => revision.imageUrl === section.imageUrl));
   const [revisionIndex, setRevisionIndex] = React.useState(currentIndex);

@@ -16,7 +16,7 @@ import { REDESIGN_FAL_MODEL, analysisProviderFor, redesignFalModelFor, type Anal
   화면은 **그림 모델**(표준형·디테일형·속도형)을 고른다(2026-10-08). 원본을 읽는
   분석 AI 는 그 모델을 따른다 — 한 벌은 서버와 함께 쓰는 `lib/redesign/model-choice.ts`.
 */
-export { analysisProviderFor, redesignFalModelFor, REDESIGN_FAL_MODEL } from "../../lib/redesign/model-choice";
+export { analysisProviderFor, projectImageModel, redesignFalModelFor, requestImageModel, REDESIGN_FAL_MODEL } from "../../lib/redesign/model-choice";
 
 /** 분석 AI(업체). 서버에 보내고 저장된 작업이 들고 있는 **내부값**이다. */
 export type Model = AnalysisProvider;

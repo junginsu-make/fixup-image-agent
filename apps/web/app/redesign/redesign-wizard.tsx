@@ -33,7 +33,7 @@ import {
   knowledgeStorageKey,
   loadKnowledgeItems,
   loadProjects,
-  analysisProviderFor, missingServerKeyMessage, providerModelNames, REDESIGN_FAL_MODEL,
+  analysisProviderFor, missingServerKeyMessage, providerModelNames, REDESIGN_FAL_MODEL, requestImageModel,
   type GenerationPlan,
   type GenerationProgress,
   type GenerationSummary,
@@ -76,7 +76,6 @@ export function RedesignWizard() {
   const [activeProject, setActiveProject] = React.useState<Project | null>(null);
   // 화면은 그림 모델을 고르고, 분석 AI 는 그것을 따른다(2026-10-08).
   const [selectedImageModel, setSelectedImageModel] = React.useState<string>(REDESIGN_FAL_MODEL);
-  const selectedModel = analysisProviderFor(selectedImageModel);
   const [channel, setChannel] = React.useState("스마트스토어");
   // 캐릭터 만들기에서 만든 등장인물. 고르면 섹션마다 같은 사람이 나온다.
   const [characterId, setCharacterId] = React.useState("");
@@ -189,12 +188,15 @@ export function RedesignWizard() {
       return null;
     }
 
-    const keyMessage = missingServerKeyMessage(serverConfig, selectedImageModel);
+    // 이어 그리면 그 작업의 모델, 새로 만들면 고른 모델(2026-10-08 최종 리뷰 I3).
+    const imageModel = requestImageModel(selectedImageModel, baseProject);
+    const model = analysisProviderFor(imageModel);
+    const keyMessage = missingServerKeyMessage(serverConfig, imageModel);
     if (keyMessage) { setToast(keyMessage); return null; }
 
     if (outputCount > 1 && !baseProject) {
       reportClientLog("generate-sequence:start", {
-        model: selectedModel,
+        model,
         count: outputCount,
         startSection
       });
@@ -221,14 +223,14 @@ export function RedesignWizard() {
     }
 
     reportClientLog("generate:start", {
-      model: selectedModel,
+      model,
       count: outputCount,
       startSection,
       files: files.length,
       append: Boolean(baseProject)
     });
     setGenerationPlan({
-      model: selectedModel, imageModel: selectedImageModel,
+      model, imageModel,
       count: outputCount,
       displayCount,
       displayIndex,
@@ -243,7 +245,7 @@ export function RedesignWizard() {
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
     const requestIdentity = requestIdentityOf({
-      model: selectedModel, imageModel: selectedImageModel,
+      model, imageModel,
       startSection,
       count: outputCount,
       baseProject,
@@ -267,7 +269,7 @@ export function RedesignWizard() {
 
       setPhase("transcribe");
       const step = await runTranscriptStep({
-        files, provider: selectedModel, signal: abortController.signal,
+        files, provider: model, signal: abortController.signal,
         cache: transcriptCacheRef.current,
         // 대기 화면이 **실제 배치 수**로 막대를 채운다. 여기만 셀 수 있는 구간이다.
         onProgress: (d, t) => setTranscribeCount({ done: d, total: t }),
@@ -291,7 +293,7 @@ export function RedesignWizard() {
         : "";
       appendGenerateFields(form, {
         uploadFiles, knowledgeText, useKnowledge: useSharedKnowledge, request,
-        model: selectedModel, imageModel: selectedImageModel, channel, ratio, look,
+        model, imageModel, channel, ratio, look,
         count: outputCount, startSection, rolloutRequest: outputRolloutRequest, transcript,
         characterId, characterAngles,
         // 쪼개 부르는 자리와, 앞 청크가 이미 한 기획(F-7-7).
@@ -362,7 +364,7 @@ export function RedesignWizard() {
         skipped: 0,
         finishedAt: Date.now(),
       });
-      setToast(data.project.warning || `${imageModelName(selectedImageModel)}으로 ${succeeded}장 생성 완료 · 성공한 이미지만 차감됐습니다.`);
+      setToast(data.project.warning || `${imageModelName(imageModel)}으로 ${succeeded}장 생성 완료 · 성공한 이미지만 차감됐습니다.`);
 
       /**
        * **만든 즉시 서버에 올린다.**

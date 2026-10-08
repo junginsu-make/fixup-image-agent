@@ -2,8 +2,9 @@ import React from "react";
 import { readFileSync, readdirSync } from "node:fs";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SectionResultCard } from "../redesign-results";
-import { missingServerKeyMessage, providerModelNames, type SectionResult, type ServerConfig } from "../redesign-model";
+import { Results, SectionResultCard } from "../redesign-results";
+import { ImageModelPicker } from "../../_components/image-model-picker";
+import { missingServerKeyMessage, providerModelNames, type Project, type SectionResult, type ServerConfig } from "../redesign-model";
 
 /**
  * **리디자인도 세 모델 중에서 고른다**(2026-10-08 사용자 결정).
@@ -70,6 +71,56 @@ describe("섹션 고치기 — 세 모델 중에서", () => {
   });
 });
 
+/**
+ * **고치기 칸은 이 작업을 그린 모델로 시작한다**(2026-10-08 최종 리뷰 I3).
+ * 작업 공간의 기본(표준형)으로 시작하면 속도형으로 만든 작업을 고칠 때 말없이 다른 모델로 그린다.
+ */
+describe("고치기 칸의 기본은 작업의 모델", () => {
+  const 작업 = (patch: Partial<Project>): Project => ({
+    id: "job-1", title: "상세페이지", channel: "스마트스토어", model: "openai", count: 1,
+    ratio: "9:16", status: "완료", files: ["원본.pdf"], request: "", createdAt: "2026-10-08T00:00:00Z",
+    sections: [섹션], ...patch,
+  });
+  const 고른값 = (project: Project) => {
+    act(() => {
+      renderer = create(
+        <Results
+          project={project} rolloutRequest="" setRolloutRequest={() => {}} onToast={() => {}}
+          onSave={() => {}} onSaveToLibrary={() => {}} onEditSection={() => {}} onGenerateRest={() => {}}
+          generating={false} editingSectionId={null}
+        />,
+      );
+    });
+    return renderer.root.findAllByType(ImageModelPicker).map((node) => node.props.value);
+  };
+
+  it("**속도형으로 만든 작업은 속도형으로 고친다**", () => {
+    expect(고른값(작업({ model: "google", imageModel: "nano-banana-2.1" }))).toEqual(["nano-banana-2.1"]);
+  });
+
+  it("옛 작업(google, imageModel 없음)은 디테일형", () => {
+    expect(고른값(작업({ model: "google" }))).toEqual(["nano-banana-pro"]);
+  });
+
+  it("숨긴 모델로 그린 작업은 보이는 기본(표준형)", () => {
+    expect(고른값(작업({ model: "openai", imageModel: "gpt-image-2.5-sunburst" }))).toEqual(["gpt-image-2.5-flare"]);
+  });
+
+  it("카드는 받은 기본으로 고치기를 부른다", () => {
+    const 받은것: string[] = [];
+    act(() => {
+      renderer = create(
+        <SectionResultCard section={섹션} index={0} projectTitle="작업" editing={false} disabled={false}
+          defaultImageModel="nano-banana-pro" onEditSection={(_, __, imageModel) => 받은것.push(imageModel)} />,
+      );
+    });
+    act(() => {
+      renderer.root.find((node) => node.type === "button" && 글자(node).includes("이 섹션 수정")).props.onClick();
+    });
+    expect(받은것).toEqual(["nano-banana-pro"]);
+  });
+});
+
 describe("서버 키 확인은 고른 그림 모델의 분석 AI 로", () => {
   const 설정 = (openai: boolean, google: boolean) => ({
     serverOpenaiKeyConfigured: openai, serverGoogleKeyConfigured: google,
@@ -102,9 +153,15 @@ describe("화면 배선", () => {
     expect(panels).not.toContain('(["openai", "google"] as const)');
   });
 
-  it("**분석 AI 는 고른 그림 모델에서 나온다**", () => {
-    expect(wizard).toMatch(/analysisProviderFor\(selectedImageModel\)/);
-    expect(wizard).toMatch(/appendGenerateFields\(form, \{[\s\S]{0,300}imageModel: selectedImageModel/);
+  it("**결과 화면의 고치기 칸은 작업의 모델로 시작한다**", () => {
+    expect(읽기("redesign-results.tsx")).toContain("defaultImageModel={projectImageModel(project)}");
+  });
+
+  it("**분석 AI 는 이 요청의 그림 모델에서 나온다** — 이어 그리면 작업의 모델", () => {
+    expect(wizard).toContain("const imageModel = requestImageModel(selectedImageModel, baseProject);");
+    expect(wizard).toContain("const model = analysisProviderFor(imageModel);");
+    expect(wizard).toMatch(/appendGenerateFields\(form, \{[\s\S]{0,300}model, imageModel, channel/);
+    expect(wizard).not.toMatch(/imageModel: selectedImageModel/);
   });
 
   it("**고치기도 그림 모델과 분석 AI 를 함께 보낸다**", () => {
@@ -113,12 +170,12 @@ describe("화면 배선", () => {
   });
 
   it("**서버 키 확인은 고른 그림 모델로**", () => {
-    expect(wizard).toContain("missingServerKeyMessage(serverConfig, selectedImageModel)");
-    expect(wizard).toContain("missingServerKeyMessage(serverConfig, imageModel)");
+    expect(wizard).not.toContain("missingServerKeyMessage(serverConfig, selectedImageModel)");
+    expect(wizard.match(/missingServerKeyMessage\(serverConfig, imageModel\)/g)).toHaveLength(2);
   });
 
   it("**같은 요청인지 가를 때 그림 모델도 본다**", () => {
-    expect(wizard).toMatch(/requestIdentityOf\(\{[\s\S]{0,200}imageModel: selectedImageModel/);
+    expect(wizard).toMatch(/requestIdentityOf\(\{\s*model, imageModel,/);
   });
 });
 

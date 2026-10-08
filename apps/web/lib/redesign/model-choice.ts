@@ -37,6 +37,28 @@ export function redesignFalModelFor(choice: string | undefined, imageModel?: str
 }
 
 /**
+ * **이 작업을 그린 그림 모델** — 이어 그리기·고치기의 기본값.
+ *
+ * 옛 작업(`imageModel` 없음)은 `model` 에서 읽는다. 보이는 셋이 아니면 기본(표준형)으로.
+ */
+export function projectImageModel(project: { model?: string; imageModel?: string }): string {
+  const drawn = redesignFalModelFor(project.model, project.imageModel);
+  return isVisibleImageModel(drawn) ? drawn : REDESIGN_FAL_MODEL;
+}
+
+/**
+ * **이 요청이 쓸 그림 모델.** 이미 있는 작업에 이어 그리면(나머지 섹션, 여러 장의
+ * 둘째 장부터) 그 작업의 모델을 따른다 — 작업 공간에서 지금 고른 값이 아니다.
+ * 새로 만들 때만 고른 값(`selected`)을 쓴다.
+ */
+export function requestImageModel(
+  selected: string,
+  baseProject?: { model?: string; imageModel?: string } | null,
+): string {
+  return baseProject ? projectImageModel(baseProject) : selected;
+}
+
+/**
  * 요청에 실린 두 값이 말이 되는가. 서버 경계(`lib/pdp/request.ts`)가 본다.
  *
  * `imageModel` 이 없으면 옛 요청이라 통과한다. 있으면 **보이는 셋**이어야 하고,
