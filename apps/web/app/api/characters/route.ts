@@ -105,10 +105,10 @@ function rawBase64(value: string): string {
  * 라이브러리의 캐릭터 화면만 이것을 보낸다. 만들기 화면·불러오기 창은 안 보낸다 — 관리자도 거기서는
  * 자기 것만 봐야 남의 캐릭터를 잘못 불러 쓰지 않는다. 회원이 보내면 무시한다.
  */
-export async function GET(req?: Request) {
+export async function GET(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
-  const wantsAll = req ? new URL(req.url).searchParams.get("scope") === "all" : false;
+  const wantsAll = new URL(req.url).searchParams.get("scope") === "all";
   const allMembers = wantsAll && hasFullScope(viewerFrom(auth.member), "read");
 
   try {
