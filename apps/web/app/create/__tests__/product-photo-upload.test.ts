@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createProductPhotoUploader, productImageFields, ProductPhotoUploadError } from "../product-photo-upload";
+import {
+  createProductPhotoUploader,
+  productImageFields,
+  ProductPhotoUploadError,
+  PRODUCT_PHOTO_UPLOAD_FAILED,
+  productPhotoErrorMessage,
+} from "../product-photo-upload";
 
 const 사진 = { base64: "QUJD", mimeType: "image/jpeg" };
 
@@ -59,5 +65,30 @@ describe("요청에 싣는 제품 사진 칸", () => {
   it("글 경로(대표 이미지)는 지금처럼 그림을 싣는다", async () => {
     expect(await productImageFields({ startMode: "text", productPhoto: 사진, fallbackBase64: "KEYVISUAL", uploader }))
       .toEqual({ originalImageBase64: "KEYVISUAL" });
+  });
+});
+
+describe("옛 작업의 data URL 사진", () => {
+  it("접두를 떼고 그 안의 mime 으로 올린다", async () => {
+    const seen: Array<{ base64: string; mimeType: string }> = [];
+    const recording = { urlFor: async (source: { base64: string; mimeType: string }) => { seen.push(source); return "https://v3.fal.media/files/z.jpg"; } };
+    await productImageFields({ startMode: "image", fallbackBase64: "data:image/png;base64,QUJD", uploader: recording });
+    expect(seen).toEqual([{ base64: "QUJD", mimeType: "image/png" }]);
+  });
+
+  it("실제 올리기도 data URL 로 터지지 않는다", async () => {
+    const uploader = createProductPhotoUploader({ post: async (bytes) => ({ ok: true as const, url: `https://v3.fal.media/files/${bytes.byteLength}.jpg`, expiresAt: Date.now() + 3600000 }) });
+    expect(await productImageFields({ startMode: "image", fallbackBase64: "data:image/jpeg;base64,QUJD", uploader }))
+      .toEqual({ productImageUrl: "https://v3.fal.media/files/3.jpg" });
+  });
+});
+
+describe("사용자에게 보이는 오류 문구", () => {
+  it("서버가 준 문구는 그대로", () => {
+    expect(productPhotoErrorMessage(new ProductPhotoUploadError("용량 초과"))).toBe("용량 초과");
+  });
+  it("그 밖의 오류는 고정 문구", () => {
+    expect(productPhotoErrorMessage(new TypeError("crypto.subtle is undefined"))).toBe(PRODUCT_PHOTO_UPLOAD_FAILED);
+    expect(PRODUCT_PHOTO_UPLOAD_FAILED).toBe("제품 사진을 올리지 못했습니다. 다시 시도해 주세요.");
   });
 });

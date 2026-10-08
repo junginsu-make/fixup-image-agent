@@ -14,8 +14,22 @@ export type PostProductPhoto = (bytes: Uint8Array, mimeType: string) => Promise<
 
 export class ProductPhotoUploadError extends Error {}
 
+/** 사용자에게 보일 문구. 서버가 준 문구는 그대로, 내부 오류(atob·crypto 등)는 고정 문구로 가린다. */
+export const productPhotoErrorMessage = (error: unknown): string =>
+  error instanceof ProductPhotoUploadError ? error.message : PRODUCT_PHOTO_UPLOAD_FAILED;
+
+/**
+ * 옛 작업은 원본 칸에 `data:<mime>;base64,…` 통째가 들어 있다(미리보기 주소에서 채운다).
+ * 서버는 접두를 받아 주었으므로 여기서도 떼고 그 mime 을 쓴다.
+ */
+function withoutDataUrl(source: ProductPhotoSource): ProductPhotoSource {
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(source.base64);
+  return match ? { base64: match[2]!, mimeType: match[1]! } : source;
+}
+
 const RENEW_BEFORE_MS = 10 * 60 * 1000;
-const FALLBACK_MESSAGE = "제품 사진을 올리지 못했습니다. 다시 시도해 주세요.";
+export const PRODUCT_PHOTO_UPLOAD_FAILED = "제품 사진을 올리지 못했습니다. 다시 시도해 주세요.";
+const FALLBACK_MESSAGE = PRODUCT_PHOTO_UPLOAD_FAILED;
 
 const bytesOf = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 
@@ -73,6 +87,6 @@ export async function productImageFields(input: {
   uploader: { urlFor(source: ProductPhotoSource): Promise<string> };
 }): Promise<{ productImageUrl: string } | { originalImageBase64: string }> {
   if (input.startMode === "text") return { originalImageBase64: input.fallbackBase64 };
-  const source = input.productPhoto ?? { base64: input.fallbackBase64, mimeType: "image/jpeg" };
+  const source = withoutDataUrl(input.productPhoto ?? { base64: input.fallbackBase64, mimeType: "image/jpeg" });
   return { productImageUrl: await input.uploader.urlFor(source) };
 }

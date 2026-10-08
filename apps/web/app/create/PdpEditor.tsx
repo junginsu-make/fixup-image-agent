@@ -84,7 +84,7 @@ import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import {
   createProductPhotoUploader,
   productImageFields,
-  ProductPhotoUploadError,
+  productPhotoErrorMessage,
   type ProductPhotoSource,
 } from "./product-photo-upload";
 import { ReviewPanel } from "./ReviewPanel";
@@ -1697,7 +1697,7 @@ export function PdpEditor({
       });
     } catch (error) {
       // 조용히 낮은 화질로 내려가지 않는다(설계 §4.6). 생성 전이라 크레딧은 안 나갔다.
-      setErrorMessage(error instanceof ProductPhotoUploadError ? error.message : "제품 사진을 올리지 못했습니다. 다시 시도해 주세요.");
+      setErrorMessage(productPhotoErrorMessage(error));
       return { ok: false, stopBatch: true };
     }
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
@@ -1896,13 +1896,18 @@ export function PdpEditor({
 
     try {
       // 묶음마다 올리지 않는다 — 사진 한 장을 한 번 올린 주소를 모든 묶음이 쓴다.
-      // 올리기가 실패하면 던져서 아래 catch 가 문구를 보이고 반복에 들어가지 않는다.
-      const productFields = await productImageFields({
-        startMode,
-        productPhoto,
-        fallbackBase64: initialResult.originalImage,
-        uploader: productUploaderRef.current,
-      });
+      // 올리기가 실패하면 사용자용 문구로 바꿔 던지고, 아래 catch 가 그 문구를 보이며 반복에 들어가지 않는다.
+      let productFields: Awaited<ReturnType<typeof productImageFields>>;
+      try {
+        productFields = await productImageFields({
+          startMode,
+          productPhoto,
+          fallbackBase64: initialResult.originalImage,
+          uploader: productUploaderRef.current,
+        });
+      } catch (error) {
+        throw new Error(productPhotoErrorMessage(error));
+      }
       for (const chunk of chunks) {
         /*
           **다시 눌러도 같은 열쇠로 간다**(K-05).
