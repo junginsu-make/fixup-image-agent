@@ -18,6 +18,7 @@ import {
   countByOrigin, filterWorks, originLabel, originOf, workFilters,
   type WorkFilterId,
 } from "./work-filter";
+import type { WorksSummary } from "./library-view-bar";
 import { readEasyWorks, stepsHref, type EasyWorks } from "./easy-href";
 import {
   Badge, Button, Card, CardContent,
@@ -57,7 +58,11 @@ type Tool = WorkTool;
  * 번호. 배열 순서와 다를 수 있다(못 만든 카드는 목록에서 빠진다). 첫 화면에
  * 걸 때 이 값으로 원본을 되짚으므로 배열 순서로 대신하면 엉뚱한 장이 걸린다.
  */
-interface WorkImage { url: string; label: string; index: number }
+interface WorkImage {
+  url: string; label: string; index: number;
+  /** 내려받을 이름의 확장자. 광고소재만 싣는다 — 규격이 JPG 인데 `.png` 로 받으면 안 된다(2026-10-08). */
+  ext?: string;
+}
 
 interface Work {
   id: string;
@@ -96,7 +101,7 @@ interface Work {
   /** 사용자가 정한 값들. 이름과 값 쌍으로 그대로 보여준다. */
   settings: Array<[string, string]>;
   href: string;
-  /** 캐릭터 만들기로 만든 것. 「캐릭터」 거르기에서만 보인다(`work-filter.ts`). */
+  /** 예전 캐릭터 만들기 결과. 「전체」에 「캐릭터」 이름표로 보인다(`work-filter.ts`). */
   origin?: "character";
   sourceId?: string | null;
   documentId?: string;
@@ -268,20 +273,30 @@ async function readWorkImages(work: Work) {
     }
     const body = await (await fetch(`/api/library?id=${encodeURIComponent(work.id)}`, { cache: "no-store" })).json();
     if (!body?.ok) return [];
-    const rows = (body.images ?? []) as Array<{ url?: string | null; position: number }>;
+    const rows = (body.images ?? []) as Array<{ url?: string | null; position: number; mimeType?: string }>;
     return rows
-      .filter((image): image is { url: string; position: number } => Boolean(image.url))
+      .filter((image): image is { url: string; position: number; mimeType?: string } => Boolean(image.url))
       .map((image) => ({
         url: image.url,
         label: `${image.position + 1}번째`,
         index: image.position,
+        // 광고 결과는 받은 그대로 저장된다(JPG·PNG). 저장된 형식으로 이름 붙인다.
+        ...(work.tool === "ad" ? { ext: image.mimeType === "image/jpeg" ? "jpg" : "png" } : {}),
       }));
   } catch {
     return [];
   }
 }
 
-export function WorksTab() {
+/**
+ * `filter` — 무엇으로 만든 것만 볼까. **라이브러리 화면의 한 줄 거르기가 정한다**(2026-10-08).
+ * `onSummary` — 그 단추에 달 개수를 위로 알린다. **바뀌지 않는 함수를 넘긴다**(상태 setter 등) —
+ * 그릴 때마다 새로 만든 함수를 넘기면 알림 → 부모 다시 그림 → 새 함수 → 또 알림으로 끝없이 돈다.
+ */
+export function WorksTab({ filter = "all", onSummary }: {
+  filter?: WorkFilterId;
+  onSummary?: (summary: WorksSummary | null) => void;
+} = {}) {
   const router = useRouter();
   const [works, setWorks] = React.useState<Work[] | null>(null);
   const [message, setMessage] = React.useState("");
@@ -320,11 +335,6 @@ export function WorksTab() {
   const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [featuring, setFeaturing] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState("");
-  /**
-   * 무엇으로 만든 것만 볼까(2026-09-22 사용자 요청 — 쉽게/다양하게/카드뉴스/캐릭터/
-   * 광고소재/상세페이지/리디자인).
-   */
-  const [filter, setFilter] = React.useState<WorkFilterId>("all");
   /** 쉽게로 만든 작업 id. `null` 이면 못 읽었다 — 쉽게와 다양하게를 못 가른다. */
   const [easyIds, setEasyIds] = React.useState<Set<string> | null>(null);
   const [easyConversations, setEasyConversations] = React.useState<Map<string, string> | null>(null); // 쉽게 작업 → 대화(설계 C)
@@ -374,7 +384,7 @@ export function WorksTab() {
       images: images.map((image) => ({
         src: image.url,
         alt: `${work.title} · ${image.label}`,
-        name: `${work.title} ${image.label}.png`,
+        name: `${work.title} ${image.label}.${image.ext ?? "png"}`,
         meta,
       })),
       deleteLabel: "이 작업 지우기",
@@ -478,7 +488,7 @@ export function WorksTab() {
         지워지고 사라진 것처럼 보인다 — `lib/library.ts` 가 레퍼런스에서 같은
         실수를 겪고 남긴 주석이다.
       */
-      const account = work.tool === "create" || work.tool === "redesign";
+      const account = work.tool === "create" || work.tool === "redesign" || work.tool === "ad";
       const endpoint = work.documentId ? `/api/pdp/documents/${work.documentId}` : account
         ? "/api/library"
         : work.tool === "sns"
@@ -582,6 +592,11 @@ export function WorksTab() {
     return () => { alive = false; };
   }, [isAdmin, allMembers]);
 
+  // 단추에 달 개수. 작업물을 다시 읽는 동안은 `null` — 옛 숫자를 남기지 않는다.
+  React.useEffect(() => {
+    onSummary?.(works ? { counts: countByOrigin(works, easyIds ?? new Set()), easyKnown: easyIds !== null } : null);
+  }, [works, easyIds, onSummary]);
+
   if (message) return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p>;
   if (!works) return <p className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />작업물을 불러오는 중입니다.</p>;
   if (!works.length) return <p role={notice ? "alert" : undefined} className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">{notice || "아직 만든 작업물이 없습니다."}</p>;
@@ -590,7 +605,6 @@ export function WorksTab() {
   // 못 쓰게 된 단추가 골라져 있으면(쉽게 목록을 다시 못 읽은 경우) 전체로 본다.
   const chosen = filters.find((entry) => entry.id === filter)?.unavailable ? "all" : filter;
   const known = easyIds ?? new Set<string>();
-  const counts = countByOrigin(works, known);
   const visible = filterWorks(works, chosen, known);
 
   return (
@@ -616,41 +630,6 @@ export function WorksTab() {
       {notice ? (
         <p role="status" className="rounded-md border border-primary/30 bg-primary-soft px-4 py-3 text-sm">{notice}</p>
       ) : null}
-      {/* 무엇으로 만든 것만 볼까. 단추마다 개수를 적어, 눌러 보기 전에 비었는지 안다. */}
-      <div role="group" aria-label="만든 기능으로 거르기" className="flex flex-wrap gap-2">
-        {filters.map((entry) => {
-          const active = chosen === entry.id;
-          return (
-            <Button
-              key={entry.id}
-              type="button"
-              size="sm"
-              variant={active ? "default" : "outline"}
-              aria-pressed={active}
-              aria-disabled={entry.unavailable ? true : undefined}
-              className={cn("rounded-full", entry.unavailable && "opacity-50")}
-              onClick={() => {
-                /*
-                  **못 쓰는 단추도 누르면 까닭을 말한다.** `disabled` 로 막으면 눌러도
-                  아무 반응이 없어 고장으로 읽힌다. 말풍선(`title`)은 안 뜨는 환경이
-                  있다(2026-09-17 「과정 보기」에서 겪었다).
-                */
-                if (entry.unavailable) {
-                  setNotice(entry.unavailable);
-                  return;
-                }
-                // 거르기 까닭만 지운다. 「첫 화면에 걸었습니다」 같은 다른 안내는 남긴다.
-                setNotice((current) => (filters.some((other) => other.unavailable === current) ? "" : current));
-                setFilter(entry.id);
-              }}
-            >
-              {entry.label}
-              {entry.unavailable ? null : <span className="tabular-nums opacity-70">{counts[entry.id]}</span>}
-            </Button>
-          );
-        })}
-      </div>
-
       {featuring ? (
         <p role="status" className="text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />첫 화면에 거는 중입니다. 그림을 한 벌 떠 두느라 몇 초 걸립니다.</p>
       ) : null}
@@ -658,10 +637,7 @@ export function WorksTab() {
       {visible.length ? null : (
         <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
           {chosen === "all"
-            ? counts.character
-              // 캐릭터 결과만 있으면 「없다」가 옆 단추의 숫자와 어긋난다.
-              ? "캐릭터 만들기로 만든 것은 「캐릭터」 단추에서 봅니다."
-              : "아직 만든 작업물이 없습니다."
+            ? "아직 만든 작업물이 없습니다."
             : `「${filters.find((entry) => entry.id === chosen)!.label}」로 만든 작업물이 없습니다.`}
         </p>
       )}

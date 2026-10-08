@@ -6,16 +6,17 @@ import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
 import { finishForAd } from "../../../../lib/ad/finish";
-import { getLibraryImageFile } from "../../../../lib/server-library";
+import { countRecentLibraryItems, getLibraryImageFile, saveLibraryItem } from "../../../../lib/server-library";
 import { getReferenceImageFile } from "../../../../lib/reference-images";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { findPosterImage } from "@fixup/poster-core";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
-import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
+import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST, type AdBatchEntry } from "../../../../lib/ad/batch";
 import { needsCutout } from "../../../../lib/ad/master-plan";
 import { assertCutoutSize, createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
 import { createPosterFalClients } from "../../../../lib/poster/providers";
 import { errorLogText } from "../../../../lib/easy/log-text";
+import { isLocalStoreEnabled } from "../../../../lib/local-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +72,75 @@ const RequestSchema = z.object({
    * 기본값이 `library` 라 **2단계 사용자는 안 깨진다** — 안 보내면 지금까지의 길이다.
    */
   source: z.enum(["library", "poster", "reference"]).default("library"),
+  /** 고른 그림의 제목. 라이브러리에 남길 작업 이름에 쓴다(2026-10-08). 라이브러리 제목 상한과 같다. */
+  title: z.string().trim().max(200).optional(),
 }).strict();
+
+/** 저장 실패를 화면에 알리는 말. 저장소 원문(서명 주소 등)은 서버 기록에만 남긴다. */
+const LIBRARY_SAVE_FAILED = "라이브러리에 저장하지 못했습니다. 내려받은 파일로 보관해 주세요.";
+
+/**
+ * 회원당 한 시간에 라이브러리에 남길 광고 묶음 수(2026-10-08 보안 리뷰).
+ *
+ * 자르기만 하는 내보내기는 0크레딧이라 장부가 막지 않는다. 그런데 뽑을 때마다 수 MB 가 영구로
+ * 쌓이므로, 작은 요청을 되풀이해 저장 공간을 채울 수 있다. 사람이 한 시간에 30번 넘게 뽑을 일은
+ * 없다. 넘으면 결과는 그대로 주고 저장만 건너뛴다.
+ */
+const AD_SAVES_PER_HOUR = 30;
+const LIBRARY_SAVE_LIMITED = `광고 결과는 한 시간에 ${AD_SAVES_PER_HOUR}번까지 라이브러리에 저장합니다. 이번 결과는 내려받은 파일로 보관해 주세요.`;
+/** 라이브러리 제목 상한(`server-library.ts` 의 `slice(0, 200)`). 꼬리가 잘리지 않게 앞을 줄인다. */
+const TITLE_LIMIT = 200;
+
+/**
+ * **뽑은 광고 규격을 라이브러리에 한 묶음으로 남긴다**(2026-10-08 사용자 요청).
+ *
+ * 전에는 응답으로만 주고 어디에도 저장하지 않아, 창을 닫으면 내려받은 ZIP 말고는 남는 것이
+ * 없었다. 한 번 뽑기 = 작업물 하나다. 규격대로 나온 것(`ok`)만 담는다.
+ *
+ * **받은 바이트 그대로 넣는다**(`asIs`) — 규격의 크기·형식이 곧 규격이고 AI 표기는 이미 새겼다.
+ *
+ * **던지지 않는다.** 저장이 실패해도 이미 뽑은 결과는 그대로 준다 — 만든 것을 잃는 것이
+ * 라이브러리에 안 남는 것보다 훨씬 나쁘다.
+ */
+async function saveToLibrary(userId: string, title: string | undefined, results: AdBatchEntry[]) {
+  const made = results.filter((entry) => entry.status === "ok" && entry.bytes);
+  // 로컬은 일부러 Supabase 를 비워 둔다(CLAUDE.md 「로컬 확인」). 시도하면 늘 실패 문구가 뜬다.
+  if (!made.length || isLocalStoreEnabled()) return undefined;
+  const name = `광고 규격 ${made.length}개`;
+  const tail = ` · ${name}`;
+  try {
+    // 못 세면 던져 아래 catch 로 간다 — 저장하지 않는 쪽으로 닫는다.
+    if (await countRecentLibraryItems(userId, "ad", new Date(Date.now() - 3_600_000)) >= AD_SAVES_PER_HOUR) {
+      return { saved: false as const, message: LIBRARY_SAVE_LIMITED };
+    }
+    const saved = await saveLibraryItem({
+      userId,
+      title: title ? `${title.slice(0, TITLE_LIMIT - tail.length)}${tail}` : name,
+      tool: "ad",
+      origin: "ai",
+      asIs: true,
+      /*
+        **어느 그림이 어느 규격인가.** 같은 크기 규격이 여럿이라(1200×628 이 둘, 1200×1200 이 셋)
+        「1번째」만으로는 어느 매체용인지 모른다. 「과정 보기」가 이 순서로 보인다.
+      */
+      process: {
+        summary: `${name}를 한 번에 뽑았습니다. 그림 순서가 아래 규격 순서입니다.`,
+        sections: made.map((entry) => ({
+          title: entry.label,
+          role: `${entry.target.width}×${entry.target.height} · ${entry.format === "jpg" ? "JPG" : "PNG"}`,
+        })),
+      },
+      images: made.map((entry) => ({
+        base64: entry.bytes!.toString("base64"),
+        mimeType: entry.format === "jpg" ? "image/jpeg" : "image/png",
+      })),
+    });
+    return saved.ok ? { saved: true as const } : { saved: false as const, message: LIBRARY_SAVE_FAILED };
+  } catch (error) {
+    console.error("[ad:export] 라이브러리 저장 실패", errorLogText(error));
+    return { saved: false as const, message: LIBRARY_SAVE_FAILED };
+  }
+}
 
 /**
  * 포스터 작업의 그림 한 장.
@@ -357,9 +426,12 @@ async function handlePost(request: Request) {
       { model: BACKGROUND_REMOVAL_MODEL, billableImages: cutoutCalls, llmUsd: 0, deliveredImages: 0, completionConfirmed: true },
     );
 
+    const library = await saveToLibrary(auth.member.userId, parsed.data.title, results);
+
     return Response.json({
       ok: true,
       usage,
+      ...(library ? { library } : {}),
       results: results.map(({ bytes, ...rest }) => ({
         ...rest,
         // **형식을 못 박지 않는다.** 규격마다 다르다 — jpg 로 고정하면 PNG 규격이

@@ -5,17 +5,25 @@
  * 자기가 만든 작업을 가리켜 두므로(`easy_messages.work_id`, `/api/easy/works`) 그 목록에
  * 있으면 쉽게다.
  *
+ * 2026-10-08: 위 탭 [작업물·참고 이미지·캐릭터] 과 **한 줄로 합쳤다**(사용자 요청). 「캐릭터」는
+ * 캐릭터 화면 단추 하나다 — 작업물 안의 캐릭터 거르기는 없앴다.
+ *
  * 순수한 규칙이라 값으로 잰다(`__tests__/work-filter.test.ts`).
  */
 
 export type WorkOrigin = "easy" | "poster" | "sns" | "character" | "ad" | "create" | "redesign";
-export type WorkFilterId = "all" | WorkOrigin;
+export type WorkFilterId = "all" | Exclude<WorkOrigin, "character">;
+/** 한 줄 거르기의 단추 하나. 작업물 거르기에 캐릭터·참고 이미지 화면이 붙는다. */
+export type LibraryView = WorkFilterId | "characters" | "references";
 
 export interface FilterableWork {
   id: string;
-  tool: "sns" | "poster" | "create" | "redesign";
-  /** 도구 칸으로 못 가르는 것만 따로 적는다. 지금은 캐릭터 만들기 결과뿐이다. */
+  tool: "sns" | "poster" | "create" | "redesign" | "ad";
+  /** 도구 칸으로 못 가르는 것만 따로 적는다. 지금은 예전 캐릭터 만들기 결과뿐이다. */
   origin?: "character";
+  /** 그림이 몇 장인가. 낱장을 미뤄 받는 작업은 0 이어도 표지가 있다. */
+  imageCount: number;
+  cover: string | null;
 }
 
 export const WORK_FILTERS: { id: WorkFilterId; label: string; unavailable?: string }[] = [
@@ -23,18 +31,26 @@ export const WORK_FILTERS: { id: WorkFilterId; label: string; unavailable?: stri
   { id: "easy", label: "쉽게" },
   { id: "poster", label: "다양하게" },
   { id: "sns", label: "카드뉴스" },
-  { id: "character", label: "캐릭터" },
-  /*
-    광고소재는 결과를 ZIP 으로 내려받기만 하고 라이브러리에 저장하지 않는다(`api/ad/export`).
-    버튼을 눌러 늘 비면 고장으로 보이므로, 저장을 붙이기 전까지는 눌리지 않고 까닭을 말한다.
-  */
-  { id: "ad", label: "광고소재", unavailable: "광고소재 결과는 아직 라이브러리에 저장되지 않습니다. 만들 때 내려받은 파일로 보관해 주세요." },
+  // 광고 내보내기가 뽑을 때마다 한 묶음을 라이브러리에 남긴다(2026-10-08, `api/ad/export`).
+  { id: "ad", label: "광고소재" },
   { id: "create", label: "상세페이지" },
   { id: "redesign", label: "리디자인" },
 ];
 
-/** 카드에 붙는 이름표. 거르기 단추와 같은 말을 쓴다 — 둘이 다르면 어느 단추로 찾을지 모른다. */
+/** 작업물 거르기 뒤에 붙는 다른 화면. 개수를 달지 않는다 — 작업물이 아니다. */
+export const LIBRARY_VIEWS: { id: LibraryView; label: string; unavailable?: string }[] = [
+  ...WORK_FILTERS,
+  { id: "characters", label: "캐릭터" },
+  { id: "references", label: "참고 이미지" },
+];
+
+/**
+ * 카드에 붙는 이름표. 거르기 단추와 같은 말을 쓴다 — 둘이 다르면 어느 단추로 찾을지 모른다.
+ *
+ * 예전 캐릭터 결과는 거르기 단추가 없다. 「전체」에서만 보이고 이름표는 「캐릭터」다.
+ */
 export function originLabel(origin: WorkOrigin): string {
+  if (origin === "character") return "캐릭터";
   return WORK_FILTERS.find((filter) => filter.id === origin)!.label;
 }
 
@@ -59,20 +75,32 @@ export function originOf(work: FilterableWork, easyWorkIds: ReadonlySet<string>)
 }
 
 /**
- * **전체에는 캐릭터 결과를 넣지 않는다.** 캐릭터 만들기 결과는 캐릭터 탭에도 있다 —
- * 전체에 넣으면 두 곳에 같은 것이 보인다. 「캐릭터」를 고르면 그때 보인다.
+ * **그림 없는 작업은 라이브러리에 안 보인다**(2026-10-08 사용자 결정).
+ *
+ * 사진만 올리고 다시 시작한 상세페이지, 기획만 한 포스터, 원고만 쓴 카드뉴스다. 그림을 만들기
+ * 전에 멈춰 크레딧이 나가지 않았다(운영 13건 모두 0). 크레딧 사용은 설정 › 사용 기록에 남고,
+ * 이어서 하기는 각 기능 화면에서 한다. 작업을 지우는 것이 아니라 여기서 안 보일 뿐이다.
+ */
+function hasPicture(work: FilterableWork): boolean {
+  return work.imageCount > 0 || Boolean(work.cover);
+}
+
+/**
+ * **전체에는 예전 캐릭터 결과도 넣는다.** 「캐릭터」 단추가 캐릭터 화면이 되어, 빼면 어디서도
+ * 안 보인다(운영 1건 — 원본 캐릭터는 이미 지워져 캐릭터 화면에 없다).
  */
 export function filterWorks<T extends FilterableWork>(works: readonly T[], filter: WorkFilterId, easyWorkIds: ReadonlySet<string>): T[] {
-  if (filter === "all") return works.filter((work) => originOf(work, easyWorkIds) !== "character");
-  return works.filter((work) => originOf(work, easyWorkIds) === filter);
+  const shown = works.filter(hasPicture);
+  if (filter === "all") return shown;
+  return shown.filter((work) => originOf(work, easyWorkIds) === filter);
 }
 
 export function countByOrigin(works: readonly FilterableWork[], easyWorkIds: ReadonlySet<string>): Record<WorkFilterId, number> {
   const counts = Object.fromEntries(WORK_FILTERS.map((filter) => [filter.id, 0])) as Record<WorkFilterId, number>;
-  for (const work of works) {
+  for (const work of works.filter(hasPicture)) {
     const origin = originOf(work, easyWorkIds);
-    counts[origin] += 1;
-    if (origin !== "character") counts.all += 1;
+    if (origin !== "character") counts[origin] += 1;
+    counts.all += 1;
   }
   return counts;
 }

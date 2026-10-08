@@ -29,6 +29,7 @@ import { uniqueCharacterName } from "../../../../lib/character-library";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 import { collectEasyWorkIds } from "../../../../lib/easy/store-core";
+import type { LibraryTool } from "../../../../lib/server-library";
 
 /**
  * 관리자가 보는 **모든 회원의 작업물** — 저장소를 만지는 쪽.
@@ -475,7 +476,7 @@ export async function readAnyLibraryWork(id: string) {
     work: {
       id: row.id as string,
       title: row.title as string,
-      tool: row.tool as "create" | "redesign",
+      tool: row.tool as LibraryTool,
       aspectRatio: (row.aspect_ratio as string | null) ?? null,
       imageCount: Number(row.image_count ?? 0),
       createdAt: String(row.created_at),

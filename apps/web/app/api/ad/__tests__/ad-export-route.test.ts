@@ -152,7 +152,23 @@ vi.mock("../../../../lib/poster/asset-bytes", () => ({
   },
 }));
 
+/** 라이브러리에 무엇을 저장했나(2026-10-08 — 광고 결과도 한 묶음으로 저장한다). */
+const saved: Array<Record<string, unknown>> = [];
+let saveResult: { ok: true; itemId: string } | { ok: false; message: string } | Error = { ok: true, itemId: "lib-1" };
+
+let recentSaves: number | Error = 0;
+let localStore = false;
+vi.mock("../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => localStore }));
 vi.mock("../../../../lib/server-library", () => ({
+  countRecentLibraryItems: async () => {
+    if (recentSaves instanceof Error) throw recentSaves;
+    return recentSaves;
+  },
+  saveLibraryItem: async (input: Record<string, unknown>) => {
+    saved.push(input);
+    if (saveResult instanceof Error) throw saveResult;
+    return saveResult;
+  },
   getLibraryImageFile: async (
     viewer: { userId: string; role: string }, itemId: string, position: number,
     action?: string,
@@ -223,6 +239,10 @@ beforeEach(() => {
   settleCalls.length = 0;
   reserveOk = true;
   batchResult = null;
+  saved.length = 0;
+  saveResult = { ok: true, itemId: "lib-1" };
+  recentSaves = 0;
+  localStore = false;
 });
 
 describe("들어올 수 있는 사람인가", () => {
@@ -780,5 +800,144 @@ describe("쓸 때마다 장부를 연다", () => {
     await call(assembling);
     expect(settleCalls[0]!.units).toBe(0);
     expect(settleCalls[0]!.cost).toMatchObject({ billableImages: 0 });
+  });
+});
+
+/**
+ * **광고 결과도 라이브러리에 한 묶음으로 남긴다**(2026-10-08 사용자 요청).
+ *
+ * 전에는 응답으로만 주고 어디에도 저장하지 않아, 창을 닫으면 내려받은 ZIP 말고는 남는 것이
+ * 없었다. 한 번 뽑기 = 작업물 하나다.
+ */
+describe("라이브러리에 저장한다", () => {
+  const two = (statuses: Array<"ok" | "failed">) => statuses.map((status, index) => ({
+    specId: `spec-${index}`, label: `규격 ${index}`, portal: "google", product: "p", required: true,
+    sourceKind: "official", format: index === 0 ? "jpg" : "png", target: { width: 10, height: 10 }, status,
+    failures: [], ...(status === "ok" ? { bytes: Buffer.from(`bytes-${index}`), byteLength: 7 } : { reason: "안 됨" }),
+  }));
+
+  it("규격대로 나온 것만 한 작업으로 저장한다", async () => {
+    batchResult = two(["ok", "failed", "ok"]);
+    await call({ ...good, title: "봄 세일 포스터" });
+    expect(saved).toHaveLength(1);
+    const input = saved[0]!;
+    expect(input).toMatchObject({ userId: "u1", tool: "ad", origin: "ai", title: "봄 세일 포스터 · 광고 규격 2개" });
+    expect((input.images as Array<{ base64: string; mimeType: string }>)).toEqual([
+      { base64: Buffer.from("bytes-0").toString("base64"), mimeType: "image/jpeg" },
+      { base64: Buffer.from("bytes-2").toString("base64"), mimeType: "image/png" },
+    ]);
+  });
+
+  /** 규격의 크기·형식이 곧 규격이고, AI 표기는 이미 새겨져 있다. 다시 굽거나 또 새기면 안 된다. */
+  it("받은 바이트 그대로 저장하게 한다", async () => {
+    await call(good);
+    expect(saved[0]).toMatchObject({ asIs: true });
+  });
+
+  it("제목을 안 보내면 「광고 규격 N개」", async () => {
+    await call(good);
+    expect(saved[0]!.title).toBe("광고 규격 1개");
+  });
+
+  it("긴 제목을 거절한다", async () => {
+    expect((await call({ ...good, title: "가".repeat(201) })).status).toBe(400);
+    expect(saved).toEqual([]);
+  });
+
+  it("한 장도 못 나왔으면 저장하지 않는다", async () => {
+    batchResult = two(["failed"]);
+    await call(good);
+    expect(saved).toEqual([]);
+  });
+
+  it("저장했으면 화면에 알린다", async () => {
+    const body = await (await call(good)).json();
+    expect(body.library).toEqual({ saved: true });
+  });
+
+  /** 저장이 실패해도 뽑은 결과는 그대로 준다 — 이미 만든 것을 잃으면 안 된다. */
+  it("저장이 거절돼도 결과는 준다", async () => {
+    saveResult = { ok: false, message: "저장하지 못했습니다." };
+    const response = await call(good);
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.results).toHaveLength(1);
+    expect(body.library).toEqual({ saved: false, message: "라이브러리에 저장하지 못했습니다. 내려받은 파일로 보관해 주세요." });
+  });
+
+  it("저장이 터져도 결과는 주고 예약은 한 번만 닫는다", async () => {
+    saveResult = new Error("storage down: https://secret/sign?token=abc");
+    const response = await call(good);
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.results).toHaveLength(1);
+    expect(body.library.saved).toBe(false);
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(settleCalls).toHaveLength(1);
+    expect(settleCalls[0]!.success).toBe(true);
+  });
+});
+
+describe("라이브러리 저장 — 독립 리뷰 뒤(2026-10-08)", () => {
+  const made = (count: number) => Array.from({ length: count }, (_, index) => ({
+    specId: `spec-${index}`, label: `규격 ${index}`, portal: "google", product: "p", required: true,
+    sourceKind: "official", format: "jpg", target: { width: 1200, height: 628 }, status: "ok",
+    failures: [], bytes: Buffer.from(`b-${index}`), byteLength: 3,
+  }));
+
+  /**
+   * **공짜 길에 저장이 붙었다**(보안 리뷰 MEDIUM). 자르기만 하는 내보내기는 0크레딧이라 장부가
+   * 막지 않는다. 한 번에 수 MB 가 영구로 쌓이므로 회원당 시간당 상한을 둔다. 결과는 그대로 준다.
+   */
+  it("한 시간 상한을 넘으면 저장하지 않고 까닭을 말한다", async () => {
+    recentSaves = 30;
+    const body = await (await call(good)).json();
+    expect(saved).toEqual([]);
+    expect(body.results).toHaveLength(1);
+    expect(body.library).toEqual({ saved: false, message: "광고 결과는 한 시간에 30번까지 라이브러리에 저장합니다. 이번 결과는 내려받은 파일로 보관해 주세요." });
+  });
+
+  /** **못 세면 저장하지 않는다.** 「0으로 치고 진행」으로 바뀌면 상한이 조용히 사라진다. */
+  it("저장 수를 못 세면 저장하지 않고 결과는 준다", async () => {
+    recentSaves = new Error("count failed");
+    const body = await (await call(good)).json();
+    expect(saved).toEqual([]);
+    expect(body.results).toHaveLength(1);
+    expect(body.library).toEqual({ saved: false, message: "라이브러리에 저장하지 못했습니다. 내려받은 파일로 보관해 주세요." });
+  });
+
+  /** 로컬은 일부러 Supabase 를 비워 둔다(CLAUDE.md). 저장을 시도하면 늘 빨간 실패 문구가 뜬다. */
+  it("로컬 저장소에서는 저장하지 않고 아무 말도 안 한다", async () => {
+    localStore = true;
+    const body = await (await call(good)).json();
+    expect(saved).toEqual([]);
+    expect(body).not.toHaveProperty("library");
+  });
+
+  it("상한 아래면 저장한다", async () => {
+    recentSaves = 29;
+    await call(good);
+    expect(saved).toHaveLength(1);
+  });
+
+  /** 같은 크기 규격이 여럿이라 「1번째」만으로는 어느 매체용인지 모른다. 「과정 보기」가 이것을 보인다. */
+  it("어느 규격인지 과정에 남긴다", async () => {
+    batchResult = made(2);
+    await call(good);
+    expect(saved[0]!.process).toEqual({
+      summary: "광고 규격 2개를 한 번에 뽑았습니다. 그림 순서가 아래 규격 순서입니다.",
+      sections: [
+        { title: "규격 0", role: "1200×628 · JPG" },
+        { title: "규격 1", role: "1200×628 · JPG" },
+      ],
+    });
+  });
+
+  /** 제목 상한은 200자다. 꼬리를 붙인 뒤 자르면 「광고 규격 N개」가 잘려 나간다. */
+  it("긴 제목은 꼬리가 들어가게 앞을 줄인다", async () => {
+    await call({ ...good, title: "가".repeat(200) });
+    const title = saved[0]!.title as string;
+    expect(title.length).toBeLessThanOrEqual(200);
+    expect(title.endsWith(" · 광고 규격 1개")).toBe(true);
   });
 });

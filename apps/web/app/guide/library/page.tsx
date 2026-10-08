@@ -63,14 +63,18 @@ export default function LibraryGuidePage() {
           <strong className="text-foreground">이 서비스가 만든 것</strong>입니다. 만들기 도구에서 그림을 불러올 때는
           참고 이미지 · 묶음 세트 · 캐릭터가 나옵니다. 작업물을 레퍼런스로 쓰려면 카드뉴스 · 상세페이지 · 리디자인 결과
           화면에서 <strong className="text-foreground">「참고 이미지로 보관」</strong>을 눌러 두세요. 이미지 만들기
-          결과는 작업물에만 쌓이므로, 레퍼런스로 쓰려면 내려받아 참고 이미지로 올려 주세요. 광고소재 결과는
-          라이브러리에 저장되지 않으니 만들 때 내려받은 파일로 보관해 주세요.
+          결과는 작업물에만 쌓이므로, 레퍼런스로 쓰려면 내려받아 참고 이미지로 올려 주세요. 광고소재 결과는 뽑을
+          때마다 한 묶음으로 작업물에 쌓입니다.
         </p>
       </Section>
 
       <Section title="라이브러리 · 세 가지가 들어 있습니다">
         <Mock title="라이브러리">
-          <MockTabs items={["작업물", "참고 이미지", "캐릭터"]} active={0} marker={1} />
+          <MockTabs
+            items={["전체", "쉽게", "다양하게", "카드뉴스", "광고소재", "상세페이지", "리디자인", "캐릭터", "참고 이미지"]}
+            active={0}
+            marker={1}
+          />
           <MockChoices
             columns={3}
             items={[
@@ -85,12 +89,14 @@ export default function LibraryGuidePage() {
         <Callouts
           items={[
             {
-              title: "탭 세 개",
+              title: "단추 한 줄",
               body: (
                 <ul className="grid gap-1.5">
                   <li>
-                    <strong className="text-foreground">작업물</strong>. 이 서비스가 만든 결과물. 도구별로 쌓이고, 누르면
-                    크게 보며 내려받거나 지울 수 있습니다
+                    <strong className="text-foreground">전체 ~ 리디자인</strong>. 이 서비스가 만든 작업물. 무엇으로
+                    만들었는지로 골라 보고, 단추의 숫자가 그 개수입니다. 누르면 크게 보며 내려받거나 지울 수 있습니다.
+                    그림을 만들기 전에 멈춘 작업은 여기 나오지 않습니다. 크레딧이 나가지 않은 작업이고, 각 만들기
+                    화면에서 이어서 할 수 있습니다
                   </li>
                   <li>
                     <strong className="text-foreground">참고 이미지</strong>. 직접 올린 그림. 「낱장」과 「묶음 세트」로
@@ -152,7 +158,7 @@ export default function LibraryGuidePage() {
           items={[
             {
               q: "라이브러리가 너무 많아 찾기 어렵습니다",
-              a: "탭으로 먼저 좁히세요. 작업물은 도구별로, 참고 이미지는 낱장과 묶음 세트로 나뉩니다.",
+              a: "위 단추 한 줄로 먼저 좁히세요. 작업물은 만든 기능별로, 참고 이미지는 낱장과 묶음 세트로 나뉩니다.",
             },
           ]}
         />

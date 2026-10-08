@@ -111,9 +111,9 @@ describe("showcaseKindOf", () => {
 });
 
 describe("TOOL_LABEL", () => {
-  it("네 도구에 모두 이름이 있다", () => {
-    // 빠지면 카드에 `undefined` 가 그대로 찍힌다.
-    expect(Object.keys(TOOL_LABEL).sort()).toEqual(["create", "poster", "redesign", "sns"]);
+  it("다섯 도구에 모두 이름이 있다", () => {
+    // 빠지면 카드에 `undefined` 가 그대로 찍힌다. 광고소재는 2026-10-08 에 더했다.
+    expect(Object.keys(TOOL_LABEL).sort()).toEqual(["ad", "create", "poster", "redesign", "sns"]);
     for (const label of Object.values(TOOL_LABEL)) expect(label).not.toBe("");
   });
 });
@@ -155,8 +155,8 @@ describe("isWorkShowcased", () => {
 });
 
 /**
- * 캐릭터 만들기 결과 — **「캐릭터」 거르기를 골랐을 때만** 실린다(2026-09-22 사용자 요청).
- * 「전체」에는 여전히 안 싣는다(위 「캐릭터는 싣지 않는다」).
+ * 예전 캐릭터 만들기 결과 — 따로 실어 「전체」에 「캐릭터」 이름표로 보인다(2026-10-08).
+ * `libraryWorks` 는 여전히 안 싣는다(위 「캐릭터는 싣지 않는다」).
  */
 describe("libraryCharacterWorks", () => {
   it("캐릭터 결과만 싣고, 캐릭터라고 표시한다", () => {
@@ -172,5 +172,28 @@ describe("libraryCharacterWorks", () => {
 
   it("일반 작업에는 캐릭터 표시가 붙지 않는다", () => {
     expect(libraryWorks([item])[0]!.origin).toBeUndefined();
+  });
+});
+
+/**
+ * **광고소재 결과도 계정 보관 작업이다**(2026-10-08). 광고 내보내기가 한 번 뽑을 때마다
+ * `library_items` 에 `tool = 'ad'` 로 한 묶음을 남긴다.
+ */
+describe("광고소재 작업", () => {
+  const ad = { ...item, id: "ad-1", title: "봄 세일 · 광고 규격 3개", tool: "ad" as const, aspectRatio: null, imageCount: 3 };
+
+  it("작업물 카드가 된다 — 도구는 ad", () => {
+    const [work] = libraryWorks([ad]);
+    expect(work!.tool).toBe("ad");
+    expect(work!.href).toBe("/library/works/ad-1");
+  });
+
+  it("이름표는 거르기 단추와 같은 「광고소재」", () => {
+    expect(TOOL_LABEL.ad).toBe("광고소재");
+  });
+
+  /** 첫 화면 갤러리 갈래는 library·sns·poster 셋뿐이다. 계정 보관분은 library 다. */
+  it("첫 화면 갤러리 갈래는 library", () => {
+    expect(showcaseKindOf("ad")).toBe("library");
   });
 });

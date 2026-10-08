@@ -372,3 +372,21 @@ describe("뽑는 동안 공통 띠", () => {
     expect(client).toContain("specIds: picked");
   });
 });
+
+/**
+ * **뽑은 결과를 라이브러리에 한 묶음으로 남긴다**(2026-10-08 사용자 요청). 이름은 고른 그림의
+ * 제목으로 짓고, 저장됐는지를 03 에 한 줄로 말한다 — 말이 없으면 어디 갔는지 모른다.
+ */
+describe("라이브러리 저장", () => {
+  it("고른 그림의 제목을 함께 보낸다", () => {
+    expect(client).toContain("title: item.title");
+  });
+
+  it("서버가 알린 저장 결과를 받는다", () => {
+    expect(client).toContain("setLibrarySaved(body.library ?? null)");
+  });
+
+  it("저장됐으면 어디서 보는지 말한다", () => {
+    expect(client).toContain("라이브러리 「광고소재」에 한 묶음으로 저장했습니다.");
+  });
+});
