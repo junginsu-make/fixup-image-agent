@@ -21,7 +21,7 @@ const DEFAULT_ID = IMAGE_MODELS.find((m) => m.isDefault)?.id;
 // 말풍선은 CSS 만으로 보이고 숨긴다. absolute 라 줄 높이를 바꾸지 않는다.
 const TIP_CLASS =
   "pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-56 rounded-md border bg-background p-2 " +
-  "text-left text-meta font-normal text-foreground shadow-lg group-hover:block group-focus-visible:block";
+  "whitespace-normal text-left text-meta font-normal text-foreground shadow-lg group-hover:block group-focus-visible:block";
 
 export function ImageModelPicker({
   value,

@@ -79,4 +79,11 @@ describe("공용 그림 모델 고르기", () => {
     act(() => radios[0]!.props.onClick());
     expect(onPick).toHaveBeenCalledTimes(1);
   });
+
+  it("말풍선은 버튼의 줄바꿈 금지를 물려받지 않는다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
+    expect(tips.length).toBe(3);
+    for (const t of tips) expect(t.props.className).toContain("whitespace-normal");
+  });
 });
