@@ -93,12 +93,13 @@ const SCREENS: Screen[] = [
   // ── 3단계 ──
   // 상세페이지 사진 칸은 칸 전체가 「파일 고르기」 단추다. 누르면 파일 창이 열려
   // 붙여넣을 수 없다 — 단추를 감싼 카드를 칸으로 삼는다(레이아웃 화면과 같은 까닭).
+  // 제품 칸(2026-10-08 §3)부터 여러 장을 받아 사진 자리가 남은 첫 제품에 넣는다.
   {
     name: "상세페이지 · 제품 사진",
     file: "../../create/PdpMakerClient.tsx",
     zone: "productDrop",
-    multiple: false,
-    onFiles: "onFiles: (files, notice) => void handlePreparedImage(files[0]!, notice)",
+    multiple: true,
+    onFiles: "onFiles: (files, notice) => void handleProductFiles(files, notice)",
     disabled: "disabled: false",
     tabIndex: "tabIndex={0}",
     accept: "ACCEPT_ANY_IMAGE",

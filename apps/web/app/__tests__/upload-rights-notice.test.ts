@@ -44,6 +44,7 @@ const 알려진자리 = [
   "characters/CharacterStudio.tsx",
   "characters/OwnCharacterField.tsx",
   "create/PdpMakerClient.tsx",
+  "create/ProductSlots.tsx",
   "create/StyleReferenceAttach.tsx",
   "easy/easy-client.tsx",
   "library/references-tab.tsx",

@@ -41,7 +41,9 @@ import { StyleReferenceCard } from "./StyleReferenceCard";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, prepareProductImageFile } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { ProductSlots, dropIntoProducts } from "./ProductSlots";
+import { primaryPhoto, productsFromLegacy, productsReady, type PdpProductDraft } from "./products";
 import { photoForEditor } from "./product-photo-upload";
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
@@ -128,7 +130,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
       try {
         const response = await fetch(picture.url);
         const blob = await response.blob();
-        await handlePreparedImage(new File([blob], `${picture.title}.png`, { type: blob.type || "image/png" }));
+        await handleProductFiles([new File([blob], `${picture.title}.png`, { type: blob.type || "image/png" })]);
       } catch {
         // 그림을 못 받아 오면 빈 화면으로 시작한다. 사용자가 다시 고르면 된다.
       }
@@ -178,7 +180,11 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     setCharacterId(id);
     setCharacterAngles(angles);
   };
-  const [preparedImage, setPreparedImage] = useState<PreparedImage | null>(null);
+  // 제품 칸(설계 2026-10-08 §3). 대표 사진은 늘 제품 1 첫 사진이다 — 읽는 자리는 그대로 둔다.
+  const [products, setProducts] = useState<PdpProductDraft[]>([]);
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const preparedImage = primaryPhoto(products);
   const [modelImage, setModelImage] = useState<PreparedImage | null>(null);
   const [modelImageUsage, setModelImageUsage] = useState<ReferenceModelUsage | null>(null);
   const [result, setResult] = useState<GeneratedResult | null>(null);
@@ -351,7 +357,6 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
 
   const selectedRatio = useMemo(() => RATIO_OPTIONS.find((option) => option.value === aspectRatio) ?? RATIO_OPTIONS[2], [aspectRatio]);
   const selectedToneLabel = desiredTone || "AI 자동 추천";
-  const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
   const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || planInstruction.trim() || Object.values(sellerBrief).some(Boolean));
   /**
@@ -380,7 +385,9 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     }),
     [sellerBrief, additionalInfo, planInstruction, attachmentIntents.style],
   );
-  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
+  // 사진 없는 제품 칸은 만들기 전에 막는다(§3.1). 제품 1 에 사진이 있어야 하는 것도 여기 든다.
+  const canAnalyze = Boolean(productsReady(products) && (!modelImage || modelImageUsage) && overLimit.length === 0);
+  const emptyProductSlot = products.some((product) => product.photos.length === 0);
   /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
   const overLimitMessage = overLimit.length
     ? `${overLimit.map((field) => `${field.label} ${field.length - field.limit}자 초과`).join(", ")}. 줄인 뒤 다시 눌러 주세요.`
@@ -424,24 +431,21 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     void refreshDrafts();
   }, [refreshDrafts]);
 
-  /** @param dropNotice 끌어다 놓기·붙여넣기가 알릴 말(「한 장만 씁니다」 등). */
-  const handlePreparedImage = async (file: File, dropNotice?: string) => {
-    try {
-      if (!file.type.startsWith("image/")) {
-        setErrorMessage("이미지 파일만 업로드할 수 있습니다.");
-        return;
-      }
-
-      const nextImage = await prepareProductImageFile(file);
-      setPreparedImage(nextImage);
-      setErrorMessage("");
-      setErrorDetail("");
-      setShowErrorDetail(false);
-      setNotice(joinMessages(`${file.name} 이미지를 준비했습니다. 설정을 확인한 뒤 AI 분석을 시작해 보세요.`, dropNotice));
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "이미지를 준비하지 못했습니다.");
-      setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+  /**
+   * 칸 바깥에 끌어다 놓거나 붙여넣은 제품 사진: 사진 자리가 남은 첫 제품에 넣는다.
+   * @param dropNotice 끌어다 놓기·붙여넣기가 알릴 말(받지 않는 형식을 뺐다 등).
+   */
+  const handleProductFiles = async (files: File[], dropNotice?: string) => {
+    const outcome = await dropIntoProducts(() => productsRef.current, files);
+    if (outcome.products) setProducts(outcome.products);
+    if (outcome.error) {
+      setErrorMessage(outcome.error);
+      return;
     }
+    setErrorMessage("");
+    setErrorDetail("");
+    setShowErrorDetail(false);
+    setNotice(joinMessages(`사진 ${files.length}장을 준비했습니다. 설정을 확인한 뒤 AI 분석을 시작해 보세요.`, dropNotice));
   };
 
   const handleModelImage = async (file: File, dropNotice?: string) => {
@@ -471,9 +475,9 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
   */
   const productDrop = useImageDropTarget({
     disabled: false,
-    multiple: false,
+    multiple: true,
     accept: ACCEPT_ANY_IMAGE,
-    onFiles: (files, notice) => void handlePreparedImage(files[0]!, notice),
+    onFiles: (files, notice) => void handleProductFiles(files, notice),
     onMessage: setErrorMessage,
   });
   const personDrop = useImageDropTarget({
@@ -492,6 +496,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
           createdAt: draftCreatedAt ?? undefined,
           appState,
           preparedImage,
+          products,
           modelImage,
           modelImageUsage,
           result,
@@ -521,7 +526,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         },
         hasDraftContent,
       ),
-    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, planInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, products, result, userInstruction, planInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
   );
 
   const draftSnapshot = useMemo(() => buildDraftInput(), [buildDraftInput]);
@@ -657,7 +662,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     setRecoveredFailures([]);
     askedRecoveryRef.current = null;
     setAppState("upload");
-    setPreparedImage(null);
+    setProducts([]);
     setModelImage(null);
     setModelImageUsage(null);
     setResult(null);
@@ -744,7 +749,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         }
         setDraftCreatedAt(draft.createdAt);
         setLastSavedAt(draft.updatedAt);
-        setPreparedImage(draft.preparedImage);
+        setProducts(draft.products ?? productsFromLegacy(draft.preparedImage));
         setModelImage(draft.modelImage ?? null);
         setModelImageUsage(draft.modelImageUsage ?? null);
         setResult(draft.result && draft.editorState?.sections.length
@@ -1457,7 +1462,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
           <p className="mt-1 text-body text-muted-foreground">
             {startMode === "text"
               ? "판매하시는 것을 글로 적어주시면 AI가 구성부터 이미지까지 만들어 드립니다."
-              : "상품 사진 한 장이면 됩니다. AI가 구성을 잡고 섹션 이미지를 만들어 드립니다."}
+              : "상품 사진 한 장이면 됩니다. 다른 각도·다른 제품도 함께 올릴 수 있습니다."}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -1695,54 +1700,9 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
                 desc="한 장만 올려도 됩니다. 업로드 후 AI 전송용으로 자동 압축합니다."
               />
 
-              <UploadDropzone
-                description="클릭해서 JPG, PNG, WEBP 파일을 선택할 수 있습니다."
-                hint={preparedImage?.fileName ? `선택됨: ${preparedImageDisplayName}` : "권장 최대 10MB"}
-                onSelect={handlePreparedImage}
-                selectedFileName={preparedImage?.fileName}
-                title="제품 이미지를 업로드하세요"
-              />
               <DropPasteHint locked={false} className="mt-1" />
-
-              {/* 계정에 이미 있는 이미지를 다시 올리게 하지 않는다. */}
-              <SavedImagePicker
-                label="저장된 이미지에서 고르기"
-                onPick={(file) => void handlePreparedImage(file)}
-              />
-
-              {preparedImage ? (
-                <div className={previewCardClass}>
-                  <div className={previewFrameClass}>
-                    <img
-                      alt={preparedImage.fileName}
-                      data-zoomable
-                      className="h-full w-full cursor-zoom-in object-contain"
-                      src={preparedImage.previewUrl}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <strong title={preparedImage.fileName} className="block truncate text-sm">
-                      {preparedImageDisplayName}
-                    </strong>
-                    <dl className="mt-2 grid gap-1.5 sm:grid-cols-3">
-                      <MetaItem label="전송 포맷" value="JPEG 1024px" />
-                      <MetaItem label="비율" value={selectedRatio.label} />
-                      <MetaItem label="톤" value={selectedToneLabel} />
-                    </dl>
-                  </div>
-                </div>
-              ) : (
-                <div className={hintBoxClass}>
-                  <Sparkles size={18} className="mt-0.5 flex-none text-primary" />
-                  <div>
-                    <strong className="block text-sm">업로드 후 바로 미리보기가 들어옵니다.</strong>
-                    <ul className={hintListClass}>
-                      <li>배경이 너무 복잡하지 않은 제품컷이면 분석 품질이 더 안정적입니다.</li>
-                      <li>투명 배경 PNG도 가능하지만, 제품이 충분히 크게 보이는 이미지를 추천합니다.</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
+              {/* 제품마다 사진 1~4장, 제품은 3개까지(설계 2026-10-08 §3.1). 칸 동작은 그 파일에 있다. */}
+              <ProductSlots products={products} onChange={setProducts} onError={setErrorMessage} />
 
             </div>
 
@@ -2422,6 +2382,9 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
                 <p id="analyze-blocked" role="status" className="mt-2 text-sm text-warning">
                   {overLimitMessage}
                 </p>
+              ) : null}
+              {emptyProductSlot ? (
+                <p role="status" className="mt-2 text-sm text-warning">사진이 없는 제품 칸이 있습니다. 사진을 넣거나 그 칸을 빼 주세요.</p>
               ) : null}
               <div className="mt-2 rounded-md bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
                 <strong className="text-foreground">이 단계의 이미지 크레딧: 0장</strong><br />
