@@ -17,13 +17,15 @@ export interface WorksSummary {
  * 전에는 위 탭 [작업물·참고 이미지·캐릭터] 아래에 작업물 거르기 [전체…리디자인] 가 또 있었다.
  * 「캐릭터」가 두 곳에 있었고, 두 줄을 오가야 했다. 이제 한 줄이 무엇을 보일지 정한다.
  *
- * 작업물 거르기에는 개수를 단다 — 눌러 보기 전에 비었는지 안다. 캐릭터·참고 이미지는 작업물이
- * 아니라 개수가 없다.
+ * 작업물 거르기에는 개수를 단다 — 눌러 보기 전에 비었는지 안다. 캐릭터는 `characterCount` 로
+ * 따로 받는다(2026-10-08). 참고 이미지는 낱장·세트가 섞여 아직 숫자가 없다.
  */
-export function LibraryViewBar({ value, summary, onChange }: {
+export function LibraryViewBar({ value, summary, onChange, characterCount = null }: {
   value: LibraryView;
   summary: WorksSummary | null;
   onChange: (next: LibraryView) => void;
+  /** 「캐릭터」 옆 숫자(2026-10-08 사용자 요청). 모르면 `null` — 이름만 보인다. */
+  characterCount?: number | null;
 }) {
   /** 못 쓰는 단추를 눌렀을 때의 까닭. 다른 단추를 누르면 지운다. */
   const [reason, setReason] = React.useState("");
@@ -38,7 +40,9 @@ export function LibraryViewBar({ value, summary, onChange }: {
         {LIBRARY_VIEWS.map((entry) => {
           const unavailable = blocked.get(entry.id);
           const active = shown === entry.id;
-          const count = summary && !unavailable && entry.id in summary.counts ? summary.counts[entry.id as WorkFilterId] : null;
+          const count = entry.id === "characters"
+            ? characterCount
+            : summary && !unavailable && entry.id in summary.counts ? summary.counts[entry.id as WorkFilterId] : null;
           return (
             <Button
               key={entry.id}

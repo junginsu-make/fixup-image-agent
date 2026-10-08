@@ -52,6 +52,16 @@ export default function LibraryPage() {
   /** 한 줄 거르기에서 고른 것(2026-10-08). 위 탭과 작업물 거르기를 합쳤다. */
   const [libraryView, setLibraryView] = React.useState<LibraryView>("all");
   const [worksSummary, setWorksSummary] = React.useState<WorksSummary | null>(null);
+  /** 「캐릭터」 단추의 숫자. 개수만 묻는다 — 목록은 그 화면을 열 때 읽는다. 관리자는 전체 회원 기준. */
+  const [characterCount, setCharacterCount] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/characters?scope=all&count=1", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body: { ok?: boolean; count?: number }) => { if (alive && body.ok && typeof body.count === "number") setCharacterCount(body.count); })
+      .catch(() => { /* 숫자가 없을 뿐이다. 단추는 그대로 눌린다. */ });
+    return () => { alive = false; };
+  }, []);
 
   /**
    * 이미지를 직접 올려 작업물로 보관한다.
@@ -217,7 +227,7 @@ export default function LibraryPage() {
         </p>
       </div>
 
-      <LibraryViewBar value={libraryView} summary={worksSummary} onChange={setLibraryView} />
+      <LibraryViewBar value={libraryView} summary={worksSummary} onChange={setLibraryView} characterCount={characterCount} />
 
       {/*
         작업물은 **늘 붙여 둔다**(감추기만 한다). 단추에 달 개수를 작업물 화면이 세므로, 캐릭터·참고

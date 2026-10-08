@@ -13,6 +13,7 @@ vi.mock("server-only", () => ({}));
 const calls = {
   create: [] as Array<Record<string, unknown>>,
   list: [] as Array<{ userId: string; options?: Record<string, unknown> }>,
+  count: [] as Array<{ userId: string; options?: Record<string, unknown> }>,
   finalize: [] as Array<{ success: boolean; units: number }>,
 };
 let role: "member" | "admin" = "member";
@@ -50,6 +51,10 @@ vi.mock("../../../../lib/characters", () => ({
     return [];
   },
   deleteCharacter: async () => ({ ok: true }),
+  countCharacters: async (userId: string, _team: unknown, options?: Record<string, unknown>) => {
+    calls.count.push({ userId, options });
+    return 7;
+  },
   countRecentCharacters: async () => {
     if (recentCharacters instanceof Error) throw recentCharacters;
     return recentCharacters;
@@ -71,6 +76,7 @@ const 정면 = { step: "candidates", description: "고양이인데 3등신", kin
 beforeEach(() => {
   calls.create.length = 0;
   calls.list.length = 0;
+  calls.count.length = 0;
   calls.finalize.length = 0;
   role = "member";
   createResult = { ok: true, id: "c1", name: "냥이", angleCount: 1 };
@@ -209,5 +215,30 @@ describe("옛 저장 단계 — 각도 없이", () => {
     recentCharacters = 30;
     const response = await post({ ...저장, angles: ["back"], chosenBase64: PNG, chosenMimeType: "image/png" });
     expect(response.status).toBe(200);
+  });
+});
+
+/**
+ * **개수만**(2026-10-08 사용자 요청 — 「캐릭터」 단추에 숫자). 목록을 통째로 읽으면 그림 주소까지
+ * 서명해 라이브러리를 열 때마다 무겁다. 숫자만 센다. 범위 규칙은 목록과 같다.
+ */
+describe("개수만", () => {
+  const get = (query: string) => GET(new Request(`http://local/api/characters${query}`));
+
+  it("목록을 읽지 않고 숫자만 준다", async () => {
+    const body = await (await get("?count=1")).json();
+    expect(body).toEqual({ ok: true, count: 7 });
+    expect(calls.list).toEqual([]);
+  });
+
+  it("관리자가 전체를 달라고 하면 전체를 센다", async () => {
+    role = "admin";
+    await get("?scope=all&count=1");
+    expect(calls.count[0]!.options).toMatchObject({ allMembers: true });
+  });
+
+  it("회원은 전체를 달라고 해도 자기 것만 센다", async () => {
+    await get("?scope=all&count=1");
+    expect(calls.count[0]!.options?.allMembers).not.toBe(true);
   });
 });

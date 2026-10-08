@@ -3,8 +3,9 @@
 import { IMAGE_LOOK_LABEL } from "@fixup/shared";
 import * as React from "react";
 import Link from "next/link";
-import { Loader2, UserRound } from "lucide-react";
-import { Badge, Button, Card, CardContent } from "@fixup/ui";
+import { ListOrdered, Loader2, UserRound } from "lucide-react";
+import { Badge, Button, Card, CardContent, cn } from "@fixup/ui";
+import { CORNER_BUTTON } from "../_components/delete-work-button";
 import { ThumbImage } from "../_components/thumb-image";
 import { openImageGallery } from "../_components/image-viewer";
 
@@ -161,15 +162,50 @@ export function CharactersTab() {
             // 정면이 없는 옛 캐릭터는 처음 장으로 대신한다.
             const cover = shown.find((view) => view.angle === "front") ?? shown[0];
             return (
-              <Card key={character.id} className="overflow-hidden">
-                {/* 칸은 작업물과 같은 정사각형, 그림은 잘라 내지 않는다. */}
-                <button
-                  type="button"
-                  aria-label={`${character.name} 크게 보기`}
-                  disabled={!cover}
-                  onClick={() => openCharacter(character, angleLabels)}
-                  className="flex aspect-square w-full items-center justify-center overflow-hidden bg-muted p-1 enabled:cursor-zoom-in"
+              /*
+                **작업물 카드와 같은 느낌**(2026-10-08 사용자 보고). 카드 어디를 눌러도 큰 창이 열린다 —
+                전에는 그림만 눌렸고 아래 「과정 보기」 글자를 누르면 상세 페이지로 넘어가 다른 화면 같았다.
+              */
+              <Card
+                key={character.id}
+                // 키보드로도 연다. 전에는 그림이 진짜 단추라 Tab·Enter 로 열렸다(독립 리뷰).
+                role="button"
+                tabIndex={0}
+                aria-label={`${character.name} 크게 보기`}
+                className={cn("relative overflow-hidden", cover && "cursor-pointer")}
+                onClick={() => { if (cover) openCharacter(character, angleLabels); }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  if (cover) openCharacter(character, angleLabels);
+                }}
+              >
+                {/* 「과정 보기」는 작업물처럼 왼쪽 위 모서리 아이콘이다. 누르면 카드의 큰 창은 안 열린다. */}
+                <Link
+                  href={`/characters/${character.id}`}
+                  aria-label={`${character.name} 과정 보기`}
+                  onClick={(event) => event.stopPropagation()}
+                  className={cn(CORNER_BUTTON, "group left-1.5 hover:text-foreground")}
                 >
+                  <ListOrdered className="size-3.5" />
+                  {/* 올리는 즉시 뜨는 말풍선. 작업물 카드와 같은 모양이다(`works-tab.tsx`). */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "pointer-events-none absolute left-0 top-full z-20 mt-1.5 grid w-max max-w-[9rem] gap-0.5",
+                      "rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-5 text-background shadow-md",
+                      "opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-visible:opacity-100",
+                    )}
+                  >
+                    <b>과정 보기</b>
+                    {/* 남의 캐릭터는 보기 전용이다 — 「다시 만들 수 있다」 는 내 것에만 맞는 말이다. */}
+                    <span>
+                      만들 때 쓴 설정과 각도를 봅니다.{character.mine === false ? "" : " 이 설정으로 다시 만들 수 있습니다."}
+                    </span>
+                  </span>
+                </Link>
+                {/* 칸은 작업물과 같은 정사각형, 그림은 잘라 내지 않는다. */}
+                <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-muted p-1">
                   {cover ? (
                     <ThumbImage
                       src={(cover.thumbUrl ?? cover.url) as string}
@@ -179,7 +215,7 @@ export function CharactersTab() {
                   ) : (
                     <span className="text-xs text-muted-foreground">저장된 각도가 없습니다</span>
                   )}
-                </button>
+                </div>
                 <CardContent className="grid gap-2 p-3">
                   <p className="truncate text-sm font-bold">{character.name}</p>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -188,13 +224,7 @@ export function CharactersTab() {
                     <Badge variant="secondary">{shown.length}장</Badge>
                     {character.mine === false ? <Badge variant="secondary">{character.ownerEmail ?? "다른 회원"}</Badge> : null}
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-meta text-subtle-foreground">{formatDate(character.createdAt)}</p>
-                    {/* 「과정 보기」 — 무엇으로 만들었는지와 각도를 본다. 작업물 카드와 같은 뜻이다. */}
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/characters/${character.id}`}>과정 보기</Link>
-                    </Button>
-                  </div>
+                  <p className="text-meta text-subtle-foreground">{formatDate(character.createdAt)}</p>
                 </CardContent>
               </Card>
             );
