@@ -193,11 +193,52 @@ describe("캐릭터도 전체에", () => {
     expect(request.images[0]!.meta).toContainEqual(["만든 사람", "나"]);
   });
 
-  /** 캐릭터는 캐릭터 표와 참고 이미지에 함께 있다. 여기서 지우면 한쪽만 사라진다 — 만들기 화면이 지운다. */
-  it("지우기 단추는 없다", async () => {
+  /**
+   * 캐릭터는 캐릭터 표·각도 그림·참고 이미지에 함께 있다. 라이브러리 표로 보내면 한쪽만 사라지므로 **캐릭터 지우기
+   * 주소**로 보낸다 — 그 주소가 셋을 함께 지운다(2026-10-09).
+   */
+  it("내 캐릭터는 캐릭터 지우기 주소로 지운다", async () => {
     await act(async () => { view = create(<WorksTab />); });
     await flush();
-    expect(view.root.findAll((node) => node.props["aria-label"] === "호랑이 지우기")).toHaveLength(0);
+    await pressDeleteAndConfirm("호랑이");
+    expect(calls.filter((call) => call.method === "DELETE")).toEqual([
+      { url: "/api/characters", method: "DELETE", body: JSON.stringify({ id: "char-1" }) },
+    ]);
+  });
+
+  /**
+   * **관리자는 남의 것도 지운다**(2026-10-09 사용자 — 「카드뉴스는 되는데 상세페이지·캐릭터는 안 된다」).
+   * 상세페이지는 관리자 주소로, 캐릭터는 캐릭터 지우기 주소로(주인은 서버가 찾는다).
+   */
+  it("관리자는 남의 상세페이지와 캐릭터도 지울 수 있다", async () => {
+    const DOC = "77777777-7777-4777-8777-777777777777";
+    const OWNER = "99999999-9999-4999-8999-999999999999";
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (method === "DELETE") return json({ ok: true });
+      if (url.startsWith("/api/showcase/manage")) return json({ ok: true, items: [] });
+      if (url.startsWith("/api/admin/works")) return json({ ok: true, sns: [], poster: [], easyWorkIds: [] });
+      if (url.startsWith("/api/admin/pdp-documents")) {
+        return json({ ok: true, documents: [{ id: DOC, userId: OWNER, revision: 1, sourceDraftId: null, createdAt: stamp.createdAt,
+          updatedAt: stamp.updatedAt, title: "남의 상세페이지", stage: "editor", sectionCount: 1, aspectRatio: "9:16", imageCount: 1,
+          cover: null, mine: false, coverUrl: "https://img/live.png" }] });
+      }
+      if (url.startsWith("/api/characters")) {
+        return json({ ok: true, characters: [{ id: "char-other", name: "남의 캐릭터", kind: "character", look: "3d",
+          createdAt: stamp.createdAt, mine: false, ownerEmail: "m@example.com",
+          views: [{ angle: "front", url: "https://img/other.png", thumbUrl: null }] }], angles: [{ id: "front", label: "정면" }] });
+      }
+      return reply(url, method);
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    await pressDeleteAndConfirm("남의 상세페이지");
+    await pressDeleteAndConfirm("남의 캐릭터");
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => [call.url, call.body])).toEqual([
+      [`/api/admin/pdp-documents/${DOC}?owner=${OWNER}`, undefined],
+      ["/api/characters", JSON.stringify({ id: "char-other" })],
+    ]);
   });
 
   it("관리자가 전체 회원을 보면 캐릭터도 전체 범위로 묻는다", async () => {
@@ -302,3 +343,13 @@ describe("캐릭터를 받는 동안", () => {
     expect(text()).toContain("아직 만든 캐릭터가 없습니다.");
   });
 });
+
+/** 카드의 지우기 단추를 누르고 확인 창의 「지웁니다」를 누른다. */
+async function pressDeleteAndConfirm(name: string) {
+  const corner = view.root.find((node) => node.type === "button" && node.props["aria-label"] === `${name} 지우기`);
+  await act(async () => { corner.props.onClick({ stopPropagation() {} }); });
+  await flush();
+  const confirm = view.root.findAll((node) => node.type === "button" && node.findAll((child) => child.children.includes("지웁니다")).length > 0).at(-1)!;
+  await act(async () => { confirm.props.onClick(); });
+  await flush();
+}

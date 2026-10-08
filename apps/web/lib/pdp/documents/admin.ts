@@ -1,6 +1,6 @@
 import {z} from "zod";
 import {assetPath,DocumentError,notFound,uuid,validateDocument} from "./model";
-import {documentResponseError,readDocumentJson,type DocumentDependencies} from "./http";
+import {completeDocumentDelete,documentResponseError,readDocumentJson,type DocumentDependencies} from "./http";
 export function adminDocumentHandlers(deps:DocumentDependencies){
   const run=(fn:(userId:string)=>Promise<object>)=>async()=>{
     try{
@@ -20,6 +20,16 @@ export function adminDocumentHandlers(deps:DocumentDependencies){
       const record=await deps.repo.get(owner,id);if(!record?.document)throw notFound();
       validateDocument(record.document,owner,id);
       return {record,urls:await deps.storage.urls(record.document.assets)};
+    })(),
+    /**
+     * **관리자는 남의 상세페이지도 지운다**(2026-10-09 사용자). 회원 주소는 자기 문서만 찾으므로 주인을 실어 받는다.
+     * 회원이 지울 때와 같이 지운 표시 → 옛 라이브러리 그림·문서 그림 파일까지 지운다.
+     */
+    remove:(req:Request,id:string)=>run(async()=>{
+      uuid.parse(id);const owner=uuid.parse(new URL(req.url).searchParams.get("owner"));
+      const row=await deps.repo.markDeleted(owner,id);
+      await completeDocumentDelete(deps,owner,row);
+      return {};
     })(),
     copy:(req:Request,id:string)=>run(async viewer=>{
       uuid.parse(id);

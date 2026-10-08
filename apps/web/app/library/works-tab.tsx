@@ -21,6 +21,7 @@ import {
 import type { WorksSummary } from "./library-view-bar";
 import { readEasyWorks, stepsHref, type EasyWorks } from "./easy-href";
 import { readCharacterWorks } from "./character-works";
+import { deleteRequest } from "./work-delete";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -471,13 +472,14 @@ export function WorksTab({ filter = "all", onSummary }: {
   }
 
   /**
-   * 지우기 단추를 낼까. 자기 것, 그리고 관리자.
+   * 지우기 단추를 낼까. 자기 것, 그리고 관리자 — 관리자는 남의 상세페이지·캐릭터도 지운다(2026-10-09 사용자).
    *
-   * **캐릭터 결과는 여기서 안 지운다.** 캐릭터 표와 라이브러리 양쪽에 있어, 여기서
-   * 지우면 한쪽만 사라진다. 캐릭터 만들기 화면에서 지운다(캐릭터 목록 카드도 같다).
+   * **캐릭터 표의 캐릭터**는 캐릭터 지우기 주소로 보낸다 — 각도 그림·참고 이미지까지 함께 지운다(`work-delete.ts`).
+   * 예전 캐릭터 결과(라이브러리 표에 든 것, `characterId` 없음)는 여기서 안 지운다 — 참고 이미지 쪽이 남는다.
    */
   function canDelete(work: Work): boolean {
-    return work.origin !== "character" && (work.documentId ? work.mine : (work.mine || isAdmin === true));
+    if (work.origin === "character" && !work.characterId) return false;
+    return work.mine || isAdmin === true;
   }
 
   /** 지우기 확인을 연다. 문서인지 확인하지 못한 카드는 열지 않고 까닭을 말한다(3차 리뷰 W24). */
@@ -493,23 +495,9 @@ export function WorksTab({ filter = "all", onSummary }: {
     setDeleting(work.id);
     setMessage("");
     try {
-      /*
-        **계정 보관 작업은 다른 표에 있다.** 도구 주소로 보내면 아무것도 안
-        지워지고 사라진 것처럼 보인다 — `lib/library.ts` 가 레퍼런스에서 같은
-        실수를 겪고 남긴 주석이다.
-      */
-      const account = work.tool === "create" || work.tool === "redesign" || work.tool === "ad";
-      const endpoint = work.documentId ? `/api/pdp/documents/${work.documentId}` : account
-        ? "/api/library"
-        : work.tool === "sns"
-          ? `/api/sns/projects/${work.id}`
-          : `/api/poster/projects/${work.id}`;
-      const body = await (await fetch(endpoint, {
-        method: "DELETE",
-        ...(account
-          ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ id: work.id }) }
-          : {}),
-      })).json();
+      // 어디로 지울지는 `work-delete.ts` 가 정한다 — 관리자는 남의 상세페이지·캐릭터도 지운다(2026-10-09).
+      const request = deleteRequest(work, isAdmin === true);
+      const body = await (await fetch(request.url, request.init)).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
       setWorks((current) => (current ?? []).filter((entry) => entry.id !== work.id));
     } catch (error) {

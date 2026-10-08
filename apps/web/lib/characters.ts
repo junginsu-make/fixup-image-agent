@@ -988,6 +988,18 @@ export async function readCharacterFile(userId: string, storagePath: string) {
   return { bytes: await readLocalCharacterFile(view.path), mimeType: view.mimeType };
 }
 
+/**
+ * 캐릭터의 주인(관리자가 남의 캐릭터를 지울 때, 2026-10-09). 없으면 null. 로컬은 사람마다 폴더가 갈려 「남의 것」이
+ * 없다 — 보는 사람이 주인이다.
+ */
+export async function characterOwnerOf(characterId: string, viewerId: string): Promise<string | null> {
+  if (isLocalStoreEnabled()) return viewerId;
+  const { data, error } = await createSupabaseAdminClient()
+    .from("characters").select("user_id").eq("id", characterId).maybeSingle();
+  if (error) throw new Error("캐릭터를 찾지 못했습니다.");
+  return data ? String((data as { user_id: string }).user_id) : null;
+}
+
 export async function deleteCharacter(userId: string, characterId: string) {
   const character = await findCharacter(userId, characterId);
 

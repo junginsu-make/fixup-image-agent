@@ -26,7 +26,10 @@ export function createDocumentHandlers(){
   storage:new Proxy({} as ReturnType<typeof services>["storage"],{get:(_,key)=>Reflect.get(services().storage,key)})});
 }
 export function createAdminDocumentHandlers(){
-  return adminDocumentHandlers({enabled:serverDocumentsEnabled,authenticate:async()=>{
+  return adminDocumentHandlers({enabled:serverDocumentsEnabled,
+    // 관리자의 지우기도 연결된 옛 라이브러리 그림을 지운다 — 회원용과 같은 정리(2026-10-09).
+    cleanupLegacy:async(userId,ids)=>{if(!isLocalStoreEnabled())await deleteDocumentLegacy(createSupabaseAdminClient(),userId,ids);},
+    authenticate:async()=>{
     const auth=await authenticateApiAdmin();return auth.ok?{userId:auth.member.userId}:auth.response;
   },repo:new Proxy({} as ReturnType<typeof documentServices>["repo"],{get:(_,key)=>Reflect.get(documentServices().repo,key)}),
   storage:new Proxy({} as ReturnType<typeof documentServices>["storage"],{get:(_,key)=>Reflect.get(documentServices().storage,key)})});

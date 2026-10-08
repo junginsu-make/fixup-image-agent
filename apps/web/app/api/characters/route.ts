@@ -10,6 +10,7 @@ import {
   MAX_CANDIDATES,
   MIN_CANDIDATES,
   characterCreditCost,
+  characterOwnerOf,
   countRecentCharacters,
   createCharacter,
   deleteCharacter,
@@ -420,8 +421,25 @@ export async function DELETE(req: Request) {
     const id = String(body.id || "");
     if (!id) return Response.json({ ok: false, message: "id 가 없습니다." }, { status: 400 });
 
-    const result = await deleteCharacter(auth.member.userId, id);
-    return Response.json(result, { status: result.ok ? 200 : 500 });
+    /*
+      **관리자는 남의 캐릭터도 지운다**(2026-10-09 사용자). 지우기는 주인 줄·주인 폴더를 기준으로 하므로, 관리자 id 로
+      부르면 한 줄도 못 지운다. 주인은 서버가 찾는다 — 화면이 보낸 값을 믿지 않는다.
+    */
+    // 형식이 틀린 id 는 DB 가 오류로 답한다(500) — 먼저 거른다.
+    if (!z.string().uuid().safeParse(id).success) {
+      return Response.json({ ok: false, message: "캐릭터를 찾지 못했습니다." }, { status: 400 });
+    }
+    const admin = hasFullScope(viewerFrom(auth.member), "delete");
+    const owner = admin ? await characterOwnerOf(id, auth.member.userId) : auth.member.userId;
+    if (!owner) return Response.json({ ok: false, message: "캐릭터를 찾지 못했습니다." }, { status: 404 });
+
+    const result = await deleteCharacter(owner, id);
+    if (!result.ok) {
+      // DB 원문(표·칸 이름)은 화면에 보내지 않는다.
+      console.error("[characters:delete]", result.message);
+      return Response.json({ ok: false, message: "삭제하지 못했습니다." }, { status: 500 });
+    }
+    return Response.json(result);
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },
