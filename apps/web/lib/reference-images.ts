@@ -330,12 +330,12 @@ async function readReferences(
 }
 
 /**
- * 올린 사람의 이메일. **관리자 목록에서만 부른다.**
+ * 올린(만든) 사람의 이메일. **관리자 목록에서만 부른다.** 캐릭터 목록도 쓴다(2026-10-08).
  *
  * 조인 대신 두 번 묻는다. PostgREST 임베드는 관계 이름이 바뀌면 조용히 빈
  * 값을 주는데, 여기서 빈 값은 "누가 올렸는지 모르는 목록"이 된다.
  */
-async function emailsByUserId(userIds: string[]): Promise<Map<string, string>> {
+export async function emailsByUserId(userIds: string[]): Promise<Map<string, string>> {
   const unique = [...new Set(userIds)];
   if (!unique.length) return new Map();
   const supabase = createSupabaseAdminClient();
