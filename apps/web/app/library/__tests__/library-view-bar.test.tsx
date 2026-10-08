@@ -12,7 +12,7 @@ import { LibraryViewBar } from "../library-view-bar";
 let view: ReactTestRenderer;
 afterEach(() => { act(() => view?.unmount()); });
 
-const counts = { all: 5, easy: 1, poster: 2, sns: 1, ad: 0, create: 1, redesign: 0 };
+const counts = { all: 7, easy: 1, poster: 2, sns: 1, ad: 0, create: 1, redesign: 0, character: 2 };
 type Node = ReactTestRenderer["root"];
 /** 단추 안의 글자를 이어 붙인다(이름 + 개수). */
 const textOf = (node: Node): string => node.children.map((child) => (typeof child === "string" ? child : textOf(child))).join("");
@@ -42,10 +42,11 @@ describe("한 줄 거르기", () => {
     expect(textOf(button("다양하게"))).toBe("다양하게2");
   });
 
-  it("캐릭터를 누르면 캐릭터 화면으로", () => {
+  /** 「캐릭터」도 작업물 거르기다 — 같은 목록에서 캐릭터만 걸러 보인다(2026-10-08 사용자 보고). */
+  it("캐릭터를 누르면 캐릭터만 거른다", () => {
     const onChange = render();
     act(() => { button("캐릭터").props.onClick(); });
-    expect(onChange).toHaveBeenCalledWith("characters");
+    expect(onChange).toHaveBeenCalledWith("character");
   });
 
   it("참고 이미지를 누르면 참고 이미지 화면으로", () => {
@@ -75,16 +76,18 @@ describe("한 줄 거르기", () => {
     expect(text()).not.toContain("쉽게와 다양하게를 가를 수 없습니다");
   });
 
-  /** 「캐릭터」 옆에도 몇 개인지 적는다(2026-10-08 사용자 요청). 참고 이미지는 아직 숫자가 없다. */
-  it("캐릭터 개수를 받으면 단다", () => {
-    render({ characterCount: 12 });
-    expect(textOf(button("캐릭터"))).toBe("캐릭터12");
+  /** 「캐릭터」 옆 숫자는 다른 단추처럼 목록에서 센다. 참고 이미지는 아직 숫자가 없다. */
+  it("캐릭터 개수도 목록에서 센 숫자다", () => {
+    render();
+    expect(textOf(button("캐릭터"))).toBe("캐릭터2");
     expect(textOf(button("참고 이미지"))).toBe("참고 이미지");
   });
 
-  it("캐릭터 개수를 아직 모르면 이름만", () => {
-    render({ characterCount: null });
+  /** 캐릭터는 나중에 온다. 오기 전에는 숫자를 달지 않는다 — 0 이었다가 바뀌면 없는 줄 안다. */
+  it("캐릭터가 아직 안 왔으면 캐릭터에만 숫자가 없다", () => {
+    render({ summary: { counts, easyKnown: true, charactersReady: false } });
     expect(textOf(button("캐릭터"))).toBe("캐릭터");
+    expect(textOf(button("다양하게"))).toBe("다양하게2");
   });
 
   it("작업물을 아직 못 읽었으면 개수 없이 단추만", () => {

@@ -45,6 +45,8 @@ describe("거르기", () => {
   const easy = new Set(["a"]);
 
   it("고른 기능으로 만든 것만", () => {
+    // 「캐릭터」도 같은 목록에서 거른다(2026-10-08 사용자 — 별도 화면이 다른 페이지 같았다).
+    expect(filterWorks(works, "character", easy).map((entry) => entry.id)).toEqual(["d"]);
     expect(filterWorks(works, "easy", easy).map((entry) => entry.id)).toEqual(["a"]);
     expect(filterWorks(works, "poster", easy).map((entry) => entry.id)).toEqual(["b"]);
     expect(filterWorks(works, "create", easy).map((entry) => entry.id)).toEqual([]);
@@ -60,7 +62,7 @@ describe("거르기", () => {
 
   it("버튼마다 개수를 센다", () => {
     const counts = countByOrigin(works, easy);
-    expect(counts).toEqual({ all: 4, easy: 1, poster: 1, sns: 1, ad: 0, create: 0, redesign: 0 });
+    expect(counts).toEqual({ all: 4, easy: 1, poster: 1, sns: 1, ad: 0, create: 0, redesign: 0, character: 1 });
   });
 });
 
@@ -94,7 +96,7 @@ describe("그림 없는 작업", () => {
 
 describe("버튼", () => {
   it("작업물 거르기는 사용자가 말한 순서다", () => {
-    expect(WORK_FILTERS.map((filter) => filter.label)).toEqual(["전체", "쉽게", "다양하게", "카드뉴스", "광고소재", "상세페이지", "리디자인"]);
+    expect(WORK_FILTERS.map((filter) => filter.label)).toEqual(["전체", "쉽게", "다양하게", "카드뉴스", "광고소재", "상세페이지", "리디자인", "캐릭터"]);
   });
 
   /** 위 탭(작업물·참고 이미지·캐릭터)과 아래 거르기를 한 줄로 합쳤다(2026-10-08 사용자 요청). */

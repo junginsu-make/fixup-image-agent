@@ -151,8 +151,7 @@ import { join } from "node:path";
 describe("캐릭터 화면 배선", () => {
   const detail = readFileSync(
     join(__dirname, "..", "[id]", "detail-client.tsx"), "utf8");
-  const tab = readFileSync(
-    join(__dirname, "..", "..", "library", "characters-tab.tsx"), "utf8");
+
 
   it("화면이 두 규칙을 모두 부른다", () => {
     expect(detail).toContain("characterDetailRows(character)");
@@ -175,8 +174,18 @@ describe("캐릭터 화면 배선", () => {
     expect(detail).toContain("/copy");
   });
 
-  it("라이브러리 캐릭터 탭에서 들어갈 수 있다", () => {
-    expect(tab).toContain("과정 보기");
-    expect(tab).toContain("/characters/${character.id}");
+  /**
+   * 라이브러리 캐릭터 카드에서 들어갈 수 있다(2026-10-08 — 카드는 작업물 목록이 그린다). 글자로 찾지 않고
+   * 실제 카드를 만들어 그 「과정 보기」 주소를 본다 — 주석에 같은 글자가 있어도 속지 않는다.
+   */
+  it("라이브러리 캐릭터 카드에서 들어갈 수 있다", async () => {
+    const { characterWorks } = await import("../../library/character-works");
+    const { stepsHref } = await import("../../library/easy-href");
+    const [card] = characterWorks([{
+      id: "c1", name: "호랑이", kind: "character", look: "3d", createdAt: "2026-10-08", mine: true,
+      views: [{ angle: "front", url: "https://img/f.png" }],
+    }], {});
+    expect(card!.href).toBe("/characters/c1");
+    expect(stepsHref(card!, null)).toBe("/characters/c1");
   });
 });

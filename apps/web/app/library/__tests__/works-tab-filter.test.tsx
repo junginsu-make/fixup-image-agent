@@ -114,8 +114,9 @@ describe("작업물 화면과 한 줄 거르기", () => {
     await act(async () => { view = create(<WorksTab onSummary={onSummary} />); });
     await flush();
     expect(onSummary).toHaveBeenLastCalledWith({
-      counts: { all: 4, easy: 0, poster: 1, sns: 1, ad: 1, create: 0, redesign: 0 },
+      counts: { all: 4, easy: 0, poster: 1, sns: 1, ad: 1, create: 0, redesign: 0, character: 1 },
       easyKnown: true,
+      charactersReady: true,
     });
   });
 });
@@ -265,5 +266,39 @@ describe("캐릭터 — 테두리", () => {
     await act(async () => { release(reply("/api/characters", "GET")); });
     await flush();
     expect(text()).toContain("호랑이");
+  });
+});
+
+/**
+ * **캐릭터를 받는 동안**(리뷰). 다른 생성 결과를 먼저 그리고 캐릭터는 나중에 더하므로, 그 사이 「캐릭터」를
+ * 누르면 「없다」가 아니라 「불러오는 중」을 보이고, 숫자는 도착한 뒤에 단다(0 이었다가 바뀌지 않게).
+ */
+describe("캐릭터를 받는 동안", () => {
+  it("「캐릭터」는 불러오는 중이라고 말하고, 숫자는 아직 모른다고 알린다", async () => {
+    let release: (value: Response) => void = () => undefined;
+    const onSummary = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/characters")) return new Promise<Response>((resolve) => { release = resolve; });
+      return reply(url, init?.method ?? "GET");
+    }));
+    await act(async () => { view = create(<WorksTab filter="character" onSummary={onSummary} />); });
+    await flush();
+    expect(text()).toContain("캐릭터를 불러오는 중입니다");
+    expect(text()).not.toContain("없습니다");
+    expect(onSummary).toHaveBeenLastCalledWith(expect.objectContaining({ charactersReady: false }));
+    await act(async () => { release(reply("/api/characters", "GET")); });
+    await flush();
+    expect(text()).toContain("호랑이");
+    expect(onSummary).toHaveBeenLastCalledWith(expect.objectContaining({ charactersReady: true }));
+  });
+
+  it("캐릭터가 하나도 없으면 「아직 만든 캐릭터가 없습니다」", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/characters")) return json({ ok: true, characters: [], angles: [] });
+      return reply(url, init?.method ?? "GET");
+    }));
+    await act(async () => { view = create(<WorksTab filter="character" />); });
+    await flush();
+    expect(text()).toContain("아직 만든 캐릭터가 없습니다.");
   });
 });
