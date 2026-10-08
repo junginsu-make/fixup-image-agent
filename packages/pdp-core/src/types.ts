@@ -601,6 +601,14 @@ export interface KeyVisualSuccessResponse {
   mimeType: string;
 }
 
+/** 분석 요청이 싣는 제품 하나. 사진은 화면이 만든 1024 사본이다. */
+export interface PdpAnalyzeProduct {
+  id: ProductId;
+  name?: string;
+  /** 1..4장, 대표가 먼저. */
+  photos: Array<{ imageBase64: string; mimeType: string }>;
+}
+
 export interface PdpAnalyzeRequest {
   /**
    * 파는 사람만 아는 것. 전부 선택 입력이다 (→ `pdp.seller-brief.ts`).
@@ -628,8 +636,14 @@ export interface PdpAnalyzeRequest {
   copyIntensity?: CopyIntensity;
   /** 근거가 없는 자리를 어떻게 할 것인가. */
   gapPolicy?: GapPolicy;
+  /** 옛 호출·검증용. `products` 가 있으면 그림으로는 그쪽을 싣는다(제품 1 대표와 같다). */
   imageBase64: string;
   mimeType: string;
+  /**
+   * 제품별 사진(설계 2026-10-08 §5). 제품 차례, 제품 안에서는 사진 차례로 싣는다.
+   * 없으면 `imageBase64` 한 장 — 지금 그대로다.
+   */
+  products?: PdpAnalyzeProduct[];
   modelImageBase64?: string;
   modelImageMimeType?: string;
   modelImageFileName?: string;
