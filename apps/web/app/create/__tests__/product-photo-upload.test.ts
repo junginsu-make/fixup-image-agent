@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createProductPhotoUploader,
   productImageFields,
@@ -37,6 +37,44 @@ describe("제품 원본 올리기", () => {
     await uploader.urlFor(사진);
     now.t = 51 * 60 * 1000;
     expect(await uploader.urlFor(사진)).toBe("https://v3.fal.media/files/2.jpg");
+  });
+
+  it("만료는 받은 순간 제 시계로 잰다 — 사용자 시계가 서버보다 50분 빨라도 곧바로 다시 올리지 않는다", async () => {
+    const now = { t: 50 * 60 * 1000 };
+    const 올린것: number[] = [];
+    const uploader = createProductPhotoUploader({
+      // 서버 시계로는 한 시간 뒤지만 사용자 시계로는 10분 뒤다.
+      post: async () => { 올린것.push(1); return { ok: true as const, url: "https://v3.fal.media/files/1.jpg", expiresAt: 60 * 60 * 1000, expiresInMs: 60 * 60 * 1000 }; },
+      now: () => now.t,
+    });
+    await uploader.urlFor(사진);
+    now.t += 30 * 60 * 1000;
+    await uploader.urlFor(사진);
+    expect(올린것).toHaveLength(1);
+    now.t += 21 * 60 * 1000;
+    await uploader.urlFor(사진);
+    expect(올린것).toHaveLength(2);
+  });
+
+  it("남은 시간이 없는 옛 서버 답이면 만료 시각을 그대로 쓴다", async () => {
+    const now = { t: 0 };
+    const 올린것: number[] = [];
+    const uploader = createProductPhotoUploader({
+      post: async () => { 올린것.push(1); return { ok: true as const, url: "https://v3.fal.media/files/1.jpg", expiresAt: 5 * 60 * 1000 }; },
+      now: () => now.t,
+    });
+    await uploader.urlFor(사진);
+    await uploader.urlFor(사진);
+    expect(올린것).toHaveLength(2);
+  });
+
+  it("실제 서버 답에서 남은 시간만 와도 받는다", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, url: "https://v3.fal.media/files/r.jpg", expiresInMs: 3600000 }), { status: 200 }));
+    try {
+      expect(await createProductPhotoUploader().urlFor(사진)).toBe("https://v3.fal.media/files/r.jpg");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("서버가 거절하면 그 문구로 멈춘다", async () => {

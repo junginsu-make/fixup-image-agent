@@ -84,6 +84,7 @@ import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import {
   createProductPhotoUploader,
   productImageFields,
+  productImageFieldsOrThrow,
   productPhotoErrorMessage,
   type ProductPhotoSource,
 } from "./product-photo-upload";
@@ -1895,20 +1896,14 @@ export function PdpEditor({
     setGenerationRun(describeRun("running", getDisplaySectionName(targets[0].section)));
 
     try {
-      // 묶음마다 올리지 않는다 — 사진 한 장을 한 번 올린 주소를 모든 묶음이 쓴다.
-      // 올리기가 실패하면 사용자용 문구로 바꿔 던지고, 아래 catch 가 그 문구를 보이며 반복에 들어가지 않는다.
-      let productFields: Awaited<ReturnType<typeof productImageFields>>;
-      try {
-        productFields = await productImageFields({
+      for (const chunk of chunks) {
+        // 묶음마다 주소를 확인한다 — 만료가 가까울 때만 다시 올린다(A1). 실패하면 아래 catch 가 문구를 보이고 이 묶음은 안 나간다.
+        const productFields = await productImageFieldsOrThrow({
           startMode,
           productPhoto,
           fallbackBase64: initialResult.originalImage,
           uploader: productUploaderRef.current,
         });
-      } catch (error) {
-        throw new Error(productPhotoErrorMessage(error));
-      }
-      for (const chunk of chunks) {
         /*
           **다시 눌러도 같은 열쇠로 간다**(K-05).
 

@@ -41,7 +41,8 @@ import { StyleReferenceCard } from "./StyleReferenceCard";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, prepareProductImageFile } from "./pdp-utils";
+import { photoForEditor } from "./product-photo-upload";
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
@@ -431,7 +432,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         return;
       }
 
-      const nextImage = await prepareImageFile(file);
+      const nextImage = await prepareProductImageFile(file);
       setPreparedImage(nextImage);
       setErrorMessage("");
       setErrorDetail("");
@@ -450,7 +451,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         return;
       }
 
-      const { original: _notUsedForPerson, ...nextImage } = await prepareImageFile(file);
+      const nextImage = await prepareImageFile(file);
       setModelImage(nextImage);
       setModelImageUsage(null);
       setErrorMessage("");
@@ -1372,7 +1373,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
         // 생성 결과를 서버에 적을 때 무엇의 것인지 묶는 값.
         draftId={activeDraftId}
-        productPhoto={preparedImage?.original}
+        productPhoto={photoForEditor(preparedImage, result.originalImage)}
         aspectRatio={aspectRatio}
         outputMode={outputMode}
         imageModel={imageModel}
