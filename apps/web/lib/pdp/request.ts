@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, PRODUCT_FACT_LIMITS, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
@@ -89,6 +89,15 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   conceptOnly: z.boolean().optional(),
   // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
   personSource: z.enum(["uploaded", "character"]).optional(),
+  /*
+    **사진에서 읽은 제품 사실**(설계 2026-10-08 §7). 프롬프트에 그대로 실리므로 길이를
+    묶는다. 수는 코어에 한 벌이다 — 화면(`productFactsFrom`)이 같은 수로 자른다.
+  */
+  productFacts: z.object({
+    category: text.max(PRODUCT_FACT_LIMITS.chars).optional(),
+    visibleFacts: z.array(text.max(PRODUCT_FACT_LIMITS.chars)).max(PRODUCT_FACT_LIMITS.facts),
+    labelText: z.array(text.max(PRODUCT_FACT_LIMITS.chars)).max(PRODUCT_FACT_LIMITS.labels),
+  }).strict().optional(),
   look: z.enum(IMAGE_LOOKS).optional(),
   /*
     **옆 칸과 같은 상한을 쓴다**(D-8).

@@ -1,5 +1,6 @@
 import type { AnchorKind } from "./pdp.product-anchor";
 import type { PersonSource } from "./pdp.person-source";
+import type { ProductFacts } from "./pdp.product-fidelity";
 import type {
   AttachmentIntents,
   CharacterImageReference,
@@ -55,6 +56,8 @@ export interface PageImageInputs {
    * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.
    */
   personSource?: PersonSource;
+  /** 사진에서 읽은 제품 사실(설계 2026-10-08 §7). 실물 사진 경로에만 있다. */
+  productFacts?: ProductFacts;
   /**
    * 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 것을 쓴다.
    *
@@ -148,6 +151,7 @@ export function buildSectionImageOptions(
     conceptOnly: page.conceptOnly,
     personSource: page.personSource,
     styleReferenceImages: page.styleReferenceImages?.length ? page.styleReferenceImages : undefined,
+    productFacts: page.productFacts,
   };
 }
 
@@ -177,6 +181,8 @@ export interface PageImageWire {
    * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.
    */
   personSource?: PersonSource;
+  /** 사진에서 읽은 제품 사실(설계 2026-10-08 §7). 실물 사진 경로에만 있다. */
+  productFacts?: ProductFacts;
   styleReference?: {
     imageBase64: string;
     mimeType: string;
@@ -203,6 +209,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     anchorKind: wire.anchorKind,
     conceptOnly: wire.conceptOnly,
     personSource: wire.personSource,
+    productFacts: wire.productFacts,
     pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,
     styleReferenceImages: wire.styleReference

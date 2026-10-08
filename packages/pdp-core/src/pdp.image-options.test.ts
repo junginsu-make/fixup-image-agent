@@ -366,3 +366,14 @@ describe("안 쓰기로 한 인물 사진은 안 넘긴다", () => {
     expect(buildSectionImageOptions(둘다("character"), target()).personSource).toBe("character");
   });
 });
+
+describe("제품 사실", () => {
+  it("페이지 값이 섹션 옵션까지 그대로 간다", () => {
+    const facts = { category: "병", visibleFacts: ["초록 유리"], labelText: ["500ml"] };
+    const options = buildSectionImageOptions(pageInputsFromWire({ productFacts: facts }), {
+      section: { section_id: "s1" } as never,
+      index: 0,
+    });
+    expect(options.productFacts).toEqual(facts);
+  });
+});

@@ -1634,6 +1634,8 @@ export function PdpEditor({
       referenceModelUsage,
       // 둘 다 골랐을 때 누구를 쓸지. 안 넘기면 서버가 말없이 업로드를 쓴다(U-04).
       personSource,
+      // 사진에서 읽은 제품 사실. 그림 프롬프트의 제품 블록에 실린다(설계 2026-10-08 §7).
+      productReading: initialResult.blueprint.productReading,
     });
 
   /**
