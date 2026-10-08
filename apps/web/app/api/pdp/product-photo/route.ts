@@ -5,7 +5,7 @@ import { withLlmMeter } from "../../../../lib/llm/meter";
 import { errorLogText } from "../../../../lib/easy/log-text";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import { isFalStorageUrl } from "../../../../lib/pdp/fal-storage-url";
-import { PRODUCT_PHOTO_MAX_BYTES, prepareProductPhoto } from "../../../../lib/pdp/product-photo";
+import { PRODUCT_PHOTO_MAX_BYTES, inspectProductPhoto, normalizeProductPhoto } from "../../../../lib/pdp/product-photo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,18 +49,31 @@ async function upload(req: Request) {
       : fail(400, "이미지를 읽지 못했습니다.");
   }
 
-  // 문지기를 지난 뒤에 예약한다 — 깨진 입력으로 시간당 칸을 태우지 않게(style-references 와 같은 판단).
-  const prepared = await prepareProductPhoto(bytes);
-  if (!prepared.ok) return fail(prepared.status, prepared.message);
+  // 머리말 문지기를 지난 뒤에 예약한다 — 깨진 입력으로 시간당 칸을 태우지 않게(style-references 와 같은 판단).
+  const inspected = await inspectProductPhoto(bytes);
+  if (!inspected.ok) return fail(inspected.status, inspected.message);
 
   const reservation = await reserveAiUsage(req, "reference_analyze", 0, freeCreditPlan("pdp:product-photo"), auth.member);
   if (!reservation.ok) return reservation.response;
+
+  // 화소를 펼치는 손질은 예약 뒤에 한다(보안 리뷰 M-1) — 칸이 다 찬 사람이 서버 메모리를 쓰지 못하게.
+  const prepared = await normalizeProductPhoto(bytes, inspected);
+  if (!prepared.ok) {
+    await settleAiUsage(reservation, false, 0, "invalid_image", { model: "", billableImages: 0 });
+    return fail(prepared.status, prepared.message);
+  }
 
   try {
     const url = await createFalUploader().uploadReference(prepared.bytes, prepared.mimeType);
     if (!isFalStorageUrl(url)) throw new Error(`unexpected upload host: ${new URL(url).hostname}`);
     await settleAiUsage(reservation, true, 0, undefined, { model: "", billableImages: 0 });
-    return Response.json({ ok: true, url, expiresAt: Date.now() + FAL_URL_LIFETIME_MS });
+    // 남은 시간도 준다 — 화면이 제 시계로 만료를 잰다(서버·사용자 시계가 어긋나도 맞게).
+    return Response.json({
+      ok: true,
+      url,
+      expiresAt: Date.now() + FAL_URL_LIFETIME_MS,
+      expiresInMs: FAL_URL_LIFETIME_MS,
+    });
   } catch (error) {
     await settleAiUsage(reservation, false, 0, "upload_failed", { model: "", billableImages: 0 });
     console.error("[pdp-product-photo] 업로드 실패", errorLogText(error));
