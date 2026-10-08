@@ -4,7 +4,7 @@
  */
 import { useCreditUnit } from "../_components/credit-policy-provider";
 import { WorkingStatus } from "../_components/working-status";
-import { models, type GenerationPlan, type GenerationProgress } from "./redesign-model";
+import { projectImageModelName, type GenerationPlan, type GenerationProgress } from "./redesign-model";
 
 type Count = { done: number; total: number };
 
@@ -42,7 +42,8 @@ export function RedesignWorkingStatus({ progress, plan, editing, transcribeCount
 }) {
   const 단위 = useCreditUnit();
   const total = plan.displayCount || plan.count;
-  const modelLabel = models[plan.model].label;
+  const modelLabel = projectImageModelName(plan);
+  // GPT 그림(표준형)을 두고 한 말이다. 분석 AI 가 openai 면 그림도 GPT 다.
   const 늦어짐 = progress.elapsedSeconds >= 120 && plan.model === "openai";
   const 남음 = progress.note.endsWith("남음");
   return (
@@ -61,7 +62,7 @@ export function RedesignWorkingStatus({ progress, plan, editing, transcribeCount
       </p>
       {늦어짐 ? (
         <p className="mt-1 text-xs text-muted-foreground">
-          정밀형은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요.
+          {`${modelLabel}은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요.`}
         </p>
       ) : null}
     </WorkingStatus>

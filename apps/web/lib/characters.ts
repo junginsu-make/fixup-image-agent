@@ -38,7 +38,7 @@ import { scopedRead } from "./teams/scope";
 import {
   CHARACTER_NAME_MAX, characterReferenceEntries, characterReferenceTitle, uniqueCharacterName,
 } from "./character-library";
-import { saveReferenceImage, removeReferenceImagesByTitle, referenceTitlesOf } from "./reference-images";
+import { emailsByUserId, saveReferenceImage, removeReferenceImagesByTitle, referenceTitlesOf } from "./reference-images";
 import { isLocalStoreEnabled } from "./local-store";
 import {
   deleteLocalCharacter,
@@ -133,6 +133,8 @@ export interface CharacterSummary {
    * 보게 된다 — 상세 화면이 「다른 회원의 것」이라고 말하는 근거가 이 칸이다.
    */
   mine: boolean;
+  /** 만든 사람의 이메일. **관리자가 전체를 볼 때, 남의 것에만** 싣는다 — 회원끼리 이메일이 보이면 안 된다. */
+  ownerEmail?: string | null;
   /** 만든 모델. 「과정 보기」가 이어받는다. 옛 캐릭터는 없다. */
   modelId?: ImageModelId;
 }
@@ -737,6 +739,51 @@ async function findCharacter(
  * 각도 짝짓기와 서명은 여기 한 곳에만 둔다. 단건용을 따로 만들면 그 규칙이
  * 두 군데로 갈린다.
  */
+/** 한 번에 묻는 id·경로 수. 주소 길이 한도 안에 넉넉히 든다(uuid 200개 ≈ 7.6KB). */
+const LOOKUP_CHUNK = 200;
+
+function chunksOf<T>(items: readonly T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+}
+
+/**
+ * 목록과 같은 범위로 **개수만** 센다(2026-10-08, 라이브러리 「캐릭터」 단추의 숫자).
+ *
+ * 목록을 읽으면 그림 주소까지 서명해 라이브러리를 열 때마다 무겁다. 범위 규칙은 목록과 같다 —
+ * 회원은 자기(와 팀) 것, 관리자가 전체를 달라고 하면 전부.
+ */
+export async function countCharacters(
+  userId: string,
+  teamId: string | null = null,
+  options: { allMembers?: boolean } = {},
+): Promise<number> {
+  if (isLocalStoreEnabled()) return (await listLocalCharacters(userId)).length;
+  const { count, error } = await scopedRead(
+    createSupabaseAdminClient().from("characters").select("id", { count: "exact", head: true }),
+    { userId, teamId, isAdmin: options.allMembers === true },
+  );
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * 이 회원이 `since` 뒤로 만든 캐릭터 수.
+ *
+ * 옛 저장 단계(`create`)를 각도 없이 부르면 0크레딧이라 장부가 막지 않는다. 지금 그 길은 자동 저장이
+ * 실패했을 때의 「다시 저장하기」뿐이라, 거기에 시간당 상한을 거는 데 쓴다(2026-10-08 보안 리뷰).
+ * **못 세면 던진다** — 부르는 쪽이 저장하지 않는 쪽으로 닫는다.
+ */
+export async function countRecentCharacters(userId: string, since: Date): Promise<number> {
+  if (isLocalStoreEnabled()) return 0;
+  const { count, error } = await createSupabaseAdminClient()
+    .from("characters")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", since.toISOString());
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function listCharacters(
   userId: string,
   teamId: string | null = null,
@@ -777,7 +824,8 @@ export async function listCharacters(
   const supabase = createSupabaseAdminClient();
   const ordered = supabase.from("characters").select("*").order("created_at", { ascending: false });
   const { data, error } = await scopedRead(
-    ids ? ordered.in("id", ids) : ordered.limit(100),
+    // 관리자 전체 보기는 모든 회원을 합친 목록이다. 회원용 상한(100)으로 자르면 옛 캐릭터가 사라진다(2026-10-08).
+    ids ? ordered.in("id", ids) : ordered.limit(options.allMembers ? 1000 : 100),
     { userId, teamId, isAdmin: options.allMembers === true },
   );
 
@@ -786,10 +834,17 @@ export async function listCharacters(
   // 각도는 **부모로 거른다.** `character_views` 에는 `team_id` 가 없어서
   // 팀에서 보이는지를 자식만 보고는 정할 수 없다. 위에서 이미 걸러 낸
   // 캐릭터의 id 로 묻는 것이 정확하다.
-  const { data: viewRows } = await supabase
-    .from("character_views")
-    .select("character_id,angle,path,thumb_path")
-    .in("character_id", data.map((row: { id: string }) => row.id));
+  //
+  // **나눠 묻는다**(2026-10-08 재리뷰). `.in` 은 주소에 붙어, 관리자 전체 보기(최대 1000개)면 게이트웨이
+  // 한도를 넘는다. 실패를 버리면 모든 카드가 「저장된 각도가 없습니다」로 조용히 바뀐다 — 기록을 남긴다.
+  const viewRows = (await Promise.all(chunksOf(data.map((row: { id: string }) => row.id), LOOKUP_CHUNK).map(async (ids) => {
+    const { data: rows, error: viewError } = await supabase
+      .from("character_views")
+      .select("character_id,angle,path,thumb_path")
+      .in("character_id", ids);
+    if (viewError) console.error("[characters:list] 각도를 읽지 못했습니다", viewError.message);
+    return rows ?? [];
+  }))).flat();
 
   // **원본과 사본을 둘 다 서명한다.** 격자는 사본을, 확대와 생성 입력은
   // 원본을 쓴다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
@@ -797,18 +852,22 @@ export async function listCharacters(
   const ownerOf = new Map(data.map((row: { id: string; user_id: string }) => [String(row.id), String(row.user_id)]));
   const paths = (viewRows ?? []).flatMap((row: { character_id: string; path: string; thumb_path?: string | null }) =>
     onlyInOwnerFolder([row.path, row.thumb_path], ownerOf.get(String(row.character_id)) ?? ""));
-  const signed = paths.length
-    ? await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
-    : { data: [] };
+  const signed = await Promise.all(chunksOf(paths, LOOKUP_CHUNK).map((part) =>
+    supabase.storage.from(BUCKET).createSignedUrls(part, SIGNED_URL_TTL_SECONDS)));
 
   const urlByPath = new Map<string, string>();
-  for (const entry of signed.data ?? []) {
+  for (const entry of signed.flatMap((part) => part.data ?? [])) {
     if (entry.path && entry.signedUrl) urlByPath.set(entry.path, entry.signedUrl);
   }
+  // 관리자가 전체를 볼 때만 묻는다(최고 관리자는 모든 회원 것을 본다, 2026-10-08).
+  const emails = options.allMembers
+    ? await emailsByUserId(data.map((row: { user_id: string }) => String(row.user_id)))
+    : new Map<string, string>();
 
   return data.map((row: Record<string, unknown>) => ({
     ...normalizeRecord(row),
     mine: row.user_id === userId,
+    ...(options.allMembers && row.user_id !== userId ? { ownerEmail: emails.get(String(row.user_id)) ?? null } : {}),
     views: (viewRows ?? [])
       .filter((view: { character_id: string }) => view.character_id === String(row.id))
       .sort(byAngleOrder)

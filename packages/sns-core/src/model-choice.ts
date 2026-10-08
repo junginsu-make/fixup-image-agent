@@ -1,5 +1,5 @@
 import { withJosa } from "@fixup/shared";
-import type { ImageModel, PixelSize } from "./models";
+import { IMAGE_MODELS, VISIBLE_IMAGE_MODELS, type ImageModel, type PixelSize } from "./models";
 import { POSTER_RATIOS, type ResolvedSize } from "./ratios";
 
 /**
@@ -156,15 +156,17 @@ function ratioName(ratioId: string): string {
 export function chooseModelForRatio(
   ratioId: string,
   preferredId: string,
-  models: ImageModel[],
+  candidates: ImageModel[] = VISIBLE_IMAGE_MODELS,
 ): ModelChoice {
-  const fallback = models.find((model) => model.isDefault) ?? models[0]!;
-  const preferred = models.find((model) => model.id === preferredId) ?? fallback;
+  // 원하는 모델은 숨긴 것까지 전체에서 찾는다 — 숨긴 모델로 만든 그림을 고치는 길이다.
+  // 대체 후보만 `candidates`(기본은 보이는 셋)다.
+  const fallback = IMAGE_MODELS.find((model) => model.isDefault) ?? IMAGE_MODELS[0]!;
+  const preferred = IMAGE_MODELS.find((model) => model.id === preferredId) ?? fallback;
 
   if (canMake(preferred, ratioId)) return { model: preferred, switched: false };
 
   const what = ratioName(ratioId);
-  const able = models.find((model) => canMake(model, ratioId));
+  const able = candidates.find((model) => canMake(model, ratioId));
   if (!able) {
     return {
       model: preferred,

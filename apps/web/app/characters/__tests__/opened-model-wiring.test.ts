@@ -10,7 +10,7 @@ describe("과정 보기 — 모델 이어받기", () => {
     const at = studio.indexOf("const prefillOpened = useCallback(");
     expect(at).toBeGreaterThan(-1);
     const body = studio.slice(at, studio.indexOf("}, []);", at));
-    expect(body).toContain("setModelId(values.modelId)");
+    expect(body).toContain("setModelId(isVisibleImageModel(values.modelId) ? values.modelId : \"\")");
     expect(body).toContain("modelId: values.modelId");
   });
 

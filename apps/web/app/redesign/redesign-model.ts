@@ -9,7 +9,17 @@
  */
 
 import type { StepDefinition } from "@fixup/ui";
-export type Model = "openai" | "google";
+import { VISIBLE_IMAGE_MODEL_IDS, imageModelName } from "@fixup/shared";
+import { REDESIGN_FAL_MODEL, analysisProviderFor, redesignFalModelFor, type AnalysisProvider } from "../../lib/redesign/model-choice";
+
+/*
+  화면은 **그림 모델**(표준형·디테일형·속도형)을 고른다(2026-10-08). 원본을 읽는
+  분석 AI 는 그 모델을 따른다 — 한 벌은 서버와 함께 쓰는 `lib/redesign/model-choice.ts`.
+*/
+export { analysisProviderFor, projectImageModel, redesignFalModelFor, requestImageModel, REDESIGN_FAL_MODEL } from "../../lib/redesign/model-choice";
+
+/** 분석 AI(업체). 서버에 보내고 저장된 작업이 들고 있는 **내부값**이다. */
+export type Model = AnalysisProvider;
 export type View = "dashboard" | "workspace" | "results";
 
 /**
@@ -47,6 +57,8 @@ export type SectionRevision = {
   createdAt: string;
   request?: string;
   model?: Model;
+  /** 이 수정을 그린 그림 모델. 옛 기록에는 없다. */
+  imageModel?: string;
 };
 
 import type { FailedSection } from "./failed-sections";
@@ -56,6 +68,8 @@ export type Project = {
   title: string;
   channel: string;
   model: Model;
+  /** 실제로 그린 그림 모델. 옛 작업에는 없다 — 그때는 `model` 에서 읽는다(`projectImageModelName`). */
+  imageModel?: string;
   count: number;
   ratio: string;
   status: string;
@@ -99,6 +113,8 @@ export type KnowledgeItem = {
 
 export type GenerationPlan = {
   model: Model;
+  /** 고른 그림 모델. 없으면 `model` 에서 읽는다. */
+  imageModel?: string;
   count: number;
   displayCount?: number;
   displayIndex?: number;
@@ -146,22 +162,27 @@ export const projectDbName = "hanirum-redesign-projects";
 export const projectStoreName = "projects";
 
 /**
- * 화면에 보이는 이름은 **성질**이다. 업체·모델 이름을 적지 않는다 —
- * 어디에 무엇을 쓰는지가 이 서비스의 결론이라, 적어 두면 가입 한 번으로
- * 넘어간다. 진짜 정체는 아래 `id` 다 — 서버에 보낼 값이라 지울 수 없다.
+ * 작업·계획에 붙일 그림 모델 이름. 옛 작업(`imageModel` 없음)은 그때 그린
+ * 모델 — openai 면 표준형, google 이면 디테일형 — 으로 읽는다.
  */
-export const models = {
-  openai: {
-    label: "정밀형",
-    id: "gpt-image-2-2026-04-21",
-    hint: "더 정교하게 만듭니다 · 시간이 더 걸립니다"
-  },
-  google: {
-    label: "속도형",
-    id: "gemini-3.1-flash-image-preview",
-    hint: "더 빠르게 만듭니다"
-  }
-};
+export function projectImageModelName(target: { model: Model; imageModel?: string }): string {
+  return imageModelName(redesignFalModelFor(target.model, target.imageModel));
+}
+
+/** 한 분석 AI 키로 쓸 수 있는 그림 모델들의 이름 — 「디테일형·속도형」. 서버 연결 딱지에 쓴다. */
+export function providerModelNames(provider: Model): string {
+  return VISIBLE_IMAGE_MODEL_IDS.filter((id) => analysisProviderFor(id) === provider).map(imageModelName).join("·");
+}
+
+/**
+ * 고른 그림 모델로 만들 수 있나 — **분석 AI 의 서버 키**를 본다. 안 되면 회원에게
+ * 할 말, 되면 빈 문자열. 키는 분석 AI 것이지만 말은 고른 모델 이름으로 한다.
+ */
+export function missingServerKeyMessage(config: ServerConfig, imageModel: string): string {
+  const provider = analysisProviderFor(imageModel);
+  const configured = provider === "openai" ? config.serverOpenaiKeyConfigured : config.serverGoogleKeyConfigured;
+  return configured ? "" : `${imageModelName(imageModel)} 운영자 서버 키가 설정되지 않았습니다.`;
+}
 
 export const baseSections = [
   ["S1 히어로", "3초 안에 제품, 타겟, 핵심 약속, CTA를 전달합니다.", "제품컷, 대표 USP"],
@@ -202,8 +223,8 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
         purpose,
         source,
         prompt: [
-          `model_label: ${models[model].label}`,
-          `model_id: ${models[model].id}`,
+          `model_label: ${projectImageModelName({ model, imageModel: overrides.imageModel })}`,
+          `model_id: ${redesignFalModelFor(model, overrides.imageModel)}`,
           "",
           `section: ${name}`,
           `purpose: ${purpose}`,

@@ -28,8 +28,12 @@ describe("planSlotImage", () => {
     expect(plan.model.id).not.toBe("nano-banana-pro");
     expect(plan.crop).toBe(false);
     expect(plan.notes).toHaveLength(1);
-    expect(plan.notes[0]).toContain("속도형은");
+    expect(plan.notes[0]).toContain("디테일형은");
     expect(plan.notes[0]).toContain("표준형으로");
+  });
+
+  it("4:1 칸은 속도형이 만든다 (숨긴 nano-banana-2 가 아니라)", () => {
+    expect(planSlotImage({ width: 2000, height: 500 }, "gpt-image-2.5-flare").model.id).toBe("nano-banana-2.1");
   });
 
   it("어느 모델도 못 만드는 비율이면 가장 가까운 것으로 만들고 잘린다고 알린다", () => {

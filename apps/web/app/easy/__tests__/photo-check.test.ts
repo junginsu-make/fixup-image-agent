@@ -43,9 +43,9 @@ describe("장수 상한 — 기획 전에 본다 (설계 §2-6)", () => {
    */
   it("비율 때문에 바뀐 모델의 상한을 쓴다", () => {
     const 바뀌는비율 = POSTER_RATIOS.map((one) => one.id)
-      .find((ratio) => chooseModelForRatio(ratio, "nano-banana", IMAGE_MODELS).switched);
+      .find((ratio) => chooseModelForRatio(ratio, "nano-banana").switched);
     expect(바뀌는비율, "경제형이 못 만드는 비율이 있어야 이 시험이 뜻을 갖는다").toBeDefined();
-    const 바뀐모델 = chooseModelForRatio(바뀌는비율!, "nano-banana", IMAGE_MODELS).model;
+    const 바뀐모델 = chooseModelForRatio(바뀌는비율!, "nano-banana").model;
     expect(바뀐모델.maxReferenceImages).toBeGreaterThan(7);
 
     const 결과 = photoLimit({ ratio: 바뀌는비율!, imageModel: "nano-banana", count: 8 });

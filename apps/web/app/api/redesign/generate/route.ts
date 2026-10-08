@@ -12,6 +12,7 @@ import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { recordPackageLlmUsage, recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { createRedesignImageGenerator, pixelSizeOf, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
+import { modelEndpointLabel } from "@fixup/sns-core";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -54,7 +55,8 @@ async function generate(req: Request) {
       **고른 것으로 그린다.** 화면의 선택이 값에만 쓰이고 그림은 늘 한 모델이
       그리던 것을 고쳤다(2026-09-17 리뷰 F-7-4).
     */
-    const falModel = redesignFalModelFor(String(form.get("model") || "openai"));
+    // 세 모델 중 고른 것(2026-10-08). 없으면 옛 요청 — 분석 AI 선택에서 전과 같이 읽는다.
+    const falModel = redesignFalModelFor(String(form.get("model") || "openai"), String(form.get("imageModel") ?? ""));
     let generateImage;
     try {
       generateImage = createRedesignImageGenerator(process.env, falModel);
@@ -200,6 +202,8 @@ async function generate(req: Request) {
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
       generateImage,
+      // 글 모델에게 실제로 그리는 모델을 알린다. 옛 직접 호출로 떨어지면 코어가 제 id 를 쓴다.
+      drawModel: generateImage ? { id: falModel, endpoint: modelEndpointLabel(falModel, true) } : undefined,
       onUsage: recordPackageLlmUsage,
       onImageUsage: recordRedesignDirectImage,
       openaiKey: resolveOpenaiKey(),

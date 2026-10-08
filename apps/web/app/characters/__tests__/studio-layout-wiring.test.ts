@@ -2,12 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * 캐릭터 만들기 화면의 **칸 높이**와 **저장 단추**(2026-10-07 사용자 보고).
+ * 캐릭터 만들기 화면의 **칸 높이**(2026-10-07 사용자 보고)와 **자동 저장**(2026-10-08).
  *
  * 이 저장소에는 jsdom 이 없어 화면을 그려 잴 수 없다. 화면 코드의 문장을 직접 본다.
  */
 const source = readFileSync(new URL("../CharacterStudio.tsx", import.meta.url), "utf8");
-const css = readFileSync(new URL("../../../../../packages/ui/src/styles/globals.css", import.meta.url), "utf8");
 
 /** `marker` 가 든 JSX 요소(`tag`)의 className 값을 낱말로 나눠 돌려준다. */
 function classesOf(marker: string, tag: string): string[] {
@@ -58,36 +57,72 @@ describe("그림 자리 — 가운데·오른쪽 칸도 줄어들어 단추와 �
 });
 
 /**
- * 저장 단추의 여는 태그부터 단추 글자 줄까지.
- *
- * 이름의 **첫 등장**을 쓰지 않는다 — 주석이 그 이름을 까닭으로 적으면 주석을
- * 단추로 알고 엉뚱한 곳을 본다(2026-10-07 실제로 그랬다). 글자만 있는 줄을 찾는다.
+ * **자동 저장**(2026-10-08 사용자 요청). 정면이 나오면 서버가 그 자리에서 캐릭터로 저장한다.
+ * 「캐릭터 저장하기」 단추는 없앴다 — 누르지 않고 나가면 크레딧을 낸 정면이 어디에도 안 남았다.
+ * 자동 저장이 실패한 때만 「다시 저장하기」가 나온다.
  */
-function saveButton(): string {
-  const label = /^[ \t]*캐릭터 저장하기[ \t]*\r?$/m.exec(source);
-  expect(label).not.toBeNull();
-  const at = label!.index;
-  return source.slice(source.lastIndexOf("<Button", at), at);
+function block(start: string): string {
+  const from = source.indexOf(start);
+  expect(from).toBeGreaterThan(-1);
+  return source.slice(from, source.indexOf("\n  };", from));
 }
 
-describe("저장 단추", () => {
-  it("이름이 「캐릭터 저장하기」다", () => {
-    // 화면에 보이는 단추 글자만 본다. 주석은 옛 이름을 까닭으로 적는다.
-    expect(source).toMatch(/^\s*캐릭터 저장하기\s*$/m);
-    expect(source).not.toMatch(/^\s*정면만 만들기\s*$/m);
+describe("자동 저장", () => {
+  it("「캐릭터 저장하기」 단추가 없다", () => {
+    expect(source).not.toMatch(/^\s*캐릭터 저장하기\s*$/m);
   });
 
-  it("정면이 나왔을 때만 녹색으로 바뀌고 고리가 번진다", () => {
-    const button = saveButton();
-    // 바탕색 자체를 본다. `hover:bg-success` 에 걸리면 바탕이 바뀌어도 통과한다.
-    expect(button).toMatch(/chosen && "bg-success /);
-    expect(button).toMatch(/chosen[^\n]*fixup-cta-pulse/);
-    // 밝은 화면은 흰 글자(4.98:1), 어두운 화면은 진한 글자 — 이 토큰이 둘을 맞춰 준다.
-    expect(button).toContain("text-primary-foreground");
+  it("정면을 만들 때 이름을 함께 보내고, 서버가 저장한 캐릭터를 받는다", () => {
+    const make = block("const handleCandidates = async () => {");
+    expect(make).toMatch(/step: "candidates"[^}]*name/);
+    expect(make).toContain("savedId: body.character?.id");
+    expect(make).toContain("body.saveError");
   });
 
-  it("번지는 고리 색은 단추 색을 따른다 — 안 넘기면 지금까지처럼 강조색", () => {
-    expect(css).toMatch(/var\(--cta-pulse-color,\s*var\(--primary\)\)/);
-    expect(saveButton()).toContain("[--cta-pulse-color:var(--success)]");
+  it("저장 단추는 저장된 캐릭터가 없을 때만 나온다", () => {
+    const at = source.indexOf('chosen.saveFailed ? "다시 저장하기"');
+    expect(at).toBeGreaterThan(-1);
+    expect(source.slice(source.lastIndexOf("{chosen && !chosen.savedId", at), at)).toContain("handleCreate(false)");
+  });
+
+  /** 「과정 보기」로 연 캐릭터는 실패한 적이 없다. 「다시」 라고 쓰면 실패로 읽힌다(독립 리뷰). */
+  it("「다시 저장하기」는 자동 저장이 실패했을 때만, 연 캐릭터는 「새 캐릭터로 저장하기」", () => {
+    expect(source).toContain('chosen.saveFailed ? "다시 저장하기" : "새 캐릭터로 저장하기"');
+    expect(block("const handleCandidates = async () => {")).toContain("saveFailed: !body.character");
+  });
+
+  /**
+   * **한 장씩 따로 처리한다**(독립 리뷰). 한 장이 끊겨도 남은 장을 마저 하고, 끝나면 늘 목록을
+   * 다시 읽는다. 성공한 장은 고른 것에서 빼 — 다시 눌러 같은 값을 또 내지 않게 한다. 크레딧이
+   * 모자라면 남은 장도 어차피 거절되므로 멈추고 그 까닭을 말한다.
+   */
+  it("더 만들기 — 한 장씩 따로, 크레딧 부족이면 멈춤, 성공한 장은 빼고, 끝나면 늘 다시 읽는다", () => {
+    const extend = block("const handleExtend = async () => {");
+    expect(extend).toMatch(/for \(const angle of jobs\) \{\s*try \{/);
+    expect(extend).toContain("if (isCreditShortage(body.code)) { setPending([]); break; }");
+    expect(extend).toContain("body.message");
+    expect(extend).toMatch(/setPickedAngles\(\(current\) => current\.filter\(\(angle\) => !made\.includes\(angle\)\)\)/);
+    const loopEnd = extend.indexOf("const refreshed = await load()");
+    expect(loopEnd).toBeGreaterThan(extend.indexOf("for (const angle of jobs)"));
+  });
+
+  it("지운 캐릭터에 더 만들지 않는다", () => {
+    expect(block("const handleDelete = async (character: Character) => {")).toContain("chosen?.savedId === character.id");
+  });
+
+  it("참고 이미지에 못 넣었으면 말한다", () => {
+    expect(block("const handleCandidates = async () => {")).toContain("body.referenceIssue");
+  });
+
+  it("더 만들기는 저장된 캐릭터에 각도를 더한다", () => {
+    const extend = block("const handleExtend = async () => {");
+    expect(extend).toContain("addAngle({ characterId: chosen.savedId");
+    // 한 장을 더하는 길은 「다시 만들기」가 쓰던 그 주소다.
+    const start = source.indexOf("async function addAngle(");
+    const add = source.slice(start, source.indexOf("\n}\n", start));
+    expect(add).toContain('"/api/characters/views"');
+    expect(source).toContain("장 더 만들기`");
+    expect(source).not.toContain("장 더 만들고 저장");
   });
 });
+

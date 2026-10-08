@@ -4,6 +4,7 @@ import { createFalUploader } from "../fal/upload";
 import { defaultFalRouter } from "../fal/pool/default";
 import type { FalRouter } from "../fal/route";
 import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
+import { REDESIGN_FAL_MODEL } from "./model-choice";
 
 /**
  * 리디자인이 **다른 도구와 같은 길로** 그림을 만든다.
@@ -30,22 +31,11 @@ import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
  * 나뉘어 있다.
  */
 
-/** 리디자인의 기본 모델. 다른 도구의 기본값(표준형)과 같은 것을 쓴다. */
-export const REDESIGN_FAL_MODEL = "gpt-image-2.5-flare";
-
-/**
- * 화면의 선택(정밀형·속도형) → **실제로 그릴 모델.**
- *
- * fal 통로가 붙은 뒤로 무엇을 고르든 `gpt-image-2.5-flare` 가 그렸고, 선택은
- * 값을 매기는 데만 쓰였다(2026-09-17 리뷰 F-7-4). 고른 적 없는 모델의 그림을
- * 주면서 다른 값을 받는 셈이었다.
- *
- * 화면이 「속도형」이라 부르는 것은 Google 계열이다. 모델 목록에서도 같은 이름을
- * 쓴다(`sns-core/models.ts` 의 `nano-banana-pro` = 속도형).
- */
-export function redesignFalModelFor(choice: string | undefined): string {
-  return String(choice) === "google" ? "nano-banana-pro" : REDESIGN_FAL_MODEL;
-}
+/*
+  기본 모델과 「화면의 선택 → 실제로 그릴 모델」은 화면도 쓰므로 서버 전용 물건이
+  없는 `model-choice.ts` 에 한 벌로 둔다(2026-10-08, 세 모델).
+*/
+export { REDESIGN_FAL_MODEL, redesignFalModelFor } from "./model-choice";
 
 export class RedesignFalError extends Error {}
 

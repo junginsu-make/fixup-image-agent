@@ -1,3 +1,4 @@
+import { isVisibleImageModel } from "@fixup/shared";
 import { IMAGE_MODELS, type ImageModel } from "@fixup/sns-core";
 
 /**
@@ -24,6 +25,8 @@ export interface ModelCatalogRow {
   /** 회원에게 보이는 이름. */
   label: string;
   isDefault: boolean;
+  /** 고르는 화면에 보이는가. 숨긴 모델은 저장된 작업을 위해 남아 있고 회원에게는 「이전 방식」이다. */
+  visible: boolean;
   /** 종점 이름 앞부분. 그 이상은 코드가 모른다 — `vendorOf` 참조. */
   vendor: string;
   t2iEndpoint: string;
@@ -59,6 +62,7 @@ export function modelCatalog(models: ImageModel[] = IMAGE_MODELS): ModelCatalogR
     id: model.id,
     label: model.label,
     isDefault: Boolean(model.isDefault),
+    visible: isVisibleImageModel(model.id),
     vendor: vendorOf(model.t2i.endpoint),
     t2iEndpoint: model.t2i.endpoint,
     i2iEndpoint: model.i2i.endpoint,

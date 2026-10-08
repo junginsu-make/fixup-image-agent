@@ -1,5 +1,5 @@
 import { IMAGE_LOOKS, creditUnits, llmCostUsd, type ImageLook } from "@fixup/shared";
-import { IMAGE_MODELS, type Attachment } from "@fixup/sns-core";
+import { IMAGE_MODELS, visibleModelOrDefault, type Attachment } from "@fixup/sns-core";
 import { estimateCost } from "../sns/cost-estimate";
 
 /**
@@ -35,7 +35,7 @@ const 모델들 = new Set(IMAGE_MODELS.map((model) => model.id));
 const 비율 = (value: unknown) => (CARD_RATIOS as readonly unknown[]).includes(value);
 const 결 = (value: unknown) => (IMAGE_LOOKS as readonly unknown[]).includes(value);
 
-/** 화면이 보낸 조건. 아는 값만 받는다. */
+/** 화면이 보낸 조건. 아는 값만 받는다. 숨긴 모델은 표준형으로 연다(새로 만들 때는 보이는 모델만). */
 export function readCardOptions(raw: unknown): Partial<CardOptions> {
   const value = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -44,7 +44,7 @@ export function readCardOptions(raw: unknown): Partial<CardOptions> {
       ? { count: value.count as CardOptions["count"] } : {}),
     ...((CARD_LANGUAGES as readonly unknown[]).includes(value.language)
       ? { language: value.language as CardOptions["language"] } : {}),
-    ...(typeof value.modelId === "string" && 모델들.has(value.modelId) ? { modelId: value.modelId } : {}),
+    ...(typeof value.modelId === "string" && 모델들.has(value.modelId) ? { modelId: visibleModelOrDefault(value.modelId) } : {}),
     ...(결(value.look) ? { look: value.look as ImageLook } : {}),
   };
 }
@@ -59,7 +59,7 @@ export function cardOptionsFrom(input: {
     count: input.chosen.count ?? DEFAULT_CARD_COUNT,
     language: input.chosen.language ?? "ko",
     modelId: input.chosen.modelId
-      ?? (input.imageModel && 모델들.has(input.imageModel) ? input.imageModel : DEFAULT_CARD_MODEL),
+      ?? (input.imageModel && 모델들.has(input.imageModel) ? visibleModelOrDefault(input.imageModel) : DEFAULT_CARD_MODEL),
     look: input.chosen.look ?? (결(input.said.look) ? input.said.look as ImageLook : "auto"),
   };
 }

@@ -42,6 +42,7 @@ vi.mock("../../../../lib/characters", () => ({
   characterCreditCost: () => 1,
   listCharacters: async () => [],
   deleteCharacter: async () => ({ ok: true }),
+  countRecentCharacters: async () => 0,
   generateCandidates: async (input: Record<string, unknown>) => {
     calls.candidates.push(input);
     return { model: "nano-banana-pro", candidates: [{ base64: "AAAA", mimeType: "image/png" }], requested: 1 };
@@ -82,7 +83,9 @@ describe("정면 만들기", () => {
 });
 
 describe("저장", () => {
-  const 저장 = { ...기본, step: "create", chosenBase64: "AAAA", chosenMimeType: "image/png", angles: [] };
+  // 옛 저장 단계는 그림인지 바이트로 본다(2026-10-08). 진짜 PNG 머리를 보낸다.
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]).toString("base64");
+  const 저장 = { ...기본, step: "create", chosenBase64: PNG, chosenMimeType: "image/png", angles: [] };
 
   it("화면이 보낸 정체성을 그대로 저장한다 — 다시 정리하지 않는다", async () => {
     await post({ ...저장, identityPrompt: "A cat with one head." });

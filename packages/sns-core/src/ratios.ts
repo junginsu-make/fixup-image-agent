@@ -1,4 +1,8 @@
+import { imageModelName, withJosa } from "@fixup/shared";
 import type { ImageModel } from "./models";
+
+/** 픽셀을 직접 지정하는 비율을 만들 수 있는 모델의 회원용 이름(조사 포함). */
+const PIXEL_ONLY_MODEL = withJosa(imageModelName("gpt-image-2.5-flare"), "으로로");
 
 export interface RatioSpec {
   id: string;
@@ -92,14 +96,14 @@ export const POSTER_RATIOS: RatioSpec[] = [
     id: "a4-print",
     label: "A4 인쇄용 (약 290dpi)",
     pixel: { width: 2400, height: 3392 },
-    pixelOnly: { reason: "A4 인쇄용은 픽셀을 직접 지정해야 해서 정밀형 계열로만 만들 수 있습니다." },
+    pixelOnly: { reason: `A4 인쇄용은 픽셀을 직접 지정해야 해서 ${PIXEL_ONLY_MODEL}만 만들 수 있습니다.` },
   },
   {
     // 실제 크기는 첨부한 그림을 보고 그때 정한다. 여기 픽셀은 자리를 채우는 값이다.
     id: "match-source",
     label: "첨부한 그림과 같은 비율",
     pixel: { width: 1088, height: 1088 },
-    pixelOnly: { reason: "첨부한 비율을 그대로 쓰려면 픽셀을 직접 지정해야 해서 정밀형 계열로만 만들 수 있습니다." },
+    pixelOnly: { reason: `첨부한 비율을 그대로 쓰려면 픽셀을 직접 지정해야 해서 ${PIXEL_ONLY_MODEL}만 만들 수 있습니다.` },
   },
 ];
 

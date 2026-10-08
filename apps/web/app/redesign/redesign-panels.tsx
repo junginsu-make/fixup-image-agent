@@ -53,7 +53,8 @@ import {
 } from "../_components/character-choice";
 import { characterAngleLabel } from "../../lib/character-library";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
-import { MAX_REFERENCE_IMAGES, models, type Model, type Project, type ServerConfig } from "./redesign-model";
+import { MAX_REFERENCE_IMAGES, projectImageModelName, type Project, type ServerConfig } from "./redesign-model";
+import { ImageModelPicker } from "../_components/image-model-picker";
 import { buildImageFileName, downloadDataUrl, imageExtension } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle, sectionSortNumber } from "./redesign-project";
 import { MiniThumb, OptionGroup, Stat, Topbar } from "./redesign-bits";
@@ -114,7 +115,7 @@ export function Dashboard({
                         <span>{project.channel}</span>
                         <span>{project.count}장</span>
                         <span>{project.ratio}</span>
-                        <span>{models[project.model].label}</span>
+                        <span>{projectImageModelName(project)}</span>
                       </div>
                     </div>
                   </button>
@@ -187,8 +188,9 @@ export function Dashboard({
 }
 
 export function Workspace(props: {
-  selectedModel: Model;
-  setSelectedModel: (model: Model) => void;
+  /** 고른 그림 모델 id. 분석 AI 는 이것을 따른다(`analysisProviderFor`). */
+  selectedImageModel: string;
+  setSelectedImageModel: (imageModel: string) => void;
   channel: string;
   setChannel: (channel: string) => void;
   characterId: string;
@@ -215,8 +217,8 @@ export function Workspace(props: {
 }) {
   const 단위 = useCreditUnit();
   const {
-    selectedModel,
-    setSelectedModel,
+    selectedImageModel,
+    setSelectedImageModel,
     channel,
     setChannel,
     characterId,
@@ -429,21 +431,9 @@ export function Workspace(props: {
                 <CardDescription>작업마다 사용할 모델을 선택합니다.</CardDescription>
               </div>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {(["openai", "google"] as const).map((model) => (
-                <button
-                  key={model}
-                  className={cn("rounded-md border border-border bg-card p-3 text-left", selectedModel === model && "border-primary ring-4 ring-primary")}
-                  onClick={() => setSelectedModel(model)}
-                >
-                  <strong className="block text-sm">{models[model].label}</strong>
-                  {/*
-                    내부 모델 이름(`gpt-image-2-…`)을 보여 주지 않는다. 비개발자에게 뜻이
-                    없고, 실제로 그리는 길(fal)과도 이름이 달라 오해만 산다(2026-09-23).
-                  */}
-                  <span className="mt-1 block text-xs text-muted-foreground">{models[model].hint}</span>
-                </button>
-              ))}
+            <CardContent>
+              {/* 다른 도구와 같은 세 모델·같은 부품(2026-10-08). 내부 모델 이름은 보여 주지 않는다. */}
+              <ImageModelPicker value={selectedImageModel} onChange={setSelectedImageModel} />
             </CardContent>
           </Card>
 

@@ -1,6 +1,12 @@
 import type { PageGoal, ProductKind } from "./pdp.offering";
 export type { PageGoal, ProductKind };
-import type { CarriedCharacterKind, ImageLook } from "@fixup/shared";
+import {
+  VISIBLE_IMAGE_MODEL_IDS,
+  imageModelName,
+  imageModelSummary,
+  type CarriedCharacterKind,
+  type ImageLook,
+} from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { AnchorKind } from "./pdp.product-anchor";
 import type { PersonSource } from "./pdp.person-source";
@@ -221,6 +227,7 @@ export type ImageModelId =
   | "gpt-image-2.5-flare"
   | "gpt-image-2"
   | "nano-banana-pro"
+  | "nano-banana-2.1"
   | "nano-banana-2"
   | "nano-banana"
   | "seedream-5-pro"
@@ -250,6 +257,7 @@ export const IMAGE_MODEL_CREDIT_WEIGHT: Record<ImageModelId, number> = {
   "gpt-image-2.5-flare": 4,
   "gpt-image-2": 4,
   "nano-banana-pro": 3,
+  "nano-banana-2.1": 2,
   "nano-banana-2": 2,
   "nano-banana": 1,
   // $0.0675(1536 이하) — Nano Banana Pro 의 절반 아래다.
@@ -304,9 +312,8 @@ export interface ImageModelInfo {
   /**
    * 캐릭터 화면에서만 보인다.
    *
-   * 상세페이지는 섹션 이미지 품질을 실측으로 맞춰 왔다. 검증 안 된 모델을
-   * 그 목록에 바로 넣으면 어느 모델로 만든 페이지인지 뒤섞인다. 캐릭터에서
-   * 먼저 비교하고, 나은 것이 확인되면 그때 푼다.
+   * 캐릭터도 앞으로 보이는 셋(`VISIBLE_PDP_MODELS`)만 쓴다(Task 7). 그때까지
+   * `/api/characters` 가 이 칸을 읽으므로 칸과 값은 그대로 둔다.
    */
   characterOnly?: boolean;
 }
@@ -314,9 +321,8 @@ export interface ImageModelInfo {
 export const IMAGE_MODELS: ImageModelInfo[] = [
   {
     id: "gpt-image-2.5-flare",
-    label: "표준형",
-    description:
-      "글자가 정확하면서 빠릅니다. 6장에 약 2분입니다. 대부분의 경우 이것으로 충분합니다.",
+    label: imageModelName("gpt-image-2.5-flare"),
+    description: imageModelSummary("gpt-image-2.5-flare"),
     creditWeight: 4,
     /**
      * **실측에서 유도한 값이지 직접 잰 값이 아니다.**
@@ -334,7 +340,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "gpt-image-2",
-    label: "정밀형",
+    label: imageModelName("gpt-image-2"),
     description:
       "글자를 가장 정확하게 그립니다. 명조체 같은 섬세한 서체도 표현됩니다. 6장에 약 5분으로 가장 오래 걸립니다.",
     creditWeight: 4,
@@ -345,16 +351,26 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "nano-banana-pro",
-    label: "속도형",
-    description: "6장에 약 2분으로 빠릅니다. 글자는 고딕 계열만 나옵니다.",
+    label: imageModelName("nano-banana-pro"),
+    description: imageModelSummary("nano-banana-pro"),
     creditWeight: 3,
     expectedBatchSeconds: 120,
     maxBatchSize: 6,
     maxReferenceImages: 14,
   },
   {
+    id: "nano-banana-2.1",
+    label: imageModelName("nano-banana-2.1"),
+    description: imageModelSummary("nano-banana-2.1"),
+    creditWeight: 2,
+    // 실측 전이라 디테일형(nano-banana-pro) 값을 그대로 둔다.
+    expectedBatchSeconds: 120,
+    maxBatchSize: 6,
+    maxReferenceImages: 14,
+  },
+  {
     id: "nano-banana-2",
-    label: "속도형 라이트",
+    label: imageModelName("nano-banana-2"),
     description: "속도형보다 빠르고 저렴합니다. 비율을 15종까지 받습니다.",
     creditWeight: 2,
     expectedBatchSeconds: 100,
@@ -363,7 +379,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "nano-banana",
-    label: "경제형",
+    label: imageModelName("nano-banana"),
     description: "가장 저렴합니다. 글자가 적은 단순한 장면에 적합합니다.",
     creditWeight: 1,
     expectedBatchSeconds: 90,
@@ -372,7 +388,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "seedream-5-pro",
-    label: "일관형",
+    label: imageModelName("seedream-5-pro"),
     description:
       "여러 참조를 놓고 같은 대상을 유지하는 데 맞춰진 모델입니다. 참조는 10장까지. " +
       "참조를 넣으면 한 장에 90초 넘게 걸립니다.",
@@ -385,7 +401,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "qwen-image-2-pro",
-    label: "화풍형",
+    label: imageModelName("qwen-image-2-pro"),
     description: "화풍을 옮기는 데 강합니다. 애니·일러스트에 씁니다. 13~18초로 빠릅니다.",
     creditWeight: 2,
     expectedBatchSeconds: 40,
@@ -394,6 +410,11 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     characterOnly: true,
   },
 ];
+
+/** 회원이 고를 수 있는 셋. 차례는 `@fixup/shared` 정본을 따른다. */
+export const VISIBLE_PDP_MODELS: ImageModelInfo[] = VISIBLE_IMAGE_MODEL_IDS.flatMap((id) =>
+  IMAGE_MODELS.filter((model) => model.id === id),
+);
 
 /** 생성에 함께 넣는 참조 이미지. 종류에 따라 처리가 갈린다. */
 export interface ReferenceImage {

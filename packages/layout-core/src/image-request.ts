@@ -1,6 +1,7 @@
 import { withJosa } from "@fixup/shared";
 import {
   IMAGE_MODELS,
+  VISIBLE_IMAGE_MODELS,
   nearestEnumRatio,
   type ImageModel,
   type PixelSize,
@@ -134,17 +135,18 @@ function candidateFor(model: ImageModel, rect: CardSize): Candidate | undefined 
 export function planSlotImage(
   rect: CardSize,
   preferredModelId: string,
-  models: ImageModel[] = IMAGE_MODELS,
+  candidates: ImageModel[] = VISIBLE_IMAGE_MODELS,
 ): SlotImagePlan {
-  const fallback = models.find((model) => model.isDefault) ?? models[0]!;
-  const preferred = models.find((model) => model.id === preferredModelId) ?? fallback;
+  // 원하는 모델은 숨긴 것까지 전체에서 찾고, 대체 후보만 보이는 셋이다.
+  const fallback = IMAGE_MODELS.find((model) => model.isDefault) ?? IMAGE_MODELS[0]!;
+  const preferred = IMAGE_MODELS.find((model) => model.id === preferredModelId) ?? fallback;
 
   const mine = candidateFor(preferred, rect);
   if (mine && mine.gap <= ASPECT_TOLERANCE) {
     return { model: mine.model, size: mine.size, crop: false, notes: [] };
   }
 
-  const others = models
+  const others = candidates
     .filter((model) => model.id !== preferred.id)
     .flatMap((model) => {
       const candidate = candidateFor(model, rect);

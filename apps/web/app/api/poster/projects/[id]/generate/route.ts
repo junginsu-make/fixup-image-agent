@@ -1,7 +1,7 @@
 import { knownPosterCreditSize } from "../../../../../../lib/membership/image-sizes";
 import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
 import sharp from "sharp";
-import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
+import { MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { withLlmMeter } from "../../../../../../lib/llm/meter";
@@ -144,7 +144,7 @@ async function handlePost(request: Request, context: Context) {
      * 조용히 바꾸지는 않는다. 바꾼 이유를 응답에 실어 화면이 말하게 한다 —
      * 모델마다 값이 다르고 결과의 결도 다르다.
      */
-    const choice = chooseModelForRatio(project.ratio, project.modelId, IMAGE_MODELS);
+    const choice = chooseModelForRatio(project.ratio, project.modelId);
 
     /**
      * 첨부한 그림을 따라가는 비율이면 그 그림의 실제 크기를 읽는다.

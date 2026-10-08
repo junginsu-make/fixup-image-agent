@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IMAGE_MODELS, pickEndpoint, unitPrice, modelById, modelEndpointLabel } from "../models";
+import { IMAGE_MODELS, VISIBLE_IMAGE_MODELS, visibleModelOrDefault, pickEndpoint, unitPrice, modelById, modelEndpointLabel } from "../models";
 
 describe("모델 목록", () => {
   /**
@@ -11,11 +11,30 @@ describe("모델 목록", () => {
    * **옛 모델은 안 지운다.** 저장된 작업이 그 id 를 들고 있고 `modelById` 가
    * 모르는 id 에 던진다.
    */
-  it("여섯을 담는다", () => {
+  it("일곱을 담는다 — 보이는 셋이 앞, 숨긴 넷이 뒤", () => {
     expect(IMAGE_MODELS.map((model) => model.id)).toEqual([
-      "gpt-image-2.5-flare", "gpt-image-2.5-sunburst",
-      "gpt-image-2", "nano-banana-pro", "nano-banana-2", "nano-banana",
+      "gpt-image-2.5-flare", "nano-banana-pro", "nano-banana-2.1",
+      "gpt-image-2.5-sunburst", "gpt-image-2", "nano-banana-2", "nano-banana",
     ]);
+    expect(VISIBLE_IMAGE_MODELS.map((model) => model.label)).toEqual(["표준형", "디테일형", "속도형"]);
+  });
+
+  it("속도형은 2K 로 부르고 끝점이 google 경로다", () => {
+    const speed = modelById("nano-banana-2.1");
+    expect(speed.t2i.endpoint).toBe("google/nano-banana-2.1");
+    expect(speed.i2i.endpoint).toBe("google/nano-banana-2.1/edit");
+    expect(speed.fixedResolution).toBe("2K");
+    expect(unitPrice(speed, "t2i", { width: 1088, height: 1360 })).toBe(0.09);
+  });
+
+  it("숨긴 모델로 저장된 값은 기본으로 연다", () => {
+    expect(visibleModelOrDefault("nano-banana")).toBe("gpt-image-2.5-flare");
+    expect(visibleModelOrDefault("nano-banana-2.1")).toBe("nano-banana-2.1");
+    expect(visibleModelOrDefault(null)).toBe("gpt-image-2.5-flare");
+  });
+
+  it("숨긴 모델의 이름은 이전 방식이다", () => {
+    expect(modelById("gpt-image-2").label).toBe("이전 방식");
   });
 
   /**
@@ -46,7 +65,7 @@ describe("모델 목록", () => {
 
   it("모든 모델이 t2i 와 i2i 엔드포인트를 갖는다", () => {
     for (const model of IMAGE_MODELS) {
-      expect(model.t2i.endpoint).toMatch(/^(fal-ai|openai)\//);
+      expect(model.t2i.endpoint).toMatch(/^(fal-ai|openai|google)\//);
       expect(model.i2i.endpoint).toMatch(/\/edit$/);
     }
   });

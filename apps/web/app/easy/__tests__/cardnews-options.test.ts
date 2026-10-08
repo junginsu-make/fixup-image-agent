@@ -8,8 +8,8 @@ describe("카드뉴스 조건 (2단계 설계 §7)", () => {
     expect(cardOptionsFrom({ said: {}, chosen: {} })).toEqual({
       ratio: "4:5", count: 6, language: "ko", modelId: "gpt-image-2.5-flare", look: "auto",
     });
-    expect(cardOptionsFrom({ said: { ratio: "1:1", look: "anime" }, chosen: { ratio: "9:16" }, imageModel: "nano-banana-2" }))
-      .toMatchObject({ ratio: "9:16", look: "anime", modelId: "nano-banana-2" });
+    expect(cardOptionsFrom({ said: { ratio: "1:1", look: "anime" }, chosen: { ratio: "9:16" }, imageModel: "nano-banana-pro" }))
+      .toMatchObject({ ratio: "9:16", look: "anime", modelId: "nano-banana-pro" });
   });
 
   /**
@@ -59,5 +59,24 @@ describe("카드뉴스 조건 (2단계 설계 §7)", () => {
     const units = creditUnits(est.usd + llmCostUsd({ planCalls: 1 + est.generatedCount }));
     expect(cardCost({ policy: "cost-v1", ratio: "4:5", modelId: "gpt-image-2.5-flare", attachments: [], cards }))
       .toEqual({ units, label: `약 ${units}장` });
+  });
+});
+
+describe("숨긴 모델은 표준형으로 연다", () => {
+  it("저장된 조건의 숨긴 모델", () => {
+    expect(readCardOptions({ modelId: "nano-banana" }).modelId).toBe("gpt-image-2.5-flare");
+  });
+
+  it("작업에서 되읽을 때도", () => {
+    expect(optionsOfProject({ ratio: "4:5", language: "ko", modelId: "nano-banana", cardCountMode: "auto", data: {} }).modelId)
+      .toBe("gpt-image-2.5-flare");
+  });
+
+  it("대화의 이미지 모델이 숨긴 것이어도", () => {
+    expect(cardOptionsFrom({ said: {}, chosen: {}, imageModel: "gpt-image-2" }).modelId).toBe("gpt-image-2.5-flare");
+  });
+
+  it("보이는 모델은 그대로", () => {
+    expect(readCardOptions({ modelId: "nano-banana-pro" }).modelId).toBe("nano-banana-pro");
   });
 });

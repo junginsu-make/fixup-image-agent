@@ -9,16 +9,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@fixup/ui";
-import { textModelChoices, type TextModelChoice } from "@fixup/shared";
+import { imageModelName, textModelChoices, type TextModelChoice } from "@fixup/shared";
+import { ImageModelPicker } from "../../_components/image-model-picker";
 
 /**
  * 입력창 위의 드롭다운 둘 — **글 모델**과 **그림 모델** (설계 §7).
  *
- * ── 진짜 이름을 낸다 ─────────────────────────────────────────
+ * ── 그림 모델은 다른 화면과 같은 이름을 쓴다 ─────────────────
  *
- * 우리 이름(「표준형」)을 안 쓴다. **이 화면에서만 푸는 예외**다(설계 §5-1,
- * 2026-09-17 사용자 결정). `model-name.test.ts` 의 예외 목록에 `app/easy` 가
- * 들어 있고, 왜인지 그 주석에 적혀 있다.
+ * 표준형·디테일형·속도형이다(2026-10-08). 글 모델만 진짜 이름을 낸다
+ * (설계 §5-1, `model-name.test.ts` 의 예외 목록).
  *
  * ── 값을 옆에 적는다 ─────────────────────────────────────────
  *
@@ -31,14 +31,8 @@ import { textModelChoices, type TextModelChoice } from "@fixup/shared";
 
 export interface ImageModelChoice {
   id: string;
-  /** 드롭다운에 보이는 이름. **진짜 이름이다**(설계 §5-1). */
+  /** 드롭다운에 보이는 이름 — 다른 화면과 같은 한국어 이름(표준형·디테일형·속도형). */
   label: string;
-  /** 우리 이름이 곧 등급이다 — 「표준형」·「경제형」. */
-  tier: string;
-  /** 한 줄 설명. 왜 이것을 고를까. */
-  note: string;
-  /** 어느 계열인가. 화면이 묶어 보일 때 쓴다. */
-  family: "gpt-image" | "nano-banana";
 }
 
 function TextModelMenu({
@@ -108,7 +102,7 @@ function TextModelMenu({
   );
 }
 
-function ImageModelMenu({
+export function ImageModelMenu({
   models,
   value,
   onChange,
@@ -119,54 +113,64 @@ function ImageModelMenu({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
-  const current = models.find((model) => model.id === value) ?? models[0];
+  const [open, setOpen] = React.useState(false);
+  const ids = React.useMemo(() => models.map((model) => model.id), [models]);
+  const panelId = React.useId();
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  // 바깥을 누르면 닫는다. 열려 있는 동안에만 듣는다.
+  React.useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const onDown = (event: PointerEvent) => {
+      if (wrapRef.current && event.target instanceof Node && wrapRef.current.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-meta">
-          {current?.label ?? value}
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      {/*
-        **글 모델과 같은 모양으로 낸다**(2026-09-21 사용자).
-
-        이름만 늘어놓으면 `gpt-image-2.5-flare` 와 `nano-banana-pro` 중 무엇을
-        골라야 할지 알 수 없다. 우리 이름(「표준형」)이 등급 자리에 오고, 한 줄
-        설명이 그 아래에 온다.
-
-        **머리말은 id 의 공통 부분이다.** 아래 항목이 `gpt-image-2.5-flare`
-        인데 머리말이 「OpenAI」면 어긋나고, 「GPT Image」는 `model-name.test.ts`
-        가 막는 이름이다 — 이미 적혀 있는 것을 그대로 쓰면 둘 다 안 걸린다.
-      */}
-      <DropdownMenuContent align="start" className="w-72">
-        {models.map((model, at) => {
-          const 계열이바뀌나 = at === 0 || model.family !== models[at - 1]!.family;
-          return (
-            <React.Fragment key={model.id}>
-              {계열이바뀌나 ? (
-                <div className="px-2 pb-1 pt-2 text-meta uppercase tracking-wide text-subtle-foreground">
-                  {model.family}
-                </div>
-              ) : null}
-              <DropdownMenuItem
-                className="grid cursor-pointer gap-0.5 py-2"
-                onSelect={() => onChange(model.id)}
-              >
-                <span className="flex w-full items-center justify-between gap-3">
-                  <span className="font-medium">{model.label}</span>
-                  <span className="shrink-0 text-meta text-subtle-foreground">{model.tier}</span>
-                </span>
-                {model.note ? (
-                  <span className="text-meta text-subtle-foreground">{model.note}</span>
-                ) : null}
-              </DropdownMenuItem>
-            </React.Fragment>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    /*
+      **메뉴가 아니라 펼침 칸이다.** Radix 메뉴 안에서는 Tab 이 막히고 방향키가 메뉴
+      항목만 돌아서, 안의 라디오 버튼에 키보드로 갈 수 없다. 버튼 하나가 칸을
+      열고 닫는다. 글 모델 메뉴는 항목뿐이라 그대로 둔다.
+    */
+    <div ref={wrapRef} className="relative" onKeyDown={(event) => { if (event.key === "Escape" && open) close(); }}>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="gap-1.5 text-meta"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((was) => !was)}
+      >
+        {imageModelName(value)}
+        <ChevronDown className="h-3 w-3" />
+      </Button>
+      {open ? (
+        <div id={panelId} className="absolute bottom-full left-0 z-30 mb-1 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
+          <ImageModelPicker
+            value={value}
+            ids={ids}
+            legend="이미지 모델"
+            disabled={disabled}
+            onChange={(id) => {
+              onChange(id);
+              close();
+            }}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

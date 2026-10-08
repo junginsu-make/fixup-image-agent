@@ -2,8 +2,8 @@ import { getMembership, getUsageSummary } from "../../../lib/membership/server";
 import { CreditWallet } from "../../_components/credit-wallet";
 import { isCreditLedgerEnabled } from "../../../lib/membership/credit-ledger";
 import { guideMetadata } from "../../../lib/seo/metadata";
-import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
-import { creditUnits } from "@fixup/shared";
+import { VISIBLE_IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
+import { VISIBLE_IMAGE_MODEL_IDS, creditUnits, imageModelName, imageModelSummary } from "@fixup/shared";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -29,21 +29,17 @@ export const metadata = guideMetadata("/guide/credits");
  *
  * 그래서 숫자를 안 적는다. 쓰는 그 함수로 그 자리에서 셈한다.
  */
-const NOTES: Record<string, string> = {
-  // 빠진 모델은 설명이 빈 칸으로 나온다. 차감량은 코드가 세므로 안 비어 있다.
-  "gpt-image-2.5-flare": "글자가 정확하면서 빠릅니다. 대부분 이것으로 충분합니다",
-  "gpt-image-2.5-sunburst": "글자 배치 지시를 더 잘 지킵니다. 대신 느립니다",
-  "gpt-image-2": "한글 글자가 가장 정확합니다. 명조 계열도 표현합니다",
-  "nano-banana-pro": "빠릅니다. 글자는 고딕 계열입니다",
-  "nano-banana-2": "속도형보다 빠르고 저렴합니다",
-  "nano-banana": "가장 저렴합니다. 글자가 적은 장면에",
-};
+const [STANDARD_ID, DETAIL_ID, SPEED_ID] = VISIBLE_IMAGE_MODEL_IDS as readonly [string, string, string];
+
+const NOTES: Record<string, string> = Object.fromEntries(
+  VISIBLE_IMAGE_MODELS.map((model) => [model.id, imageModelSummary(model.id)]),
+);
 
 /** 표가 기준으로 삼는 크기. 정사각 1024 는 가장 흔한 한 장이다. */
 const 기준크기 = { width: 1024, height: 1024 };
 
 /** 그 모델로 이 크기 한 장을 만들면 몇 장이 깎이나. **쓰는 그 함수로 센다.** */
-function 한장당(model: (typeof IMAGE_MODELS)[number]): number {
+function 한장당(model: (typeof VISIBLE_IMAGE_MODELS)[number]): number {
   return creditUnits(unitPrice(model, "t2i", 기준크기));
 }
 
@@ -54,7 +50,7 @@ function 한장당(model: (typeof IMAGE_MODELS)[number]): number {
  * 달라졌는데 글만 남았다(2026-09-21).
  */
 function 원가차이(): string {
-  const 값 = IMAGE_MODELS.map((model) => unitPrice(model, "t2i", 기준크기));
+  const 값 = VISIBLE_IMAGE_MODELS.map((model) => unitPrice(model, "t2i", 기준크기));
   return (Math.max(...값) / Math.min(...값)).toFixed(1);
 }
 
@@ -149,7 +145,7 @@ export default async function CreditsGuidePage() {
               </tr>
             </thead>
             <tbody>
-              {IMAGE_MODELS.map((model) => {
+              {VISIBLE_IMAGE_MODELS.map((model) => {
                 const note = NOTES[model.id];
                 return (
                   <tr key={model.id} className="border-b align-top last:border-b-0">
@@ -180,13 +176,13 @@ export default async function CreditsGuidePage() {
               적어 뒀는데, 차감이 원가에서 나오게 바뀐 뒤로 실제는 30장이었다.
               값 안내가 틀리면 없는 것만 못하다(2026-09-21).
             */
-            const 정밀 = IMAGE_MODELS.find((model) => model.id === "gpt-image-2")!;
-            const 경제 = IMAGE_MODELS.find((model) => model.id === "nano-banana")!;
+            const 표준 = VISIBLE_IMAGE_MODELS.find((model) => model.id === STANDARD_ID)!;
+            const 속도 = VISIBLE_IMAGE_MODELS.find((model) => model.id === SPEED_ID)!;
             return (
               <>
-                {정밀.label}으로 카드 6장을 만들면{" "}
-                <strong className="text-foreground">6 × {한장당(정밀)} = {6 * 한장당(정밀)}장</strong>이
-                차감됩니다. {경제.label}으로 같은 6장을 만들면 {6 * 한장당(경제)}장입니다.
+                {표준.label}으로 카드 6장을 만들면{" "}
+                <strong className="text-foreground">6 × {한장당(표준)} = {6 * 한장당(표준)}장</strong>이
+                차감됩니다. {속도.label}으로 같은 6장을 만들면 {6 * 한장당(속도)}장입니다.
               </>
             );
           })()}
@@ -197,11 +193,11 @@ export default async function CreditsGuidePage() {
         <ChoiceTable
           head={["이런 결과물이면", "이 모델", "왜"]}
           rows={[
-            ["카드뉴스 · 글자가 많다", "정밀형", "한글이 가장 정확합니다. 여기서 아끼면 다시 만들게 됩니다"],
-            ["포스터 · 헤드라인이 크다", "정밀형", "큰 글자가 틀리면 바로 눈에 띕니다"],
-            ["A4 인쇄용", "정밀형", "픽셀을 직접 지정해야 해서 다른 방식은 이 비율을 못 만듭니다"],
-            ["배경 · 분위기 이미지", "경제형", "글자가 없으면 비싼 쪽을 쓸 이유가 없습니다"],
-            ["여러 안을 빠르게 보고 싶다", "속도형", "빠르고 차감이 정밀형보다 적습니다"],
+            ["카드뉴스 · 글자가 많다", imageModelName(STANDARD_ID), imageModelSummary(STANDARD_ID)],
+            ["포스터 · 헤드라인이 크다", imageModelName(STANDARD_ID), "큰 글자가 틀리면 바로 눈에 띕니다"],
+            ["A4 인쇄용", imageModelName(STANDARD_ID), "픽셀을 직접 지정해야 해서 다른 방식은 이 비율을 못 만듭니다"],
+            ["인물 · 질감이 중요하다", imageModelName(DETAIL_ID), imageModelSummary(DETAIL_ID)],
+            ["여러 안을 빠르게 보고 싶다", imageModelName(SPEED_ID), imageModelSummary(SPEED_ID)],
             ["모르겠다", "기본값 그대로", "기본은 표준형입니다. 가장 안전합니다"],
           ]}
         />

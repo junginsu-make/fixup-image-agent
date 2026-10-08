@@ -34,6 +34,7 @@ export function ModelCatalogPanel() {
             <thead>
               <tr className="border-b text-meta text-subtle-foreground">
                 <th className="py-2 pr-3 font-medium">화면 이름</th>
+                <th className="py-2 pr-3 font-medium">보임</th>
                 <th className="py-2 pr-3 font-medium">실제 모델</th>
                 <th className="py-2 pr-3 font-medium">값</th>
                 <th className="py-2 pr-3 font-medium">참고 이미지</th>
@@ -49,6 +50,13 @@ export function ModelCatalogPanel() {
                     {row.isDefault ? (
                       <Badge variant="secondary" className="ml-1.5">기본</Badge>
                     ) : null}
+                  </td>
+                  <td className="py-3 pr-3">
+                    {row.visible ? (
+                      <Badge variant="secondary">보임</Badge>
+                    ) : (
+                      <span className="text-xs text-subtle-foreground">숨김 (이전 방식)</span>
+                    )}
                   </td>
                   <td className="py-3 pr-3">
                     <code className="text-xs font-bold">{row.id}</code>

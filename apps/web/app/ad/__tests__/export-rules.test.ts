@@ -311,6 +311,22 @@ describe("고를 수 있는 것을 고르는 규칙", () => {
     expect(items).toEqual([]);
   });
 
+  /**
+   * **광고 결과는 원본이 아니다**(2026-10-08 독립 리뷰). 뽑을 때마다 라이브러리에 한 묶음이
+   * 쌓이는데, 그것을 원본으로 다시 뽑으면 214×214 를 늘려 화질이 깨지고 표기가 두 번 찍힌다.
+   */
+  it("광고소재 결과는 뺀다", () => {
+    const items = adSourceItems({
+      works: [
+        { id: "AD1", title: "봄 · 광고 규격 3개", mine: true, sourceType: "generation", tool: "ad", coverThumbUrl: "a" },
+        { id: "C1", title: "상세", mine: true, sourceType: "generation", tool: "create", coverThumbUrl: "c" },
+      ],
+      references: [],
+      posters: [],
+    });
+    expect(items.map((item) => item.id)).toEqual(["C1"]);
+  });
+
   it("캐릭터는 뺀다 — 옛 작업물 쪽", () => {
     expect(all().map((item) => item.id)).not.toContain("W3");
   });

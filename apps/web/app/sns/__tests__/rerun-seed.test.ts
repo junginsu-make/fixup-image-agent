@@ -15,7 +15,7 @@ const project = {
   title: "가을 소식",
   ratio: "4:5",
   language: "ko" as const,
-  modelId: "m-1",
+  modelId: "nano-banana-pro",
   cardCountMode: "fixed" as const,
   cardCount: 6,
   toneNote: "따뜻하게",
@@ -41,7 +41,7 @@ describe("snsSeed — 내 작업", () => {
     expect(seed.spec).toMatchObject({
       ratio: "4:5",
       language: "ko",
-      modelId: "m-1",
+      modelId: "nano-banana-pro",
       cardCountMode: "fixed",
       cardCount: 6,
       look: "illustration",
@@ -224,5 +224,20 @@ describe("snsSeed — 관리자가 복사해 온 첨부", () => {
   it("원본 첨부를 건드리지 않는다", () => {
     snsSeed(project, false, 복사본);
     expect(project.data.attachments[0]!.id).toBe("a1");
+  });
+});
+
+describe("snsSeed — 모델", () => {
+  const base = {
+    title: "t", ratio: "1:1", language: "ko" as const, cardCountMode: "auto" as const,
+    data: { source: { kind: "text" as const, text: "글" }, attachments: [] },
+  };
+
+  it("숨긴 모델로 만든 카드뉴스를 다시 열면 표준형이 켜진다", () => {
+    expect(snsSeed({ ...base, modelId: "nano-banana" }, true).spec.modelId).toBe("gpt-image-2.5-flare");
+  });
+
+  it("보이는 모델은 그대로", () => {
+    expect(snsSeed({ ...base, modelId: "nano-banana-pro" }, true).spec.modelId).toBe("nano-banana-pro");
   });
 });

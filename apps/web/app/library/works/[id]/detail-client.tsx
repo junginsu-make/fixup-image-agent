@@ -13,7 +13,7 @@ interface WorkImage { position: number; url: string | null }
 interface Work {
   id: string;
   title: string;
-  tool: "create" | "redesign";
+  tool: "create" | "redesign" | "ad";
   aspectRatio: string | null;
   imageCount: number;
   createdAt: string;
@@ -166,7 +166,8 @@ export function WorkDetailClient({ workId }: { workId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>
-              어떤 섹션으로 짰습니다 <Badge variant="secondary" className="ml-1">{sections.length}</Badge>
+              {/* 광고소재는 섹션이 아니라 뽑은 규격이 이 자리에 담긴다(2026-10-08, `api/ad/export`). */}
+              {work.tool === "ad" ? "어떤 규격으로 뽑았습니다" : "어떤 섹션으로 짰습니다"} <Badge variant="secondary" className="ml-1">{sections.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">

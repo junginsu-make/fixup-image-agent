@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CARD_RATIOS, IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
+import { CARD_RATIOS, VISIBLE_IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ATTACHMENT_ROLE_LABEL, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { GUIDE_TOPICS, neighborsOf } from "../_components/topics";
@@ -195,7 +195,7 @@ describe("설명서 내용", () => {
     //
     // **모델 이름이 아니라 우리가 붙인 이름으로 부른다.** 업체·모델 이름이
     // 다시 들어오는 것은 `lib/__tests__/model-name.test.ts` 가 막는다.
-    const known = IMAGE_MODELS.map((model) => model.label);
+    const known = VISIBLE_IMAGE_MODELS.map((model) => model.label);
     const mentioned = new Set<string>();
     for (const file of guideSources()) {
       for (const match of file.source.matchAll(/([가-힣]+형(?: [가-힣]+)?)/g)) {
@@ -206,11 +206,11 @@ describe("설명서 내용", () => {
       }
     }
     for (const name of mentioned) {
-      expect(known, `설명서가 말하는 "${name}" 가 IMAGE_MODELS 에 없다`).toContain(name);
+      expect(known, `설명서가 말하는 "${name}" 가 고르는 목록(VISIBLE_IMAGE_MODELS)에 없다`).toContain(name);
     }
 
     // 목록이 비면 위 검사가 무의미해진다.
-    expect(known).toContain("표준형");
+    expect(known).toEqual(["표준형", "디테일형", "속도형"]);
   });
 });
 

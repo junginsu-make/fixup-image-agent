@@ -11,13 +11,16 @@ import {
   Input, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
 import {
-  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, lookBlockedReason, withJosa, type ImageLook,
+  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, imageModelName, isVisibleImageModel, lookBlockedReason, withJosa,
+  type ImageLook,
 } from "@fixup/shared";
+import { selectCharacterModel } from "@fixup/pdp-core";
+import { ImageModelPicker } from "../_components/image-model-picker";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
-import { modelDisplayName } from "../../lib/model-name";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
+import { isCreditShortage } from "../../lib/membership/account-events";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { lookAfterRole, roleAfterLook } from "./look-role";
 import { useOpenedCharacter } from "./use-opened-character";
@@ -135,7 +138,7 @@ interface Character {
   views: CharacterView[];
 }
 
-interface ImageModel { id: string; label: string; description: string; untested?: boolean }
+interface ImageModel { id: string; label: string; description: string }
 /** `thumbUrl` 은 격자용 사본이다. `/api/reference-images` 가 둘 다 준다. */
 interface LibraryImage { id: string; title: string | null; signedUrl: string | null; thumbUrl?: string | null }
 
@@ -226,7 +229,16 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 그림과 어긋나지 않아야 한다.
    */
   const [chosen, setChosen] = useState<
-    (Candidate & { description: string; identity: string; name: string; kind: Kind; look: Look; modelId: string }) | null
+    (Candidate & {
+      description: string; identity: string; name: string; kind: Kind; look: Look; modelId: string;
+      /** 서버가 정면을 만들며 저장한 캐릭터(2026-10-08 자동 저장). */
+      savedId?: string;
+      /**
+       * 자동 저장이 실패했다 — 「다시 저장하기」. `savedId` 가 없는 것만으로는 못 가른다: 「과정 보기」로
+       * 연 캐릭터도 `savedId` 가 없지만 실패한 적이 없다(그때는 「새 캐릭터로 저장하기」).
+       */
+      saveFailed?: boolean;
+    }) | null
   >(null);
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
   /** 각도를 만드는 동안 자리를 잡아 둘 칸. 비면 만드는 중이 아니다. */
@@ -301,7 +313,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setKind(values.kind as Kind);
     setLook(lookAfterRole("extract", values.look as Look));
     // 원래 캐릭터를 만든 모델로 그린다. 비면(옛 캐릭터) 그림체의 기본 모델이다.
-    setModelId(values.modelId);
+    // 이제 안 보이는 모델이면 칸은 자동으로 시작한다 — 새 후보에 숨긴 모델을 보내지 않는다.
+    setModelId(isVisibleImageModel(values.modelId) ? values.modelId : "");
     if (!front) return;
     setChosen({
       ...front, description: values.description, identity: "", name: values.name,
@@ -421,10 +434,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setMessage("");
     setChosen(null);
     setCreated(null);
+    // 서버도 앞뒤 빈칸을 떼고 비교한다. 같게 떼야 「이름이 바뀌었다」를 잘못 말하지 않는다.
+    const requestedName = (name.trim() || description).slice(0, 40).trim();
     try {
       const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
-          step: "candidates", description, kind, look, aspectRatio: "3:4",
+          step: "candidates", description, kind, look, aspectRatio: "3:4", name: requestedName,
           candidates: 1,
           modelId: modelId || undefined,
           reference: attached
@@ -434,6 +449,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
         }),
       })).json() as {
         ok?: boolean; candidates?: Candidate[]; message?: string; brief?: { identity?: string };
+        character?: { id: string; name: string }; saveError?: string; referenceIssue?: string;
       };
 
       const made = body.candidates?.[0];
@@ -441,7 +457,26 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
       // 만들 때 쓸 값을 함께 얼려 둔다 — 뒤에 왼쪽 칸을 건드려도 이미 나온
       // 그림과 어긋나지 않아야 한다.
-      setChosen({ ...made, description, identity: body.brief?.identity || description, name, kind, look, modelId });
+      setChosen({
+        ...made, description, identity: body.brief?.identity || description, name, kind, look, modelId,
+        savedId: body.character?.id, saveFailed: !body.character,
+      });
+      /*
+        **정면이 나오면 서버가 이미 저장했다**(2026-10-08 자동 저장). 어디 있는지 말한다. 같은 이름이
+        있어 꼬리표가 붙었으면 그 이름을 — 말없이 바뀌면 라이브러리에서 못 찾는다.
+      */
+      if (body.character) {
+        setMessage([
+          body.character.name !== requestedName
+            ? `같은 이름의 캐릭터가 있어 「${body.character.name}」(으)로 저장했습니다.`
+            : `「${body.character.name}」(으)로 저장했습니다. 「내 캐릭터」와 라이브러리에 있습니다.`,
+          // 조용히 넘어가지 않는다. 참고 이미지에 못 넣었으면 다른 도구의 불러오기에 안 보인다.
+          body.referenceIssue ?? "",
+        ].filter(Boolean).join(" "));
+        void load();
+      } else if (body.saveError) {
+        setMessage(body.saveError);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "정면을 만들지 못했습니다.");
     } finally {
@@ -531,6 +566,60 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     }
   };
 
+  /**
+   * **저장된 캐릭터에 각도를 더한다**(2026-10-08 자동 저장).
+   *
+   * 정면이 나올 때 이미 저장됐으므로 다시 저장하지 않고, 고른 각도·다각도를 한 장씩 그 캐릭터에
+   * 붙인다. 한 장씩 만드는 길(`characters/views`)은 「다시 만들기」가 쓰던 그 길이다 — 장마다
+   * 예약하고 실패한 장은 차감하지 않는다.
+   *
+   * **한 장씩 따로 처리한다**(독립 리뷰). 한 장이 끊겨도(프록시 504·연결 끊김) 남은 장을 마저 하고,
+   * 끝나면 늘 목록을 다시 읽는다. 크레딧이 모자라면 남은 장도 어차피 거절되므로 멈춘다.
+   */
+  const handleExtend = async () => {
+    if (!chosen?.savedId) return;
+    const characterId = chosen.savedId;
+    const jobs = [...(sheet ? [sheetItem.id] : []), ...pickedAngles.filter((angle) => angle !== "front")];
+    if (!jobs.length) return;
+    setBusy("create");
+    setWorkStartedAt(Date.now());
+    setPending(jobs);
+    setMessage("");
+    const made: string[] = [];
+    let reason = "";
+    try {
+      for (const angle of jobs) {
+        try {
+          const body = await addAngle({ characterId: chosen.savedId, angle, modelId: chosen.modelId });
+          if (body.ok) made.push(angle);
+          else {
+            reason ||= body.message ?? "";
+            // 남은 장도 어차피 거절된다. 그 자리의 「만드는 중」 표시를 바로 거둔다.
+            if (isCreditShortage(body.code)) { setPending([]); break; }
+          }
+        } catch {
+          reason ||= "서버에 닿지 못했습니다.";
+        } finally {
+          setPending((current) => current.filter((entry) => entry !== angle));
+        }
+      }
+      const refreshed = await load();
+      setCreated(refreshed.find((entry) => entry.id === characterId) ?? null);
+      // 만든 장은 고른 것에서 뺀다. 남겨 두면 다시 눌러 같은 장 값을 또 낸다.
+      setPickedAngles((current) => current.filter((angle) => !made.includes(angle)));
+      if (made.includes(sheetItem.id)) setSheet(false);
+      setMessage(extendSummary(jobs.length, made.length, reason));
+      if (made.length === jobs.length) {
+        setChosen(null);
+        setStep("result");
+      }
+    } finally {
+      setPending([]);
+      setBusy("");
+      setWorkStartedAt(undefined);
+    }
+  };
+
   const handleRedo = async (character: Character, angle: string) => {
     setRedoing(`${character.id}:${angle}`);
     setWorkStartedAt(Date.now());
@@ -562,6 +651,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
         body: JSON.stringify({ id: character.id }),
       });
       setCharacters((current) => current.filter((item) => item.id !== character.id));
+      // 1단계에 그 캐릭터의 정면이 걸려 있으면 놓는다. 남기면 「더 만들기」가 지운 캐릭터에 붙으려다 전부 실패한다.
+      if (chosen?.savedId === character.id) setChosen(null);
     } finally {
       setDeletingId(null);
     }
@@ -574,16 +665,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 그림을 본다. 첨부가 없으면 `resolveLook` 이 실사로 내리므로 실사와 같은
    * 모델을 가리키는 것이 앞뒤가 맞는다.
    */
-  const MODEL_BY_LOOK: Record<Look, string> = {
-    auto: "nano-banana-pro",
-    photoreal: "nano-banana-pro",
-    anime: "gpt-image-2.5-flare",
-    "3d": "gpt-image-2.5-flare",
-    illustration: "gpt-image-2.5-flare",
-  };
-  const autoModel = MODEL_BY_LOOK[look];
-  const activeModel = modelId || autoModel;
-  const chosenModel = models.find((model) => model.id === activeModel);
+  const autoModel = selectCharacterModel(look);
 
   /**
    * 정면을 고른 뒤에는 1단계 칸을 잠근다.
@@ -745,34 +827,19 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               </fieldset>
 
               {models.length ? (
-                <fieldset className="grid flex-none gap-1.5">
-                  <legend className="text-meta text-subtle-foreground">모델</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {models.map((model) => (
-                      <Button
-                        key={model.id} type="button" size="sm" disabled={locked}
-                        variant={activeModel === model.id ? "default" : "secondary"}
-                        onClick={() => setModelId(model.id)}
-                      >
-                        {model.label}
-                        {/* 아직 우리 쓰임에서 재 보지 않은 모델. 골라서 비교해
-                            보라는 뜻이지 기본으로 밀지 않는다. */}
-                        {model.untested ? <span className="ml-1 text-[10px] opacity-70">시험</span> : null}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-subtle-foreground">
-                    {modelId
-                      ? chosenModel?.description
-                      : `고른 결에 맞춰 ${chosenModel?.label ?? modelDisplayName(autoModel)} 로 만듭니다.`}
-                  </p>
-                  {chosenModel?.untested ? (
-                    <p className="text-xs text-amber-700">
-                      「시험」 표시가 붙은 모델입니다. 이 쓰임에서 더 나은지 아직 재지 않았습니다.
-                      같은 캐릭터를 기본 모델로도 만들어 견줘 보세요.
-                    </p>
-                  ) : null}
-                </fieldset>
+                <ImageModelPicker
+                  legend="모델"
+                  value={modelId}
+                  ids={models.map((model) => model.id)}
+                  disabled={locked}
+                  onChange={setModelId}
+                  auto={{
+                    label: "자동",
+                    hint: `고른 결에 맞춰 ${withJosa(imageModelName(autoModel), "으로로")} 만듭니다.`,
+                    active: !modelId,
+                    onPick: () => setModelId(""),
+                  }}
+                />
               ) : null}
 
               <label className="grid flex-none gap-1.5">
@@ -988,7 +1055,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 **높이를 정해 둔다**(2026-10-07 사용자 결정). 남는 높이를 다 쓰게
                 했더니 모니터가 낮으면 0 까지 줄어 아래 단추들이 그 위로 겹쳤다.
                 넘치면 이 칸이 구른다. 256px 인 까닭: 칸이 가장 낮을 때(30rem)도
-                바로 아래 「캐릭터 저장하기」가 굴리지 않고 보인다. 320px 이면 밀린다.
+                바로 아래 단추들이 굴리지 않고 보인다. 320px 이면 밀린다.
               */}
               <div className="grid h-64 flex-none place-items-center">
                 {busy === "candidates" ? (
@@ -1034,27 +1101,21 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               {/* ── 단추는 결과물이 없어도 늘 보인다 ────────────────── */}
               <div className="grid flex-none gap-2">
                 {/*
-                  **정면이 나오면 이것을 눌러야 저장된다**(2026-10-07 사용자 요청).
-                  「정면만 만들기」라는 이름은 정면을 또 만드는 것처럼 읽혔다.
-                  정면이 나왔을 때만 녹색으로 바꾸고 고리를 번지게 한다 —
-                  나오기 전에 녹색이면 눌러야 할 때를 알려 주지 못한다.
-                  글자는 `primary-foreground` 다. 밝은 화면은 흰 글자(4.98:1),
-                  어두운 화면은 진한 글자라 둘 다 읽힌다.
+                  **「캐릭터 저장하기」는 없다**(2026-10-08 사용자 요청). 정면이 나오면 서버가 그
+                  자리에서 저장한다 — 전에는 누르지 않고 나가면 크레딧을 낸 정면이 어디에도 안
+                  남았다. 자동 저장이 실패했을 때만 이 단추가 나와 그 정면을 살린다.
                 */}
-                <Button
-                  disabled={!chosen || Boolean(busy)}
-                  onClick={() => void handleCreate(false)}
-                  className={cn(
-                    chosen && "bg-success font-bold text-primary-foreground hover:bg-success/90",
-                    chosen && !busy && "fixup-cta-pulse [--cta-pulse-color:var(--success)]",
-                  )}
-                >
-                  {busy === "create" && !pending.length
-                    ? <><Loader2 size={16} className="mr-1.5 animate-spin" />{workingButton("save")}</>
-                    : <>
-                      캐릭터 저장하기
-                    </>}
-                </Button>
+                {chosen && !chosen.savedId ? (
+                  <Button
+                    disabled={Boolean(busy)}
+                    onClick={() => void handleCreate(false)}
+                    className="bg-success font-bold text-primary-foreground hover:bg-success/90"
+                  >
+                    {busy === "create" && !pending.length
+                      ? <><Loader2 size={16} className="mr-1.5 animate-spin" />{workingButton("save")}</>
+                      : chosen.saveFailed ? "다시 저장하기" : "새 캐릭터로 저장하기"}
+                  </Button>
+                ) : null}
 
                 {/* 여기서부터가 「이어서 더 만들기」다. 줄을 그어 나눈다 —
                     위는 끝내는 길, 아래는 더 가는 길이다. */}
@@ -1113,7 +1174,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <Button
                     size="sm"
                     disabled={!chosen || Boolean(busy) || extraCount === 0}
-                    onClick={() => void handleCreate(true)}
+                    // 저장된 캐릭터에 더한다. 자동 저장이 실패했으면 옛 길로 저장하며 함께 만든다.
+                    onClick={() => void (chosen?.savedId ? handleExtend() : handleCreate(true))}
                   >
                     {/* 아이콘 없이 글자만(2026-09-11 사용자 요청). 도는 표시는 남긴다. */}
                     {busy === "create" && pending.length
@@ -1121,7 +1183,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       : null}
                     {busy === "create" && pending.length
                       ? workingButton("make")
-                      : extraCount ? `${extraCount}장 더 만들고 저장` : "더 만들 것을 고르세요"}
+                      : extraCount ? `${extraCount}장 더 만들기` : "더 만들 것을 고르세요"}
                   </Button>
                 </div>
 
@@ -1158,11 +1220,24 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   );
 }
 
+/** 「더 만들기」가 끝난 뒤의 한 줄. 다 됐으면 비운다. 조용히 넘어가지 않는다 — 남은 장은 다시 누르면 된다. */
+function extendSummary(asked: number, made: number, reason: string): string {
+  if (made === asked) return "";
+  return [made ? `${made}장을 만들었습니다.` : "", reason, `남은 ${asked - made}장은 다시 눌러 만드세요.`].filter(Boolean).join(" ");
+}
+
+/** 저장된 캐릭터에 한 장을 더한다. 「다시 만들기」가 쓰던 그 길이다 — 장마다 예약하고 실패한 장은 차감하지 않는다. */
+async function addAngle(input: { characterId: string; angle: string; modelId: string }) {
+  return (await billableFetch("/api/characters/views", {
+    body: JSON.stringify({ characterId: input.characterId, angle: input.angle, aspectRatio: "3:4", modelId: input.modelId || undefined }),
+  })).json() as Promise<{ ok?: boolean; message?: string; code?: string }>;
+}
+
 /**
  * 화면 맨 위의 띠. **한 화면에 띠 하나** — 정면·각도·다시 만들기는 동시에 돌지 않는다.
  *
- * 멈추는 길이 없는 요청이라 중지 단추는 두지 않는다. 각도는 한 요청으로 한꺼번에
- * 보내므로 몇 장 끝났는지 모른다 — 0장에서 시작해 끝나면 사라진다.
+ * 멈추는 길이 없는 요청이라 중지 단추는 두지 않는다. 「더 만들기」는 2026-10-08 부터 한 장씩
+ * 보내 끝난 장이 `pending` 에서 빠진다. 「다시 저장하기」로 함께 만들 때는 한 요청이라 끝나야 사라진다.
  */
 function StudioWorkingBanner({ busy, pending, redoingAngle, startedAt }: {
   busy: "" | "candidates" | "create";
