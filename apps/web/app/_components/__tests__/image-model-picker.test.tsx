@@ -22,16 +22,14 @@ afterEach(() => {
 });
 
 describe("공용 그림 모델 고르기", () => {
-  it("세 버튼과 고른 모델의 설명이 늘 보인다", () => {
+  it("세 버튼이 보이고, 설명은 말풍선에만 있다", () => {
     const root = mount({ value: "nano-banana-pro" });
     const radios = root.findAll((n) => n.type === "button" && n.props.role === "radio");
-    const labels = radios.map((r) => text(r));
-    expect(labels).toHaveLength(3);
-    expect(labels.join("|")).toContain("표준형");
-    expect(labels.join("|")).toContain("디테일형");
-    expect(labels.join("|")).toContain("속도형");
-    const summary = root.findByProps({ "data-testid": "model-summary" });
-    expect(text(summary)).toContain("질감과 인물 표현이 섬세합니다");
+    const names = radios.map((r) => text(r).replace(text(r.find((n) => n.props.role === "tooltip")), ""));
+    expect(names).toEqual(["표준형", "디테일형", "속도형"]);
+    // 2026-10-08 사용자 지시: 버튼 아래에 늘 보이던 설명 줄은 말풍선과 겹쳐 지운다.
+    expect(root.findAll((n) => n.props["data-testid"] === "model-summary")).toHaveLength(0);
+    expect(root.findAll((n) => n.type === "p")).toHaveLength(0);
   });
 
   it("버튼마다 설명 말풍선이 붙어 있다", () => {
@@ -54,19 +52,19 @@ describe("공용 그림 모델 고르기", () => {
     expect(onChange).toHaveBeenCalledWith("nano-banana-2.1");
   });
 
-  it("기본 모델에는 「기본」 표시", () => {
+  it("버튼에 「기본」 표시를 붙이지 않는다", () => {
     const root = mount({ value: "nano-banana-pro" });
-    const std = root.find((n) => n.type === "button" && n.props.role === "radio" && text(n).includes("표준형"));
-    expect(text(std)).toContain("기본");
-    const detail = root.find((n) => n.type === "button" && n.props.role === "radio" && text(n).includes("디테일형"));
-    expect(text(detail)).not.toContain("기본");
+    const radios = root.findAll((n) => n.type === "button" && n.props.role === "radio");
+    for (const r of radios) {
+      const tip = text(r.find((n) => n.props.role === "tooltip"));
+      expect(text(r).replace(tip, "")).not.toContain("기본");
+    }
   });
 
   it("숨긴 id 가 와도 켜진 버튼이 없고 죽지 않는다", () => {
     const root = mount({ value: "nano-banana" });
     const radios = root.findAll((n) => n.type === "button" && n.props.role === "radio");
     expect(radios.every((r) => r.props["aria-checked"] === false)).toBe(true);
-    expect(text(root.findByProps({ "data-testid": "model-summary" }))).toBe("");
   });
 
   it("자동 선택지는 맨 앞에 나오고 켜짐·누름이 된다", () => {
@@ -85,6 +83,18 @@ describe("공용 그림 모델 고르기", () => {
     const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
     expect(tips.length).toBe(3);
     for (const t of tips) expect(t.props.className).toContain("whitespace-normal");
+  });
+
+  it("말풍선은 넓고 글자가 읽히는 크기다", () => {
+    const root = mount({ value: "nano-banana-pro" });
+    const tips = root.findAll((n) => n.type === "span" && n.props.role === "tooltip");
+    for (const t of tips) {
+      const classes = String(t.props.className).split(/\s+/);
+      expect(classes).toContain("w-80");
+      expect(classes).toContain("text-sm");
+      expect(classes).not.toContain("w-56");
+      expect(classes).not.toContain("text-meta");
+    }
   });
 
   it("좁은 화면에서 말풍선이 화면 밖으로 나가지 않는다 — 맨 끝 것은 오른쪽에 붙는다", () => {
