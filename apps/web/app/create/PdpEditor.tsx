@@ -81,6 +81,12 @@ import { EmphasisWordPicker } from "./EmphasisWordPicker";
 import { keepWordsPresentIn } from "./emphasis-words";
 import { COPY_SLOTS, overlayStyleFor, type CopyOverlayType } from "./copy-slots";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
+import {
+  createProductPhotoUploader,
+  productImageFields,
+  ProductPhotoUploadError,
+  type ProductPhotoSource,
+} from "./product-photo-upload";
 import { ReviewPanel } from "./ReviewPanel";
 import { ScorecardPanel } from "./ScorecardPanel";
 import {
@@ -206,6 +212,8 @@ interface PdpEditorProps {
   // 단계 표시줄은 4단계를 모두 그리므로 1·2단계 라벨도 계속 보인다.
   // 텍스트로 시작한 작업에 "이미지 업로드"가 뜨지 않게 시작 방식을 넘겨받는다.
   startMode?: CreateMode;
+  /** 사용자가 올린 제품 원본. 없으면 1024 사본을 올린다. */
+  productPhoto?: ProductPhotoSource;
   /**
    * 파는 것이 무엇인가(N-2, 설계 §9.1).
    *
@@ -326,6 +334,7 @@ export function PdpEditor({
   look = "photoreal",
   userInstruction = "",
   startMode = "image",
+  productPhoto,
   productKind,
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
@@ -495,6 +504,7 @@ export function PdpEditor({
   const previewStageRef = useRef<HTMLDivElement>(null);
   const resizeSessionRef = useRef<Record<string, { width: number; height: number; fontSize: number }>>({});
   const generationLockRef = useRef(false);
+  const productUploaderRef = useRef(createProductPhotoUploader());
   const retryRequestKeysRef = useRef<Record<string, string>>({});
 
   const currentSection = sections[currentSectionIndex];
@@ -1677,6 +1687,19 @@ export function PdpEditor({
       return { ok: false, stopBatch: true };
     }
 
+    let productFields: Awaited<ReturnType<typeof productImageFields>>;
+    try {
+      productFields = await productImageFields({
+        startMode,
+        productPhoto,
+        fallbackBase64: initialResult.originalImage,
+        uploader: productUploaderRef.current,
+      });
+    } catch (error) {
+      // 조용히 낮은 화질로 내려가지 않는다(설계 §4.6). 생성 전이라 크레딧은 안 나갔다.
+      setErrorMessage(error instanceof ProductPhotoUploadError ? error.message : "제품 사진을 올리지 못했습니다. 다시 시도해 주세요.");
+      return { ok: false, stopBatch: true };
+    }
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setInFlightKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
@@ -1688,7 +1711,7 @@ export function PdpEditor({
         method: "POST",
         headers: { "x-idempotency-key": requestKey },
         body: JSON.stringify({
-          originalImageBase64: initialResult.originalImage,
+          ...productFields,
           // 서버가 이 한 장도 남기고 라이브러리를 맞춘다(`librarySyncFields`).
           ...librarySyncFields(),
           section,
@@ -1872,6 +1895,14 @@ export function PdpEditor({
     setGenerationRun(describeRun("running", getDisplaySectionName(targets[0].section)));
 
     try {
+      // 묶음마다 올리지 않는다 — 사진 한 장을 한 번 올린 주소를 모든 묶음이 쓴다.
+      // 올리기가 실패하면 던져서 아래 catch 가 문구를 보이고 반복에 들어가지 않는다.
+      const productFields = await productImageFields({
+        startMode,
+        productPhoto,
+        fallbackBase64: initialResult.originalImage,
+        uploader: productUploaderRef.current,
+      });
       for (const chunk of chunks) {
         /*
           **다시 눌러도 같은 열쇠로 간다**(K-05).
@@ -1892,7 +1923,7 @@ export function PdpEditor({
           method: "POST",
           headers: { "x-idempotency-key": chunkRequestKey },
           body: JSON.stringify({
-            originalImageBase64: initialResult.originalImage,
+            ...productFields,
             // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
             ...librarySyncFields(),
             sections: chunk.map(({ section }) => section),

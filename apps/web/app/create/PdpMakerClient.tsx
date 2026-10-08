@@ -1372,6 +1372,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
         // 생성 결과를 서버에 적을 때 무엇의 것인지 묶는 값.
         draftId={activeDraftId}
+        productPhoto={preparedImage?.original}
         aspectRatio={aspectRatio}
         outputMode={outputMode}
         imageModel={imageModel}
