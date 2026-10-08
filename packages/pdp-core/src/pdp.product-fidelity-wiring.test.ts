@@ -43,6 +43,7 @@ describe("제품 블록 배선", () => {
   it("사용자 지시가 있으면 지시가 맨 앞·맨 뒤를 지킨다", async () => {
     const { prompt } = await sent({ userInstruction: "왼쪽에 놓아 주세요" });
     expect(prompt.indexOf("USER INSTRUCTION")).toBeLessThan(prompt.indexOf("PRODUCT FIDELITY"));
+    expect(prompt.indexOf("Final check:")).toBeGreaterThanOrEqual(0);
     expect(prompt.indexOf("Final check:")).toBeLessThan(prompt.indexOf("Before drawing, re-read"));
   });
 
@@ -64,12 +65,14 @@ describe("제품 블록 배선", () => {
   });
 
   it("보존을 끄고 레퍼런스를 붙이면 색은 바꿔도 되는 쪽", async () => {
-    const { prompt } = await sent({
+    const { prompt, systemPrompt } = await sent({
       preserveProductImage: false,
       styleReferenceImages: [{ base64: "REF", mimeType: "image/png" }],
     });
     const free = prompt.split("\n").find((line) => line.startsWith("Free to change:")) ?? "";
     expect(free).toMatch(/colour/);
+    expect(systemPrompt).toMatch(/colour and finish follow the design reference/);
+    expect(systemPrompt).not.toMatch(/exact product/);
   });
 
   it("읽어 둔 라벨 글자가 실린다", async () => {

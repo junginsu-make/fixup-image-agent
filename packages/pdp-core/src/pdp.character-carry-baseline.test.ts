@@ -64,7 +64,11 @@ function withoutProductBlock(captured: { prompt: string; systemPrompt: string })
       .split("\n\n")
       .filter((paragraph) => !paragraph.startsWith("PRODUCT FIDELITY") && !paragraph.startsWith("Final check:"))
       .join("\n\n"),
-    systemPrompt: captured.systemPrompt.replace(` ${productFidelitySystemLine("identity")}`, ""),
+    // 어느 제품 줄이 붙었든(보존·shape-only) 걷어 낸다 — 한쪽만 걷으면 다른 쪽이 붙은 경우를 「바뀌었다」로 잘못 읽는다.
+    systemPrompt: (["identity", "shape-only"] as const).reduce(
+      (text, role) => text.replace(` ${productFidelitySystemLine(role)}`, ""),
+      captured.systemPrompt,
+    ),
   };
 }
 

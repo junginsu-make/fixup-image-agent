@@ -21,7 +21,18 @@ export interface ProductFacts {
 /** 화면·서버·코어가 같은 수를 본다. 두 벌이면 화면이 보낸 것을 서버가 거절한다. */
 export const PRODUCT_FACT_LIMITS = { facts: 8, labels: 12, chars: 200 } as const;
 
-const clip = (value: unknown) => Array.from(String(value ?? "").trim()).slice(0, PRODUCT_FACT_LIMITS.chars).join("");
+/**
+ * 판독은 Claude 가 자유롭게 쓴 글이라 줄바꿈이 섞일 수 있다. 그대로 실으면 「- 사실」
+ * 목록 밖에 새 줄(지시처럼 읽히는 줄)이 생긴다 — 제어 문자(U+0000–U+001F)와 공백류를
+ * 모두 빈칸 하나로 접는다. 정규식 대신 코드 포인트로 거른다(no-control-regex).
+ */
+const flatten = (text: string) =>
+  Array.from(text, (char) => ((char.codePointAt(0) ?? 0) < 0x20 ? " " : char))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+const clip = (value: unknown) =>
+  Array.from(flatten(String(value ?? ""))).slice(0, PRODUCT_FACT_LIMITS.chars).join("");
 const clipList = (values: unknown, limit: number) =>
   (Array.isArray(values) ? values : []).map(clip).filter(Boolean).slice(0, limit);
 
@@ -101,5 +112,9 @@ export function productFidelityTail(input: { imageNumber: number; anchorRole: An
 
 export function productFidelitySystemLine(anchorRole: AnchorRole): string {
   if (anchorRole === "mood-only") return "";
+  // shape-only 는 사용자가 색·마감을 레퍼런스에 양보했다 — 「그 제품 그대로」라 하면 그 선택을 뒤집는다.
+  if (anchorRole === "shape-only") {
+    return "The attached product photo is the real product being sold: keep its shape, proportions and label text in every section, let its colour and finish follow the design reference, and choose a fresh camera angle and scene for each one.";
+  }
   return "The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.";
 }
