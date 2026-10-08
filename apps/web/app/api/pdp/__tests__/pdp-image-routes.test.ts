@@ -490,3 +490,35 @@ describe("캐릭터를 못 불러오면 막는다", () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe("제품 사진 주소", () => {
+  const 주소 = "https://v3.fal.media/files/a/b.jpg";
+
+  it("단건: 주소만 와도 만들고, 코어에는 주소가 간다", async () => {
+    const response = await single(post({ productImageUrl: 주소, section: section("s1"), aspectRatio: "3:4" }));
+    expect(response.status).toBe(200);
+    expect(calls[0]).toMatchObject({ productImageUrl: 주소 });
+    expect((calls[0] as { originalImageBase64?: string }).originalImageBase64).toBeUndefined();
+  });
+
+  it("일괄: 섹션마다 같은 주소", async () => {
+    await batch(post({ productImageUrl: 주소, sections: [section("s1"), section("s2")], aspectRatio: "3:4" }));
+    expect(calls.map((call) => (call as { productImageUrl?: string }).productImageUrl)).toEqual([주소, 주소]);
+  });
+
+  it("fal 저장소가 아닌 주소는 400 — 예약도 안 한다", async () => {
+    const response = await single(post({ productImageUrl: "https://example.com/a.jpg", section: section("s1"), aspectRatio: "3:4" }));
+    expect(response.status).toBe(400);
+    expect(reserved).toHaveLength(0);
+  });
+
+  it("주소도 그림도 없으면 400", async () => {
+    expect((await single(post({ section: section("s1"), aspectRatio: "3:4" }))).status).toBe(400);
+  });
+
+  it("옛 화면이 그림만 보내도 지금처럼 된다", async () => {
+    const response = await single(post({ originalImageBase64: "AAAA", section: section("s1"), aspectRatio: "3:4" }));
+    expect(response.status).toBe(200);
+    expect(calls[0]).toMatchObject({ originalImageBase64: "AAAA" });
+  });
+});

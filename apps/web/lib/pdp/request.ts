@@ -4,10 +4,18 @@ import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
 import { PDP_RETIRED_MODEL_MESSAGE, isRetiredPdpModel } from "./image-models";
+import { isFalStorageUrl } from "./fal-storage-url";
 
 // 기존 decoded 업로드 예산 20MiB + base64 팽창 + JSON 메타데이터 여유.
 export const PDP_JSON_LIMIT = Math.ceil(20 * 1024 * 1024 * 4 / 3) + 1024 * 1024;
 const text = z.string();
+/*
+  **제품 원본은 주소로 온다**(설계 2026-10-08 §4.5). 우리가 fal 에 올린 주소만 받는다.
+  옛 화면·글 경로는 여전히 그림을 몸통에 싣는다 — 둘 중 하나는 있어야 한다.
+*/
+const productImageUrl = text.refine(isFalStorageUrl, "제품 사진 주소가 올바르지 않습니다.");
+const hasProductImage = (body: { productImageUrl?: string; originalImageBase64?: string }) =>
+  Boolean(body.productImageUrl || body.originalImageBase64);
 /*
   **첨부 지시는 힘이 세다**(D-8).
 
@@ -133,8 +141,12 @@ const schemas = {
     imageUrl: text.regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/), request: text.trim().min(1),
     section: z.record(text, z.unknown()).optional(), project: z.record(text, z.unknown()).optional(),
   }).passthrough(),
-  single: z.object({ ...common, originalImageBase64: text.trim().min(1), section }).passthrough(),
-  batch: z.object({ ...common, originalImageBase64: text.trim().min(1), sections: z.array(section).min(1) }).passthrough()
+  single: z.object({ ...common, originalImageBase64: text.trim().min(1).optional(), productImageUrl: productImageUrl.optional(), section })
+    .passthrough()
+    .refine(hasProductImage, "제품 사진이 없습니다."),
+  batch: z.object({ ...common, originalImageBase64: text.trim().min(1).optional(), productImageUrl: productImageUrl.optional(), sections: z.array(section).min(1) })
+    .passthrough()
+    .refine(hasProductImage, "제품 사진이 없습니다.")
     .refine((body) => body.sections.length <= maxBatchSizeFor(body.page?.imageModel ?? DEFAULT_IMAGE_MODEL), "한 번에 생성할 수 있는 장수를 초과했습니다."),
   analyze: z.object({ ...common, imageBase64: imagePayload, mimeType: imageMime,
     modelImageBase64: text.optional(), modelImageMimeType: text.optional(),

@@ -26,7 +26,8 @@ import type {
  * 라우트가 따로 지었다 — 그래서 인물 사진이 한쪽에만 실렸다.
  */
 type PdpImagesRequestBody = {
-  originalImageBase64: string;
+  originalImageBase64?: string;
+  productImageUrl?: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
   desiredTone?: string;
@@ -187,7 +188,9 @@ async function handlePost(req: Request) {
     await markCreditStarted(reservation);
     const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
       {
-        originalImageBase64: body.originalImageBase64,
+        ...(body.productImageUrl
+          ? { productImageUrl: body.productImageUrl }
+          : { originalImageBase64: body.originalImageBase64 }),
         section: body.section,
         aspectRatio: body.aspectRatio,
         desiredTone: body.desiredTone,

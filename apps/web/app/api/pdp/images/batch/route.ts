@@ -41,7 +41,9 @@ type BatchRequest = {
   /** 어느 작업의 것인가. 없으면 예약 식별자로 대신한다 — 그때는 이 요청 한 건만 묶인다. */
   documentId?: string;
   revision?: number;
-  originalImageBase64: string;
+  originalImageBase64?: string;
+  /** 제품 원본을 올려 둔 fal 주소. 있으면 이것을 쓴다(설계 2026-10-08 §4). */
+  productImageUrl?: string;
   sections: SectionBlueprint[];
   /**
    * 각 섹션이 **페이지에서** 몇 번째인지. 묶음 안 순서가 아니다.
@@ -239,7 +241,10 @@ async function handlePost(req: Request) {
       });
 
       return {
-          originalImageBase64: body.originalImageBase64,
+          // 주소가 오면 몸통의 그림은 넘기지 않는다 — 코어가 주소를 참조로 쓴다.
+          ...(body.productImageUrl
+            ? { productImageUrl: body.productImageUrl }
+            : { originalImageBase64: body.originalImageBase64 }),
           section,
           aspectRatio: body.aspectRatio,
           desiredTone: body.desiredTone,
