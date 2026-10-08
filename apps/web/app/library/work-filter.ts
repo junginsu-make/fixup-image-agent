@@ -19,7 +19,7 @@ export type LibraryView = WorkFilterId | "characters" | "references";
 export interface FilterableWork {
   id: string;
   tool: "sns" | "poster" | "create" | "redesign" | "ad";
-  /** 도구 칸으로 못 가르는 것만 따로 적는다. 지금은 예전 캐릭터 만들기 결과뿐이다. */
+  /** 도구 칸으로 못 가르는 것만 따로 적는다. 캐릭터뿐이다 — 예전 라이브러리 줄과 캐릭터 목록 카드(`character-works.ts`). */
   origin?: "character";
   /** 그림이 몇 장인가. 낱장을 미뤄 받는 작업은 0 이어도 표지가 있다. */
   imageCount: number;
@@ -47,7 +47,7 @@ export const LIBRARY_VIEWS: { id: LibraryView; label: string; unavailable?: stri
 /**
  * 카드에 붙는 이름표. 거르기 단추와 같은 말을 쓴다 — 둘이 다르면 어느 단추로 찾을지 모른다.
  *
- * 예전 캐릭터 결과는 거르기 단추가 없다. 「전체」에서만 보이고 이름표는 「캐릭터」다.
+ * 캐릭터는 작업물 거르기 단추가 없다(「캐릭터」 단추는 캐릭터 화면이다). 「전체」에서 보이고 이름표는 「캐릭터」다.
  */
 export function originLabel(origin: WorkOrigin): string {
   if (origin === "character") return "캐릭터";
@@ -86,7 +86,7 @@ function hasPicture(work: FilterableWork): boolean {
 }
 
 /**
- * **전체에는 예전 캐릭터 결과도 넣는다.** 「캐릭터」 단추가 캐릭터 화면이 되어, 빼면 어디서도
+ * **전체에는 캐릭터도 넣는다**(2026-10-08 — 캐릭터 목록 카드도 같은 `origin`). 「캐릭터」 단추가 캐릭터 화면이 되어, 빼면 어디서도
  * 안 보인다(운영 1건 — 원본 캐릭터는 이미 지워져 캐릭터 화면에 없다).
  */
 export function filterWorks<T extends FilterableWork>(works: readonly T[], filter: WorkFilterId, easyWorkIds: ReadonlySet<string>): T[] {

@@ -44,6 +44,18 @@ function reply(url: string, method: string): Response {
     ] });
   }
   if (url.startsWith("/api/easy/works")) return json({ ok: true, workIds: [] });
+  if (url.startsWith("/api/characters")) {
+    return json({ ok: true, characters: [{
+      id: "char-1", name: "호랑이", kind: "character", look: "3d", createdAt: "2026-10-08T01:00:00.000Z", mine: true,
+      views: [
+        { angle: "front", url: "https://img/char-front.png?token=a", thumbUrl: "https://img/char-front.thumb.webp" },
+        { angle: "back", url: "https://img/char-back.jpg?token=b", thumbUrl: null },
+      ],
+    }, {
+      id: "char-team", name: "팀원 캐릭터", kind: "person", look: "photoreal", createdAt: "2026-10-08T01:00:00.000Z", mine: false,
+      views: [{ angle: "front", url: "https://img/team.png", thumbUrl: null }],
+    }], angles: [{ id: "front", label: "정면" }, { id: "back", label: "뒷면" }] });
+  }
   if (url.startsWith("/api/library?id=")) {
     return json({ ok: true, images: [
       { position: 0, mimeType: "image/jpeg", url: "https://img/ad-0.jpg" },
@@ -102,7 +114,7 @@ describe("작업물 화면과 한 줄 거르기", () => {
     await act(async () => { view = create(<WorksTab onSummary={onSummary} />); });
     await flush();
     expect(onSummary).toHaveBeenLastCalledWith({
-      counts: { all: 3, easy: 0, poster: 1, sns: 1, ad: 1, create: 0, redesign: 0 },
+      counts: { all: 4, easy: 0, poster: 1, sns: 1, ad: 1, create: 0, redesign: 0 },
       easyKnown: true,
     });
   });
@@ -148,5 +160,110 @@ describe("광고소재 그림 내려받기 이름", () => {
     await flush();
     const names = (gallery.open.mock.calls[0]![0] as { images: Array<{ name: string }> }).images.map((image) => image.name);
     expect(names).toEqual(["봄 세일 · 광고 규격 2개 1번째.jpg", "봄 세일 · 광고 규격 2개 2번째.png"]);
+  });
+});
+
+/**
+ * **캐릭터도 생성 결과다**(2026-10-08 사용자 — 「이 시스템에서 생성한 모든 것은 생성 결과」). 「전체」에
+ * 정면 한 장 카드로 섞여 나오고 숫자에도 든다. 누르면 각도를 넘겨 보고, 지우기는 캐릭터 만들기 화면이 한다.
+ */
+describe("캐릭터도 전체에", () => {
+  it("전체에 캐릭터 카드가 정면 한 장으로 나온다", async () => {
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(text()).toContain("호랑이");
+    expect(text()).toContain("캐릭터");
+  });
+
+  it("누르면 모든 각도를 넘겨 본다", async () => {
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    const card = view.root.find((node) => typeof node.type === "string" && typeof node.props.onClick === "function"
+      && String(node.props.className ?? "").includes("cursor-pointer")
+      && node.findAll((child) => child.children.includes("호랑이")).length > 0);
+    await act(async () => { card.props.onClick(); });
+    await flush();
+    const images = (gallery.open.mock.calls[0]![0] as { images: Array<{ src: string }> }).images;
+    const request = gallery.open.mock.calls[0]![0] as { images: Array<{ src: string; name: string; meta: Array<[string, string]> }> };
+    expect(images.map((image) => image.src)).toEqual(["https://img/char-front.png?token=a", "https://img/char-back.jpg?token=b"]);
+    // 받을 때는 실제 형식대로 이름 붙인다(리뷰). 같은 그림이 캐릭터 화면에서와 다른 이름이면 안 된다.
+    expect(request.images.map((image) => image.name)).toEqual(["호랑이 정면.png", "호랑이 뒷면.jpg"]);
+    // 내 캐릭터는 「확인할 수 없음」 이 아니라 「나」.
+    expect(request.images[0]!.meta).toContainEqual(["만든 사람", "나"]);
+  });
+
+  /** 캐릭터는 캐릭터 표와 참고 이미지에 함께 있다. 여기서 지우면 한쪽만 사라진다 — 만들기 화면이 지운다. */
+  it("지우기 단추는 없다", async () => {
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(view.root.findAll((node) => node.props["aria-label"] === "호랑이 지우기")).toHaveLength(0);
+  });
+
+  it("관리자가 전체 회원을 보면 캐릭터도 전체 범위로 묻는다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url, method });
+      if (url.startsWith("/api/showcase/manage")) return json({ ok: true, items: [] });
+      if (url.startsWith("/api/admin/works")) return json({ ok: true, sns: [], poster: [], easyWorkIds: [] });
+      return reply(url, method);
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(calls.some((call) => call.url === "/api/characters?scope=all")).toBe(true);
+  });
+
+  /** 첫 화면 갤러리는 작업물·카드뉴스·포스터만 건다. 캐릭터에 「첫 화면에 걸기」를 내면 눌러도 실패한다. */
+  it("관리자에게도 캐릭터에는 「첫 화면에 걸기」가 없다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url.startsWith("/api/showcase/manage")) return json({ ok: true, items: [] });
+      if (url.startsWith("/api/admin/works")) return json({ ok: true, sns: [], poster: [], easyWorkIds: [] });
+      return reply(url, method);
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    const card = view.root.find((node) => typeof node.type === "string" && typeof node.props.onClick === "function"
+      && String(node.props.className ?? "").includes("cursor-pointer")
+      && node.findAll((child) => child.children.includes("호랑이")).length > 0);
+    await act(async () => { card.props.onClick(); });
+    await flush();
+    expect((gallery.open.mock.calls[0]![0] as { action?: unknown }).action).toBeUndefined();
+  });
+});
+
+describe("캐릭터 — 테두리", () => {
+  /** 회원 목록은 같은 팀 사람 것이 섞여 올 수 있다. 작업물처럼 내 것만 둔다. */
+  it("회원 화면에서는 남의 캐릭터를 빼낸다", async () => {
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(text()).not.toContain("팀원 캐릭터");
+  });
+
+  /** 캐릭터를 못 읽어도 다른 생성 결과는 그대로 나오고, 왜 캐릭터가 없는지 말한다. */
+  it("캐릭터를 못 읽어도 다른 생성 결과는 나오고 까닭을 말한다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/characters")) return new Response("{}", { status: 500 });
+      return reply(url, init?.method ?? "GET");
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(text()).toContain("포스터 하나");
+    expect(text()).toContain("캐릭터를 불러오지 못했습니다");
+  });
+
+  /** 캐릭터가 늦게 와도 다른 생성 결과는 먼저 그린다(리뷰). 캐릭터는 도착하는 대로 더한다. */
+  it("캐릭터를 기다리지 않고 다른 생성 결과를 먼저 그린다", async () => {
+    let release: (value: Response) => void = () => undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/characters")) return new Promise<Response>((resolve) => { release = resolve; });
+      return reply(url, init?.method ?? "GET");
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(text()).toContain("포스터 하나");
+    expect(text()).not.toContain("호랑이");
+    await act(async () => { release(reply("/api/characters", "GET")); });
+    await flush();
+    expect(text()).toContain("호랑이");
   });
 });

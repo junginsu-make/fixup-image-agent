@@ -20,6 +20,7 @@ import {
 } from "./work-filter";
 import type { WorksSummary } from "./library-view-bar";
 import { readEasyWorks, stepsHref, type EasyWorks } from "./easy-href";
+import { readCharacterWorks } from "./character-works";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -60,7 +61,7 @@ type Tool = WorkTool;
  */
 interface WorkImage {
   url: string; label: string; index: number;
-  /** 내려받을 이름의 확장자. 광고소재만 싣는다 — 규격이 JPG 인데 `.png` 로 받으면 안 된다(2026-10-08). */
+  /** 내려받을 이름의 확장자. 광고소재·캐릭터만 싣는다 — 실제로는 JPG 인데 `.png` 로 받으면 안 된다(2026-10-08). */
   ext?: string;
 }
 
@@ -101,13 +102,15 @@ interface Work {
   /** 사용자가 정한 값들. 이름과 값 쌍으로 그대로 보여준다. */
   settings: Array<[string, string]>;
   href: string;
-  /** 예전 캐릭터 만들기 결과. 「전체」에 「캐릭터」 이름표로 보인다(`work-filter.ts`). */
+  /** 캐릭터(예전 라이브러리 줄·캐릭터 목록 카드). 「전체」에 「캐릭터」 이름표로 보인다(`work-filter.ts`). */
   origin?: "character";
   sourceId?: string | null;
   documentId?: string;
   documentOwner?: string;
   /** 문서 목록을 못 읽어 문서인지만 아는 카드. 지우지 않는다(`library-works.ts`). */
   documentUnconfirmed?: boolean;
+  /** 캐릭터 표에서 온 카드. 첫 화면 갤러리는 캐릭터를 걸지 못한다(`character-works.ts`). */
+  characterId?: string;
 }
 
 /**
@@ -237,6 +240,11 @@ function toPosterWork(project: Record<string, any>): Work {
  * **못 읽어도 목록을 비우지 않는다.** 카드뉴스·포스터가 이미 와 있는데 이것
  * 하나 때문에 화면이 통째로 비면, 사용자는 작업이 사라진 줄 안다.
  */
+/** 최신순. 작업물과 캐릭터를 함께 세운다. */
+function newestFirst(left: { updatedAt?: string }, right: { updatedAt?: string }): number {
+  return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+}
+
 async function readLibraryWorks(allMembers: boolean, onError?: (message:string)=>void) {
   let legacy: LibraryWork[] = [];
   try {
@@ -391,8 +399,8 @@ export function WorksTab({ filter = "all", onSummary }: {
       // 자기 것, 그리고 관리자. 잘못 올라온 것을 내릴 사람이 아무도 없으면
       // 그대로 남는다. 되돌릴 수 없는 일이라 누른 뒤 한 번 더 묻는다.
       onDelete: canDelete(work) ? () => askDelete(work) : undefined,
-      // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다.
-      action: showcase
+      // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다. 캐릭터는 갤러리 갈래가 없어 못 건다.
+      action: showcase && !work.characterId
         ? {
             label: "첫 화면에 걸기",
             doneLabel: "첫 화면에 걸림",
@@ -464,7 +472,7 @@ export function WorksTab({ filter = "all", onSummary }: {
    * 지우기 단추를 낼까. 자기 것, 그리고 관리자.
    *
    * **캐릭터 결과는 여기서 안 지운다.** 캐릭터 표와 라이브러리 양쪽에 있어, 여기서
-   * 지우면 라이브러리 쪽만 사라지고 캐릭터 탭에는 그대로 남는다. 캐릭터 탭에서 지운다.
+   * 지우면 한쪽만 사라진다. 캐릭터 만들기 화면에서 지운다(캐릭터 목록 카드도 같다).
    */
   function canDelete(work: Work): boolean {
     return work.origin !== "character" && (work.documentId ? work.mine : (work.mine || isAdmin === true));
@@ -545,6 +553,11 @@ export function WorksTab({ filter = "all", onSummary }: {
     setWorks(null);
     setEasyIds(null);
     setEasyConversations(null);
+    /*
+      **캐릭터는 기다리지 않는다**(2026-10-08 리뷰). 관리자는 전체 회원 캐릭터를 서명하느라 늦을 수 있다 —
+      같은 순간에 묻되, 다른 생성 결과를 먼저 그리고 캐릭터는 도착하는 대로 더한다.
+    */
+    const characters = readCharacterWorks(allMembers, (text) => { if (alive) setNotice(text); });
     void (async () => {
       try {
         // 전체를 볼 때는 관리자 전용 길로 한 번에 읽는다. 회원용 목록은 자기
@@ -580,7 +593,10 @@ export function WorksTab({ filter = "all", onSummary }: {
               ];
             })();
         if (!alive) return;
-        setWorks(merged.sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "")));
+        setWorks(merged.sort(newestFirst));
+        // 캐릭터도 생성 결과다 — 「전체」에 섞는다(2026-10-08, `character-works.ts`).
+        const arrived = await characters;
+        if (alive && arrived.length) setWorks((current) => [...(current ?? []), ...arrived].sort(newestFirst));
       } catch (error) {
         // 화면을 통째로 지우지 않는다. 전체 보기가 실패했는데 목록까지
         // 사라지면 「내 것만 보기」로 돌아갈 단추마저 없어진다.
