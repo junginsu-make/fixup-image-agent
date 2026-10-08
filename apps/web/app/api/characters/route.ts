@@ -18,7 +18,7 @@ import {
   listCharacters,
 } from "../../../lib/characters";
 import {
-  CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, OWN_WITH_EXTRACT_MESSAGE, selectCharacterModel,
+  CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, OWN_WITH_EXTRACT_MESSAGE, VISIBLE_PDP_MODELS, selectCharacterModel,
   type CharacterAngle,
 } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
@@ -155,12 +155,10 @@ export async function GET(req: Request) {
        * (`DEFAULT_EXTRA_ANGLES`)은 옛 호출을 위해 그대로 둔다.
        */
       defaultAngles: [],
-      // 화면이 모델을 고를 수 있어야 한다. 목록을 여기서 준다 —
-      // 이미지 만들기와 같은 목록이다.
-      models: IMAGE_MODELS.map((model) => ({
+      // 화면이 모델을 고를 수 있어야 한다. 이미지 만들기와 같은 보이는 셋만 준다.
+      // 숨긴 모델은 옛 캐릭터 각도를 다시 만들 때만 서버가 받는다(POST 검증은 전체 목록).
+      models: VISIBLE_PDP_MODELS.map((model) => ({
         id: model.id, label: model.label, description: model.description,
-        // 아직 우리 쓰임에서 재 보지 않은 모델. 화면이 그렇게 표시한다.
-        untested: Boolean(model.characterOnly),
       })),
     });
   } catch (error) {
