@@ -87,6 +87,7 @@ describe("카드 머리의 딱지", () => {
 describe("모델 고르기", () => {
   it("**내부 모델 이름을 보여 주지 않는다** — 비개발자에게 뜻이 없다", () => {
     expect(panels).not.toContain("{models[model].id}");
-    expect(panels).toContain("{models[model].hint}");
+    // 세 모델은 공용 부품이 정본 이름·설명으로 그린다(2026-10-08). 내부 id 는 거기서도 안 보인다.
+    expect(panels).toContain("<ImageModelPicker");
   });
 });

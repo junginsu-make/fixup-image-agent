@@ -61,33 +61,44 @@ describe("가장 가까운 열거 비율 찾기", () => {
 
 describe("비율이 모델보다 우선한다", () => {
   it("고른 모델이 할 수 있으면 그대로 둔다", () => {
-    const choice = chooseModelForRatio("1:1", "nano-banana", IMAGE_MODELS);
+    const choice = chooseModelForRatio("1:1", "nano-banana");
     expect(choice.model.id).toBe("nano-banana");
     expect(choice.switched).toBe(false);
   });
 
   it("못 하면 할 수 있는 모델로 바꾼다", () => {
     // A4 인쇄용은 픽셀을 직접 지정해야 해서 열거 모델로는 못 만든다.
-    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    const choice = chooseModelForRatio("a4-print", "nano-banana");
     // **id 를 못 박지 않는다.** 여기서 묻는 것은 「픽셀을 지정할 수 있는 모델로
     // 바꾸는가」이지 어느 모델인가가 아니다. 기본이 바뀌면 여기도 따라와야 하는데,
     // id 를 적어 두면 기본을 옮길 때마다 뜻과 무관하게 고치게 된다.
     expect(choice.model.pixelSizeLimits, "픽셀을 지정할 수 있어야 한다").toBeTruthy();
     expect(choice.switched).toBe(true);
-    // 이름과 조사가 함께 맞아야 한다 — 「경제형 은 … 표준형 로」가 아니라.
-    expect(choice.reason).toContain("경제형은");
+    // 이름과 조사가 함께 맞아야 한다 — 「이전 방식 은 … 표준형 로」가 아니라.
+    expect(choice.reason).toContain("이전 방식은");
     expect(choice.reason).toContain("표준형으로");
   });
 
   it("첨부 비율 그대로는 픽셀을 지정할 수 있는 모델이라야 한다", () => {
-    const choice = chooseModelForRatio(MATCH_SOURCE, "nano-banana-pro", IMAGE_MODELS);
+    const choice = chooseModelForRatio(MATCH_SOURCE, "nano-banana-pro");
     expect(choice.model.pixelSizeLimits).toBeTruthy();
     expect(choice.switched).toBe(true);
   });
 
+  it("숨긴 모델로 만든 그림은 그 모델로 그대로 고친다", () => {
+    expect(chooseModelForRatio("4:5", "gpt-image-2")).toMatchObject({ model: { id: "gpt-image-2" }, switched: false });
+  });
+
+  it("대체는 보이는 모델로만 — A4 인쇄용이면 표준형", () => {
+    expect(chooseModelForRatio("a4-print", "nano-banana-2.1")).toMatchObject({
+      model: { id: "gpt-image-2.5-flare" },
+      switched: true,
+    });
+  });
+
   it("바꿀 이유를 남긴다", () => {
     // 조용히 바꾸면 사용자는 자기가 고른 모델로 만든 줄 안다.
-    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    const choice = chooseModelForRatio("a4-print", "nano-banana");
     expect(choice.reason).toBeTruthy();
   });
 
@@ -100,7 +111,7 @@ describe("비율이 모델보다 우선한다", () => {
    * 붙이므로 뺀다.
    */
   it("안내에 비율의 화면 이름을 쓴다", () => {
-    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    const choice = chooseModelForRatio("a4-print", "nano-banana");
 
     expect(choice.reason).not.toContain("a4-print");
     expect(choice.reason).toContain("A4 인쇄용을");
@@ -115,13 +126,13 @@ describe("비율이 모델보다 우선한다", () => {
   });
 
   it("모르는 모델을 주면 기본 모델로 본다", () => {
-    const choice = chooseModelForRatio("1:1", "없는-모델", IMAGE_MODELS);
+    const choice = chooseModelForRatio("1:1", "없는-모델");
     // 「기본이 무엇인가」는 목록이 정한다. 여기서 다시 적으면 두 곳이 갈린다.
     expect(choice.model.id).toBe(IMAGE_MODELS.find((model) => model.isDefault)!.id);
   });
 
   it("아무도 못 하는 비율이면 알린다", () => {
-    const choice = chooseModelForRatio("없는-비율", "gpt-image-2", IMAGE_MODELS);
+    const choice = chooseModelForRatio("없는-비율", "gpt-image-2");
     expect(choice.reason).toBeTruthy();
   });
 });

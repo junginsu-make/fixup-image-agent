@@ -176,14 +176,32 @@ describe("위쪽 띠", () => {
     await 띄운다(보기({ phase: "generate", elapsedSeconds: 3 }));
 
     const 글 = 그려진것();
-    expect(글).toContain("정밀형");
+    // 옛 계획(imageModel 없음, openai)은 그때 그린 모델 — 표준형이다(2026-10-08).
+    expect(글).toContain("표준형");
+    expect(글).not.toContain("정밀형");
     expect(글).toContain("성공 시 현재 요청에서 최대");
   });
 
-  it("**정밀형이 2분을 넘기면 늦어질 수 있다고 말한다**", async () => {
+  it("**고른 그림 모델 이름을 말한다**", async () => {
+    await 띄운다(보기({ phase: "generate", elapsedSeconds: 3 }), {
+      plan: { model: "google", imageModel: "nano-banana-2.1", count: 1, startedAt: Date.now() },
+    });
+
+    expect(그려진것()).toContain("속도형");
+  });
+
+  it("**표준형이 2분을 넘기면 늦어질 수 있다고 말한다**", async () => {
     await 띄운다(보기({ phase: "generate", elapsedSeconds: 130, estimateSeconds: 600 }));
 
-    expect(그려진것()).toContain("2분 이상 걸릴 수 있습니다");
+    expect(그려진것()).toContain("표준형은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다");
+  });
+
+  it("Google 계열은 그 말을 하지 않는다 — 그 말은 GPT 그림을 두고 한 것이다", async () => {
+    await 띄운다(보기({ phase: "generate", elapsedSeconds: 130, estimateSeconds: 600 }), {
+      plan: { model: "google", imageModel: "nano-banana-pro", count: 1, startedAt: Date.now() },
+    });
+
+    expect(그려진것()).not.toContain("2분 이상 걸릴 수 있습니다");
   });
 });
 

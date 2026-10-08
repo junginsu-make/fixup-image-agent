@@ -1,4 +1,4 @@
-import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
+import { IMAGE_MODELS, VISIBLE_IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
 import { imageCredits } from "@fixup/shared";
 
 /**
@@ -48,9 +48,9 @@ function 한장당(id: string): number {
  * 말하는 모델과 표의 모델이 조용히 갈린다.
  */
 export const LANDING_CREDITS = {
-  정밀형: 한장당("gpt-image-2"),
-  속도형: 한장당("nano-banana-pro"),
-  경제형: 한장당("nano-banana"),
+  표준형: 한장당("gpt-image-2.5-flare"),
+  디테일형: 한장당("nano-banana-pro"),
+  속도형: 한장당("nano-banana-2.1"),
 } as const;
 
 /**
@@ -60,6 +60,6 @@ export const LANDING_CREDITS = {
  * 정산에 쓰는 값이 아니다.
  */
 export const LANDING_COST_SPREAD = (() => {
-  const 값 = IMAGE_MODELS.map((model) => unitPrice(model, "t2i", 기준크기));
+  const 값 = VISIBLE_IMAGE_MODELS.map((model) => unitPrice(model, "t2i", 기준크기));
   return (Math.max(...값) / Math.min(...값)).toFixed(1);
 })();

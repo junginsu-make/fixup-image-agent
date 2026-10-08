@@ -1,6 +1,6 @@
 import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
-import { IMAGE_MODELS, REVIEW_CRITERIA } from "@fixup/pdp-core";
+import { REVIEW_CRITERIA, VISIBLE_PDP_MODELS } from "@fixup/pdp-core";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -15,7 +15,7 @@ export const metadata = guideMetadata("/guide/detail-page");
 const 단계 = CREATE_STEPS.image.map((step) => step.label);
 
 /** 한 번에 보내는 장 수(모델마다 다르다). 「3장 또는 6장」처럼 읽힌다. */
-const 묶음 = [...new Set(IMAGE_MODELS.filter((model) => !model.characterOnly).map((model) => model.maxBatchSize))]
+const 묶음 = [...new Set(VISIBLE_PDP_MODELS.filter((model) => !model.characterOnly).map((model) => model.maxBatchSize))]
   .sort((a, b) => a - b)
   .map((size) => `${size}장`)
   .join(" 또는 ");

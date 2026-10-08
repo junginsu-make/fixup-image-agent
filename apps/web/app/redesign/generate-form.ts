@@ -15,7 +15,10 @@ export type GenerateFieldsInput = {
   knowledgeText: string;
   useKnowledge: boolean;
   request: string;
+  /** 분석 AI(openai/google). 고른 그림 모델에서 나온다(`analysisProviderFor`). */
   model: string;
+  /** 고른 그림 모델(2026-10-08, 세 모델). 없으면 서버가 `model` 에서 옛 규칙으로 읽는다. */
+  imageModel?: string;
   channel: string;
   ratio: string;
   look: string;
@@ -75,6 +78,7 @@ export function appendGenerateFields(form: FormData, input: GenerateFieldsInput)
   form.append("useKnowledge", String(input.useKnowledge));
   form.append("request", input.request);
   form.append("model", input.model);
+  if (input.imageModel) form.append("imageModel", input.imageModel);
   form.append("channel", input.channel);
   form.append("ratio", input.ratio);
   form.append("look", input.look);

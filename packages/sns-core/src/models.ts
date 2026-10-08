@@ -1,3 +1,5 @@
+import { imageModelName, imageModelSummary, isVisibleImageModel } from "@fixup/shared";
+
 export type ImageMode = "t2i" | "i2i";
 
 export interface PixelSize { width: number; height: number }
@@ -111,6 +113,9 @@ const NANO_RATIOS_11 = ["auto","21:9","16:9","3:2","4:3","5:4","1:1","4:5","3:4"
  * `layout-core/image-request.ts` 의 `planSlotImage` 가 동점일 때 앞을 고른다.
  * flare 와 gpt-image-2 는 픽셀 한계가 같아 **항상 동점**이므로, 새 기본을
  * 맨 앞에 둔다.
+ *
+ * 보이는 셋이 앞, 숨긴 것이 뒤. `planSlotImage` 동점이면 앞을 고른다 — 속도형이
+ * nano-banana-2 보다 앞이어야 한다.
  */
 export const IMAGE_MODELS: ImageModel[] = [
   {
@@ -123,9 +128,9 @@ export const IMAGE_MODELS: ImageModel[] = [
      * 싸다.
      */
     id: "gpt-image-2.5-flare",
-    label: "표준형",
+    label: imageModelName("gpt-image-2.5-flare"),
     family: "gpt-image",
-    note: "빠르고 값이 낮습니다. 참고 그림을 가장 많이 받습니다",
+    note: imageModelSummary("gpt-image-2.5-flare"),
     isDefault: true,
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/flare/text-to-image", table: GPT25_MAX },
@@ -133,6 +138,39 @@ export const IMAGE_MODELS: ImageModel[] = [
     maxReferenceImages: 16,
     batchMax: 4,
     pixelSizeLimits: { minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3 },
+  },
+  {
+    id: "nano-banana-pro",
+    label: imageModelName("nano-banana-pro"),
+    family: "nano-banana",
+    note: imageModelSummary("nano-banana-pro"),
+    t2i: { endpoint: "fal-ai/nano-banana-pro", flatUsd: 0.15 },
+    i2i: { endpoint: "fal-ai/nano-banana-pro/edit", flatUsd: 0.15 },
+    maxReferenceImages: 14,
+    batchMax: 4,
+    supportedRatios: NANO_RATIOS_11,
+    fixedResolution: "2K",
+    resolutionMultiplier: 1,
+  },
+  {
+    id: "nano-banana-2.1",
+    label: imageModelName("nano-banana-2.1"),
+    family: "nano-banana",
+    note: imageModelSummary("nano-banana-2.1"),
+    /*
+      **단가는 실측 전 어림이다**(2026-10-08). fal 은 토큰으로 매긴다 — 공표값은 2K
+      $0.059(생성)·$0.063(참고 2장 편집), 짧은 프롬프트 기준이다. 우리 프롬프트는
+      길고 참고 그림이 붙어 그 위로 나온다. 적게 잡는 쪽이 위험해 위쪽 값으로 둔다.
+      실측하면 이 줄과 `model_prices` 행을 함께 고친다.
+    */
+    t2i: { endpoint: "google/nano-banana-2.1", flatUsd: 0.09 },
+    i2i: { endpoint: "google/nano-banana-2.1/edit", flatUsd: 0.09 },
+    maxReferenceImages: 14,
+    batchMax: 4,
+    supportedRatios: NANO_RATIOS_15,
+    // fal 기본은 1K 다. 1K 에서 작은 글씨가 흐리다(DeepMind 모델 카드) — 2K 로 못 박는다.
+    fixedResolution: "2K",
+    resolutionMultiplier: 1,
   },
   {
     /**
@@ -149,9 +187,8 @@ export const IMAGE_MODELS: ImageModel[] = [
      * (`pdp/images/batch/route.ts`), 95초 × 3장이면 285초다.
      */
     id: "gpt-image-2.5-sunburst",
-    label: "정밀형 플러스",
+    label: imageModelName("gpt-image-2.5-sunburst"),
     family: "gpt-image",
-    note: "글자 배치 지시를 더 잘 지킵니다. 대신 두 배 느립니다",
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/sunburst/text-to-image", table: GPT25_MAX },
     i2i: { endpoint: "openai/gpt-image-2.5/sunburst/edit", table: GPT25_MAX },
@@ -165,7 +202,7 @@ export const IMAGE_MODELS: ImageModel[] = [
      * id 에 던진다 — 지우면 그 작업들이 500 이 된다.
      */
     id: "gpt-image-2",
-    label: "정밀형",
+    label: imageModelName("gpt-image-2"),
     family: "gpt-image",
     /*
       **고르는 목록에 있다**(2026-09-21 사용자 — 「쉽게 만들기 모드에서 이미지
@@ -175,7 +212,6 @@ export const IMAGE_MODELS: ImageModel[] = [
       **글자가 가장 정확한 판**이라 고를 까닭이 있다. 그래서 설명도 「옛것」이
       아니라 **무엇에 좋은지**로 적는다.
     */
-    note: "한글 글자가 가장 정확합니다. 명조 계열도 표현합니다",
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,
@@ -183,23 +219,9 @@ export const IMAGE_MODELS: ImageModel[] = [
     pixelSizeLimits: { minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3 },
   },
   {
-    id: "nano-banana-pro",
-    label: "속도형",
-    family: "nano-banana",
-    note: "인물 실사에 강한 편입니다. 값이 한 장에 고정입니다",
-    t2i: { endpoint: "fal-ai/nano-banana-pro", flatUsd: 0.15 },
-    i2i: { endpoint: "fal-ai/nano-banana-pro/edit", flatUsd: 0.15 },
-    maxReferenceImages: 14,
-    batchMax: 4,
-    supportedRatios: NANO_RATIOS_11,
-    fixedResolution: "2K",
-    resolutionMultiplier: 1,
-  },
-  {
     id: "nano-banana-2",
-    label: "속도형 라이트",
+    label: imageModelName("nano-banana-2"),
     family: "nano-banana",
-    note: "지원하는 비율이 가장 넓습니다. 띠 모양까지 됩니다",
     t2i: { endpoint: "fal-ai/nano-banana-2", flatUsd: 0.08 },
     i2i: { endpoint: "fal-ai/nano-banana-2/edit", flatUsd: 0.08 },
     maxReferenceImages: 14,
@@ -210,9 +232,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "nano-banana",
-    label: "경제형",
+    label: imageModelName("nano-banana"),
     family: "nano-banana",
-    note: "가장 쌉니다. 대신 참고 그림 7장까지입니다",
     t2i: { endpoint: "fal-ai/nano-banana", flatUsd: 0.039 },
     i2i: { endpoint: "fal-ai/nano-banana/edit", flatUsd: 0.039 },
     maxReferenceImages: 7,
@@ -220,6 +241,14 @@ export const IMAGE_MODELS: ImageModel[] = [
     supportedRatios: NANO_RATIOS_11,
   },
 ];
+
+/** 고르는 화면과 자동 대체가 쓰는 목록. 저장된 id 를 찾을 때는 `IMAGE_MODELS`·`modelById`. */
+export const VISIBLE_IMAGE_MODELS: ImageModel[] = IMAGE_MODELS.filter((model) => isVisibleImageModel(model.id));
+
+export function visibleModelOrDefault(id: string | null | undefined): string {
+  if (isVisibleImageModel(id)) return id as string;
+  return (IMAGE_MODELS.find((model) => model.isDefault) ?? IMAGE_MODELS[0]!).id;
+}
 
 export function modelById(id: string): ImageModel {
   const found = IMAGE_MODELS.find((model) => model.id === id);

@@ -40,7 +40,7 @@ export function sectionSortNumber(sectionId: string) {
 }
 
 
-export function addSectionRevision(section: SectionResult, nextImageUrl: string, nextPrompt: string, request: string, model: Model): SectionResult {
+export function addSectionRevision(section: SectionResult, nextImageUrl: string, nextPrompt: string, request: string, model: Model, imageModel?: string): SectionResult {
   const history = ensureSectionRevisions(section);
   const nextRevision: SectionRevision = {
     id: `revision-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -48,7 +48,8 @@ export function addSectionRevision(section: SectionResult, nextImageUrl: string,
     label: `수정 ${history.length}`,
     createdAt: new Date().toISOString(),
     request,
-    model
+    model,
+    imageModel
   };
 
   return {

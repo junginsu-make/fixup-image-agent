@@ -463,3 +463,16 @@ describe("기획에 드는 값", () => {
     expect(호출).toContain("promptMode,");
   });
 });
+
+describe("이미지 만들기 모델 고르기", () => {
+  const src = readFileSync(new URL("../new-client.tsx", import.meta.url), "utf8");
+
+  it("ImageModelPicker 를 쓴다", () => {
+    expect(src).toContain("<ImageModelPicker");
+    expect(src).not.toContain("IMAGE_MODELS.map(");
+  });
+
+  it("다시 열 때 숨긴 모델은 보이는 모델로 바꾼다", () => {
+    expect(src).toContain("setModelId(visibleModelOrDefault(seed.modelId))");
+  });
+});

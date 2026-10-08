@@ -60,6 +60,10 @@ const ENDPOINTS: Record<ImageModelId, { textToImage: string; edit: string }> = {
   },
   "gpt-image-2": { textToImage: "openai/gpt-image-2", edit: "openai/gpt-image-2/edit" },
   "nano-banana-pro": { textToImage: "fal-ai/nano-banana-pro", edit: "fal-ai/nano-banana-pro/edit" },
+  "nano-banana-2.1": {
+    textToImage: "google/nano-banana-2.1",
+    edit: "google/nano-banana-2.1/edit",
+  },
   "nano-banana-2": { textToImage: "fal-ai/nano-banana-2", edit: "fal-ai/nano-banana-2/edit" },
   "nano-banana": { textToImage: "fal-ai/nano-banana", edit: "fal-ai/nano-banana/edit" },
   "seedream-5-pro": {
@@ -210,7 +214,7 @@ export function buildFalPayload(model: ImageModelId, input: ImageProviderInput):
     output_format: "png",
   };
 
-  if (model === "nano-banana-pro") {
+  if (model === "nano-banana-pro" || model === "nano-banana-2.1") {
     // 아트 디렉션을 시스템 쪽으로 빼면 프롬프트가 짧아져 실측에서 시간이 40% 줄었다.
     payload.resolution = "2K";
     if (systemPrompt) payload.system_prompt = systemPrompt;

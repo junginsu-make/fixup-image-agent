@@ -11,7 +11,8 @@ import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
-import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, RATIO_USES, chooseModelForRatio } from "@fixup/sns-core";
+import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, RATIO_USES, chooseModelForRatio, visibleModelOrDefault } from "@fixup/sns-core";
+import { ImageModelPicker } from "../_components/image-model-picker";
 import {
   DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
@@ -249,7 +250,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 죽어 있었다** — 사용자는 광고와 상관없어 보이는 문구만 봤다.
    */
   const submitRatio = effectiveRatio(adMode, ratio);
-  const choice = chooseModelForRatio(submitRatio, modelId, IMAGE_MODELS);
+  const choice = chooseModelForRatio(submitRatio, modelId);
   const estimate = estimatePosterCost({
     modelId: choice.model.id, ratioId: submitRatio, variants,
     hasReferences,
@@ -349,7 +350,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       setTitle(seed.title);
       setInstruction(seed.instruction);
       setRatio(seed.ratio);
-      if (seed.modelId) setModelId(seed.modelId);
+      if (seed.modelId) setModelId(visibleModelOrDefault(seed.modelId));
       setVariants(seed.variants);
       setLook(seed.look);
       setPromptMode(seed.promptMode);
@@ -759,26 +760,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               </div>
             )}
 
-            <fieldset className="grid gap-2">
-              <legend className="text-meta text-subtle-foreground">모델</legend>
-              <div className="flex flex-wrap gap-2">
-                {IMAGE_MODELS.map((model) => (
-                  <Button
-                    key={model.id}
-                    type="button"
-                    size="sm"
-                    variant={modelId === model.id ? "default" : "secondary"}
-                    onClick={() => setModelId(model.id)}
-                  >
-                    {model.label}
-                  </Button>
-                ))}
-              </div>
+            <div className="grid gap-2">
+              <ImageModelPicker legend="모델" value={modelId} onChange={setModelId} />
               {/* 조용히 바꾸면 사용자는 자기가 고른 모델로 만든 줄 안다. */}
               {choice.switched ? (
                 <p role="status" className="text-sm text-amber-700">{choice.reason}</p>
               ) : null}
-            </fieldset>
+            </div>
 
             <fieldset className="grid gap-2">
               <legend className="text-meta text-subtle-foreground">변형 장수</legend>

@@ -39,6 +39,8 @@ describe("같은 입력이면 같은 키", () => {
 describe("무엇이 바뀌면 다른 요청인가", () => {
   const 달라져야_하는_것: Array<[string, Partial<RequestIdentityInput>]> = [
     ["모델", { model: "google" }],
+    // 디테일형·속도형은 분석 AI 가 같은 Google 이다. 그림 모델이 빠지면 같은 키로 나간다.
+    ["그림 모델", { imageModel: "nano-banana-2.1" }],
     ["시작 섹션", { startSection: 2 }],
     ["장수", { count: 3 }],
     ["이어 만드는 작업", { baseProject: { id: "proj-1" } }],

@@ -6,7 +6,6 @@ import {
   IMAGE_LOOK_HINT,
   IMAGE_LOOK_LABEL,
   IMAGE_LOOKS,
-  IMAGE_MODELS,
   hasStyleSource,
   lookBlockedReason,
   resolveLook,
@@ -18,6 +17,7 @@ import {
 } from "@fixup/sns-core";
 import { Badge, Card, CardContent, Label, Textarea } from "@fixup/ui";
 import { estimateCost } from "../cost-estimate";
+import { ImageModelPicker } from "../../_components/image-model-picker";
 
 export interface SnsSpec {
   ratio: string;
@@ -97,7 +97,7 @@ export function SpecPicker({ spec, onChange, attachments }: {
 
       <div className="grid gap-5 md:grid-cols-2">
         <label className="grid gap-2"><Label htmlFor="sns-language">언어</Label><select id="sns-language" className="h-10 rounded-md border bg-background px-3 text-sm" value={spec.language} onChange={(event) => onChange({ ...spec, language: event.target.value as SnsSpec["language"] })}><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
-        <label className="grid gap-2"><Label htmlFor="sns-model">이미지 모델</Label><select id="sns-model" className="h-10 rounded-md border bg-background px-3 text-sm" value={spec.modelId} onChange={(event) => onChange({ ...spec, modelId: event.target.value })}>{IMAGE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}{model.isDefault ? " · 기본" : ""}</option>)}</select></label>
+        <ImageModelPicker legend="이미지 모델" value={spec.modelId} onChange={(id) => onChange({ ...spec, modelId: id })} />
       </div>
 
       <section className="grid gap-3">

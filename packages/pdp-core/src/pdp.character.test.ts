@@ -14,7 +14,7 @@ import {
   selectCharacterModel,
 } from "./pdp.character";
 import { OWN_WITH_EXTRACT_MESSAGE } from "./pdp.character-own";
-import { IMAGE_LOOKS, imageLookDirective } from "@fixup/shared";
+import { imageLookDirective } from "@fixup/shared";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { IMAGE_MODELS } from "./types";
@@ -281,31 +281,26 @@ describe("결이 질감을 정한다", () => {
   });
 
   /**
-   * 같은 표가 화면에 한 벌 더 있다
-   * (`apps/web/app/characters/CharacterStudio.tsx` 의 `MODEL_BY_LOOK`).
-   * 갈리면 **화면이 가리키는 모델과 실제로 그리는 모델이 달라진다** — 화면은
-   * 사용자가 직접 고를 때만 `modelId` 를 보내고, 안 고르면 서버가 결로 정한다.
-   * 패키지 경계를 넘는 import 는 못 하니 파일을 글자로 읽어 맞댄다.
+   * 화면(`apps/web/app/characters/CharacterStudio.tsx`)은 손으로 적은 결→모델 표를
+   * 따로 두지 않고 이 패키지의 `selectCharacterModel` 을 그대로 부른다.
+   * 표가 다시 화면에 한 벌 생기면 **화면이 가리키는 모델과 실제로 그리는 모델이
+   * 갈릴 수 있다** — 화면은 사용자가 직접 고를 때만 `modelId` 를 보내고, 안
+   * 고르면 서버가 결로 정한다. 패키지 경계를 넘는 import 는 못 하니 파일을
+   * 글자로 읽어 확인한다.
    */
-  it("화면에 있는 같은 표와 어긋나지 않는다", () => {
+  it("화면은 같은 함수를 쓰고 표를 따로 두지 않는다", () => {
     // `process.cwd()` 는 패키지 뿌리다 — 이 저장소의 다른 파일 읽기 시험과 같은
     // 형식이다(`sns-core/__tests__/migration.test.ts`).
     const studio = readFileSync(
       path.join(process.cwd(), "../../apps/web/app/characters/CharacterStudio.tsx"),
       "utf8",
     );
-    const start = studio.indexOf("const MODEL_BY_LOOK");
-    expect(start, "화면에서 MODEL_BY_LOOK 를 못 찾았다").toBeGreaterThan(-1);
-    const table = studio.slice(start, studio.indexOf("};", start));
-
-    // **손으로 적지 않는다.** 새로 넣은 결이 대조 밖으로 빠진다(2026-09-17 리뷰).
-    for (const look of IMAGE_LOOKS) {
-      // 화면 표는 `3d` 만 따옴표가 붙는다(식별자로 못 쓰는 이름이라).
-      const key = /^[a-z]/.test(look) ? look : `"${look}"`;
-      expect(table, `화면 표에 ${look} 가 없다`).toContain(`${key}: "`);
-      expect(table, `${look} 가 서버와 다르다`)
-        .toContain(`${key}: "${selectCharacterModel(look)}"`);
-    }
+    expect(studio, "화면이 pdp-core 의 selectCharacterModel 을 가져오지 않는다")
+      .toMatch(/import\s*\{[^}]*\bselectCharacterModel\b[^}]*\}\s*from\s*"@fixup\/pdp-core"/);
+    expect(studio, "화면이 selectCharacterModel(look) 을 부르지 않는다")
+      .toMatch(/selectCharacterModel\(look\)/);
+    expect(studio, "화면에 손으로 적은 결→모델 표가 다시 생겼다")
+      .not.toContain("MODEL_BY_LOOK");
   });
 });
 

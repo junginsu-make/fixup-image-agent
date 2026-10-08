@@ -10,6 +10,7 @@ import { testPostgres } from '../lib/test-credit-postgres.mjs';
   이 파일은 실제로 돌린다.
 */
 const MIGRATION = '202609300002_ai_cost_events.sql';
+const NANO_BANANA_21_MIGRATION = '202610080002_nano_banana_21_price.sql';
 const USER = '90000000-0000-4000-8000-000000000001';
 const REQ = '91000000-0000-4000-8000-000000000001';
 const SIGNATURE = 'public.ai_cost_record(uuid,uuid,text,text,text,integer,integer,integer,numeric,text,boolean,text)';
@@ -25,7 +26,7 @@ const row = (where) => json(`select to_jsonb(e) from (select usd::float8 usd, us
 before(async () => {
   db = await testPostgres();
   // 새 파일은 커밋 전이라 git 목록에 없을 수 있다. 이름으로 함께 깐다.
-  await db.migrate([MIGRATION]);
+  await db.migrate([MIGRATION, NANO_BANANA_21_MIGRATION]);
 });
 after(async () => { await db?.close(); });
 
@@ -38,6 +39,12 @@ test('image rows are priced from model_prices at write time', async () => {
   await record({ provider: 'fal', model: 'nano-banana-pro', images: 2, basis: 'image_unit', fal: 'fal-a' });
   const unit = Number(await db.sql(`select unit_cost_usd from model_prices where model='nano-banana-pro';`));
   assert.deepEqual(await row(`fal_request_id='fal-a'`), { usd: Number((unit * 2).toFixed(6)), usd_basis: 'image_unit', images: 2, input_tokens: 0, output_tokens: 0 });
+});
+
+test('speed model nano-banana-2.1 has a price row and is priced from it', async () => {
+  assert.equal(Number(await db.sql(`select unit_cost_usd from model_prices where model='nano-banana-2.1';`)), 0.09);
+  await record({ provider: 'fal', model: 'nano-banana-2.1', images: 2, basis: 'image_unit', fal: 'fal-d' });
+  assert.deepEqual(await row(`fal_request_id='fal-d'`), { usd: 0.18, usd_basis: 'image_unit', images: 2, input_tokens: 0, output_tokens: 0 });
 });
 
 test('an unknown image model is priced at the most expensive row and marked estimate', async () => {

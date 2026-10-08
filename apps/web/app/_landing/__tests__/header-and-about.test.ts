@@ -321,7 +321,7 @@ describe("공개 홈의 크레딧 사실", () => {
    */
   it("모델마다 차감이 다르다고 말하지 않는다", () => {
     expect(new Set(Object.values(LANDING_CREDITS)).size).toBe(1);
-    expect(LANDING_CREDITS.정밀형).toBe(1);
+    expect(LANDING_CREDITS.표준형).toBe(1);
     expect(코드만).not.toMatch(/LANDING_CREDITS\.[^}]+\}장/);
     expect(코드만).not.toContain("모델별 ${");
     expect(코드만).not.toContain("credits follow that cost");

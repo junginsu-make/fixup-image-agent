@@ -53,3 +53,4 @@ export * from "./text-models";
 
 /** 지어내면 안 되는 것 — 두 도구가 함께 쓰는 한 벌(F-7-1). */
 export { GROUNDING_RULE, NEVER_FABRICATE } from "./grounding.js";
+export * from "./image-model-names";

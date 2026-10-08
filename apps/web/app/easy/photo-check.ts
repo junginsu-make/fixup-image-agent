@@ -1,4 +1,4 @@
-import { IMAGE_MODELS, chooseModelForRatio } from "@fixup/sns-core";
+import { chooseModelForRatio } from "@fixup/sns-core";
 
 /**
  * **값이 나가기 전에 멈춘다**(설계 §2-3 ⓪ · §2-6 ⓒ).
@@ -41,7 +41,7 @@ export type PhotoLimit = { ok: true; modelId: string; max: number } | { ok: fals
  * 모델이 바뀌면 상한도 바뀐다.
  */
 export function photoLimit(input: { ratio: string; imageModel?: string; count: number }): PhotoLimit {
-  const { model } = chooseModelForRatio(input.ratio, input.imageModel ?? "", IMAGE_MODELS);
+  const { model } = chooseModelForRatio(input.ratio, input.imageModel ?? "");
   if (input.count <= model.maxReferenceImages) {
     return { ok: true, modelId: model.id, max: model.maxReferenceImages };
   }

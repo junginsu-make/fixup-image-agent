@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IMAGE_MODELS as PDP_MODELS } from "@fixup/pdp-core";
 import { IMAGE_MODELS as STUDIO_MODELS } from "@fixup/sns-core";
+import { IMAGE_MODEL_NAMES } from "@fixup/shared";
 import { RETIRED_MODEL_NAME, modelDisplayName } from "../model-name";
 
 /**
@@ -131,27 +132,10 @@ describe("회원 화면에 모델 이름이 없다", () => {
   // 저장된 경로는 `/` 로 적혀 있다. `join` 은 윈도에서 `\` 를 써서 안 맞는다.
   const 법이_이름을_요구하는_문서 = "legal/documents.ts";
   const 업체이름 = new Set(["Anthropic", "OpenAI Image"]);
-  /*
-    **상세페이지 모델 고르기는 실제 모델 이름으로 보인다**(2026-10-08 사용자 결정). 이 보호를 푼다는
-    것을 알고 정했다. 그 이름을 적는 곳은 이 한 파일뿐이다 — 다른 화면은 계속 막는다.
-  */
-  const 상세페이지_모델_이름 = "lib/pdp/image-models.ts";
-  const 상세페이지_허용 = new Set(["GPT Image", "Nano Banana"]);
-  const 상세페이지_예외 = (path: string, 이름: string) => 상세페이지_허용.has(이름) && path.endsWith(상세페이지_모델_이름);
-
-  // 예외가 넓어지면 다른 화면에서 이름이 새도 오늘은 아무 시험도 안 깨진다. 예외 자체를 잠근다.
-  it("상세페이지 예외는 모델 목록 파일 한 곳, 두 이름만이다", () => {
-    expect(상세페이지_예외("apps/web/lib/pdp/image-models.ts", "GPT Image")).toBe(true);
-    expect(상세페이지_예외("apps/web/app/create/ModelPicker.tsx", "GPT Image")).toBe(false);
-    expect(상세페이지_예외("apps/web/app/library/works-tab.tsx", "Nano Banana")).toBe(false);
-    expect(상세페이지_예외("apps/web/lib/pdp/image-models.ts", "Seedream")).toBe(false);
-  });
-
   for (const 이름 of 새면_안_되는_이름) {
     it(`「${이름}」이 없다`, () => {
       const 걸린곳 = 화면들
         .filter((file) => !(업체이름.has(이름) && file.path.endsWith(법이_이름을_요구하는_문서)))
-        .filter((file) => !상세페이지_예외(file.path, 이름))
         .filter((file) => 문자열들(file.source).some((글) => 글.includes(이름)))
         .map((file) => file.path);
 
@@ -243,6 +227,32 @@ describe("회원 화면에 모델 이름이 없다", () => {
     expect(문자열들(목록!.source)).toContain("Claude Sonnet 5");
   });
 
+  it("사라진 등급 이름이 회원 글에 없다", () => {
+    const 사라진 = ["정밀형", "정밀형 플러스", "속도형 라이트", "경제형"];
+    const 걸린 = 화면들.flatMap(({ path, source }) =>
+      문자열들(source)
+        .filter((s) => 사라진.some((n) => s.includes(n)))
+        .map((s) => `${path}: ${s}`),
+    );
+    expect(걸린).toEqual([]);
+  });
+
+  /**
+   * 이름 옆에 붙는 설명과 짧은 말은 정본(`image-model-names.ts`) 한 곳에만 적는다.
+   * 화면 글에 같은 문장을 다시 적으면 정본이 바뀔 때 한쪽만 낡는다.
+   */
+  it("정본의 설명·짧은 말을 손으로 다시 적지 않는다", () => {
+    const 정본 = "packages/shared/src/image-model-names.ts";
+    const 문장들 = IMAGE_MODEL_NAMES.filter((e) => e.visible).flatMap((e) => [e.summary, e.strength]);
+    expect(문장들.every((t) => t.length > 0)).toBe(true);
+    const 걸린 = 화면들
+      .filter((file) => !file.path.endsWith(정본))
+      .flatMap(({ path, source }) =>
+        문자열들(source).filter((s) => 문장들.some((t) => s.includes(t))).map((s) => `${path}: ${s}`),
+      );
+    expect(걸린).toEqual([]);
+  });
+
   it("id 가 문장에 섞여 있지 않다", () => {
     const 섞인곳: string[] = [];
 
@@ -265,8 +275,8 @@ describe("회원 화면에 모델 이름이 없다", () => {
 
 describe("저장된 작업의 모델 이름", () => {
   it("아는 id 는 우리가 붙인 이름으로 나온다", () => {
-    expect(modelDisplayName("gpt-image-2")).toBe("정밀형");
-    expect(modelDisplayName("nano-banana")).toBe("경제형");
+    expect(modelDisplayName("gpt-image-2")).toBe("이전 방식");
+    expect(modelDisplayName("nano-banana")).toBe("이전 방식");
   });
 
   /** 은퇴한 모델로 만든 옛 작업이 남아 있다. 모른다고 원본을 내보내면 안 된다. */

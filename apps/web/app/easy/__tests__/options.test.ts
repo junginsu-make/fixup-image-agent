@@ -14,7 +14,7 @@ describe("결과 밑에 적을 조건", () => {
       width: 1088,
       height: 1088,
       references: 2,
-    })).toEqual(["gpt-image-2.5-flare", "1:1", "1088 × 1088", "참고 2장"]);
+    })).toEqual(["표준형", "1:1", "1088 × 1088", "참고 2장"]);
   });
 
   /**
@@ -22,7 +22,7 @@ describe("결과 밑에 적을 조건", () => {
    * 대시가 무슨 뜻인지 한 번 더 생각하게 된다.
    */
   it("모르는 칸은 빼고 적는다", () => {
-    expect(easyOptionLines({ model: "nano-banana" })).toEqual(["nano-banana"]);
+    expect(easyOptionLines({ model: "nano-banana-pro" })).toEqual(["디테일형"]);
     expect(easyOptionLines({})).toEqual([]);
     expect(easyOptionLines(undefined)).toEqual([]);
   });
@@ -45,9 +45,9 @@ describe("결과 밑에 적을 조건", () => {
    * 자리만 차지한다. 숫자 홀로는 뜻이 안 서는 참고 장수만 말을 붙인다.
    */
   it("알아볼 수 있는 값에는 이름표를 안 붙인다", () => {
-    const lines = easyOptionLines({ model: "nano-banana", ratio: "2:3", references: 1 });
+    const lines = easyOptionLines({ model: "nano-banana-pro", ratio: "2:3", references: 1 });
 
-    expect(lines).not.toContain("모델 nano-banana");
+    expect(lines).not.toContain("모델 디테일형");
     expect(lines).not.toContain("비율 2:3");
     expect(lines).toContain("참고 1장");
   });
@@ -60,11 +60,11 @@ describe("결과 밑에 적을 조건", () => {
  * 붙인다. 두 곳이 서로 다른 것을 말하면 안 되므로 한 자리에서 같이 정한다.
  */
 describe("크게 보기 창에 걸 이름표", () => {
-  const 조건 = { model: "nano-banana", ratio: "2:3", width: 832, height: 1248, references: 1 };
+  const 조건 = { model: "nano-banana-pro", ratio: "2:3", width: 832, height: 1248, references: 1 };
 
   it("이름표와 값을 짝지어 준다", () => {
     expect(easyOptionMeta(조건)).toEqual([
-      ["이미지 모델", "nano-banana"],
+      ["이미지 모델", "디테일형"],
       ["비율", "2:3"],
       ["크기", "832 × 1248"],
       ["참고 이미지", "1장"],
@@ -103,5 +103,16 @@ describe("사진 역할 (설계 §2-8)", () => {
     const options = { model: "m", roles: "①제품 유지" };
     expect(easyOptionLines(options)).toContain("①제품 유지");
     expect(easyOptionMeta(options)).toContainEqual(["사진 역할", "①제품 유지"]);
+  });
+});
+
+describe("모델은 한국어 이름으로 적는다", () => {
+  it("밑줄과 크게 보기 모두 id 를 내지 않는다", () => {
+    expect(easyOptionLines({ model: "gpt-image-2.5-flare" })).toEqual(["표준형"]);
+    expect(easyOptionMeta({ model: "nano-banana-pro" })).toEqual([["이미지 모델", "디테일형"]]);
+  });
+
+  it("숨긴 모델은 이전 방식", () => {
+    expect(easyOptionLines({ model: "nano-banana" })).toEqual(["이전 방식"]);
   });
 });

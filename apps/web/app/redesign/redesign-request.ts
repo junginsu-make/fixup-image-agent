@@ -20,6 +20,8 @@ import type { Model, Project } from "./redesign-model";
  */
 export interface RequestIdentityInput {
   model: Model;
+  /** 고른 그림 모델. 디테일형·속도형은 분석 AI(`model`)가 같아 이것이 없으면 같은 키가 된다. */
+  imageModel?: string;
   startSection: number;
   count: number;
   /** 이어 만드는 중이면 그 작업. 처음이면 없다. */
@@ -37,6 +39,7 @@ export function requestIdentityOf(input: RequestIdentityInput): string {
   return [
     "generate",
     input.model,
+    input.imageModel ?? "",
     input.startSection,
     input.count,
     input.baseProject?.id || "new",

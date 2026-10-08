@@ -11,11 +11,13 @@ import {
   Input, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
 import {
-  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, lookBlockedReason, withJosa, type ImageLook,
+  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, imageModelName, isVisibleImageModel, lookBlockedReason, withJosa,
+  type ImageLook,
 } from "@fixup/shared";
+import { selectCharacterModel } from "@fixup/pdp-core";
+import { ImageModelPicker } from "../_components/image-model-picker";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
-import { modelDisplayName } from "../../lib/model-name";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
 import { isCreditShortage } from "../../lib/membership/account-events";
@@ -136,7 +138,7 @@ interface Character {
   views: CharacterView[];
 }
 
-interface ImageModel { id: string; label: string; description: string; untested?: boolean }
+interface ImageModel { id: string; label: string; description: string }
 /** `thumbUrl` 은 격자용 사본이다. `/api/reference-images` 가 둘 다 준다. */
 interface LibraryImage { id: string; title: string | null; signedUrl: string | null; thumbUrl?: string | null }
 
@@ -311,7 +313,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setKind(values.kind as Kind);
     setLook(lookAfterRole("extract", values.look as Look));
     // 원래 캐릭터를 만든 모델로 그린다. 비면(옛 캐릭터) 그림체의 기본 모델이다.
-    setModelId(values.modelId);
+    // 이제 안 보이는 모델이면 칸은 자동으로 시작한다 — 새 후보에 숨긴 모델을 보내지 않는다.
+    setModelId(isVisibleImageModel(values.modelId) ? values.modelId : "");
     if (!front) return;
     setChosen({
       ...front, description: values.description, identity: "", name: values.name,
@@ -662,16 +665,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 그림을 본다. 첨부가 없으면 `resolveLook` 이 실사로 내리므로 실사와 같은
    * 모델을 가리키는 것이 앞뒤가 맞는다.
    */
-  const MODEL_BY_LOOK: Record<Look, string> = {
-    auto: "nano-banana-pro",
-    photoreal: "nano-banana-pro",
-    anime: "gpt-image-2.5-flare",
-    "3d": "gpt-image-2.5-flare",
-    illustration: "gpt-image-2.5-flare",
-  };
-  const autoModel = MODEL_BY_LOOK[look];
-  const activeModel = modelId || autoModel;
-  const chosenModel = models.find((model) => model.id === activeModel);
+  const autoModel = selectCharacterModel(look);
 
   /**
    * 정면을 고른 뒤에는 1단계 칸을 잠근다.
@@ -833,34 +827,19 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               </fieldset>
 
               {models.length ? (
-                <fieldset className="grid flex-none gap-1.5">
-                  <legend className="text-meta text-subtle-foreground">모델</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {models.map((model) => (
-                      <Button
-                        key={model.id} type="button" size="sm" disabled={locked}
-                        variant={activeModel === model.id ? "default" : "secondary"}
-                        onClick={() => setModelId(model.id)}
-                      >
-                        {model.label}
-                        {/* 아직 우리 쓰임에서 재 보지 않은 모델. 골라서 비교해
-                            보라는 뜻이지 기본으로 밀지 않는다. */}
-                        {model.untested ? <span className="ml-1 text-[10px] opacity-70">시험</span> : null}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-subtle-foreground">
-                    {modelId
-                      ? chosenModel?.description
-                      : `고른 결에 맞춰 ${chosenModel?.label ?? modelDisplayName(autoModel)} 로 만듭니다.`}
-                  </p>
-                  {chosenModel?.untested ? (
-                    <p className="text-xs text-amber-700">
-                      「시험」 표시가 붙은 모델입니다. 이 쓰임에서 더 나은지 아직 재지 않았습니다.
-                      같은 캐릭터를 기본 모델로도 만들어 견줘 보세요.
-                    </p>
-                  ) : null}
-                </fieldset>
+                <ImageModelPicker
+                  legend="모델"
+                  value={modelId}
+                  ids={models.map((model) => model.id)}
+                  disabled={locked}
+                  onChange={setModelId}
+                  auto={{
+                    label: "자동",
+                    hint: `고른 결에 맞춰 ${withJosa(imageModelName(autoModel), "으로로")} 만듭니다.`,
+                    active: !modelId,
+                    onPick: () => setModelId(""),
+                  }}
+                />
               ) : null}
 
               <label className="grid flex-none gap-1.5">

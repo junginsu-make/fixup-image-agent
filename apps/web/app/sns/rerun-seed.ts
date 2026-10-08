@@ -1,4 +1,4 @@
-import type { Attachment } from "@fixup/sns-core";
+import { visibleModelOrDefault, type Attachment } from "@fixup/sns-core";
 import type { ImageLook } from "@fixup/shared";
 import type { SlotIntents } from "./_components/slot-intents";
 import type { SourceDraft } from "./_components/source-input";
@@ -174,7 +174,7 @@ export function snsSeed(
       // 「AI 추천」이면 장수를 비운다. 0 을 넣으면 화면이 0장으로 읽는다.
       cardCount: project.cardCountMode === "fixed" ? project.cardCount ?? undefined : undefined,
       language: project.language ?? "ko",
-      modelId: project.modelId ?? "",
+      modelId: visibleModelOrDefault(project.modelId),
       // 없는 칸은 지금까지의 동작으로 읽는다.
       look: data.look ?? "auto",
       userInstruction: data.userInstruction ?? "",
