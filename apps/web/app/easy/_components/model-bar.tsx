@@ -102,7 +102,7 @@ function TextModelMenu({
   );
 }
 
-function ImageModelMenu({
+export function ImageModelMenu({
   models,
   value,
   onChange,
@@ -115,32 +115,61 @@ function ImageModelMenu({
 }) {
   const [open, setOpen] = React.useState(false);
   const ids = React.useMemo(() => models.map((model) => model.id), [models]);
+  const panelId = React.useId();
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  // 바깥을 누르면 닫는다. 열려 있는 동안에만 듣는다.
+  React.useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const onDown = (event: PointerEvent) => {
+      if (wrapRef.current && event.target instanceof Node && wrapRef.current.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-meta">
-          {imageModelName(value)}
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      {/*
-        **다른 화면과 같은 고르기를 넣는다.** 표준형·디테일형·속도형 세 개이고, 마우스를
-        올리면 설명이 뜨며, 고른 모델의 설명은 늘 보인다(`ImageModelPicker`). 말풍선이
-        메뉴 밖으로 나가야 하므로 잘림을 푼다. 하나를 고르면 메뉴를 닫는다.
-      */}
-      <DropdownMenuContent align="start" className="w-72 overflow-visible p-3">
-        <ImageModelPicker
-          value={value}
-          ids={ids}
-          legend="이미지 모델"
-          onChange={(id) => {
-            onChange(id);
-            setOpen(false);
-          }}
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    /*
+      **메뉴가 아니라 펼침 칸이다.** Radix 메뉴 안에서는 Tab 이 막히고 방향키가 메뉴
+      항목만 돌아서, 안의 라디오 버튼에 키보드로 갈 수 없다. 버튼 하나가 칸을
+      열고 닫는다. 글 모델 메뉴는 항목뿐이라 그대로 둔다.
+    */
+    <div ref={wrapRef} className="relative" onKeyDown={(event) => { if (event.key === "Escape" && open) close(); }}>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="gap-1.5 text-meta"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((was) => !was)}
+      >
+        {imageModelName(value)}
+        <ChevronDown className="h-3 w-3" />
+      </Button>
+      {open ? (
+        <div id={panelId} className="absolute bottom-full left-0 z-30 mb-1 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
+          <ImageModelPicker
+            value={value}
+            ids={ids}
+            legend="이미지 모델"
+            onChange={(id) => {
+              onChange(id);
+              close();
+            }}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
