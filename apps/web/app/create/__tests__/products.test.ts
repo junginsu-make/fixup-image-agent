@@ -3,6 +3,7 @@ import {
   addPhotos,
   addProduct,
   makePrimary,
+  normalizeProducts,
   primaryPhoto,
   productsFromLegacy,
   productsKey,
@@ -103,6 +104,26 @@ describe("불변", () => {
     addProduct(before); removeProduct(before, "p2"); renameProduct(before, "p1", "새 이름");
     addPhotos(before, "p2", [photo("c")]); removePhoto(before, "p1", 0); makePrimary(before, "p1", 1);
     expect(before).toEqual(snapshot);
+  });
+});
+
+describe("저장된 제품 칸 다듬기", () => {
+  const keep = (p: PreparedImageDraft) => (p.base64 ? p : null);
+  it("아는 id 만, 겹침 없이, 이름은 글자만 30자, 사진은 4장·빈 사진은 버린다", () => {
+    const raw = [
+      { id: "p1", name: 5, photos: [photo("a"), { ...photo("x"), base64: "" }, photo("b"), photo("c"), photo("d"), photo("e")] },
+      { id: "p1", name: "겹침", photos: [] },
+      { id: "p7", name: "모름", photos: [photo("z")] },
+      { id: "p2", name: "다".repeat(40) },
+    ];
+    expect(normalizeProducts(raw, keep)).toEqual([
+      { id: "p1", name: "", photos: [photo("a"), photo("b"), photo("c"), photo("d")] },
+      { id: "p2", name: "다".repeat(30), photos: [] },
+    ]);
+  });
+  it("배열이 아니거나 제품 1 이 없으면 null", () => {
+    expect(normalizeProducts(undefined, keep)).toBeNull();
+    expect(normalizeProducts([{ id: "p2", name: "", photos: [photo("a")] }], keep)).toBeNull();
   });
 });
 

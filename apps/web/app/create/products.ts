@@ -50,10 +50,60 @@ const updateProduct = (
   change: (product: PdpProductDraft) => PdpProductDraft,
 ): PdpProductDraft[] => products.map((product) => (product.id === id ? change(product) : product));
 
-/** 이모지 하나가 두 칸으로 잘리지 않게 코드 포인트로 자른다(분석 프롬프트와 같은 상한). */
+/**
+ * 이모지 하나가 두 칸으로 잘리지 않게 코드 포인트로 자른다(분석 프롬프트와 같은 상한).
+ * 저장본에서 읽은 값은 글자가 아닐 수 있다 — 그때는 빈 이름(「제품 N」으로 불린다).
+ */
+export function clipProductName(name: unknown): string {
+  return typeof name === "string" ? Array.from(name).slice(0, PRODUCT_LIMITS.nameChars).join("") : "";
+}
+
 export function renameProduct(products: readonly PdpProductDraft[], id: ProductId, name: string): PdpProductDraft[] {
-  const cut = Array.from(name).slice(0, PRODUCT_LIMITS.nameChars).join("");
+  const cut = clipProductName(name);
   return updateProduct(products, id, (product) => ({ ...product, name: cut }));
+}
+
+/** 제품 1 을 맨 앞에 둔다. 없으면 빈 칸으로 만든다 — 대표 사진 자리라 늘 있어야 한다. */
+export function withFirstProduct(products: readonly PdpProductDraft[]): PdpProductDraft[] {
+  const first = products.find((product) => product.id === "p1") ?? emptyProduct("p1");
+  return [first, ...products.filter((product) => product.id !== "p1")].slice(0, PRODUCT_LIMITS.products);
+}
+
+type SavedEntry = { id: ProductId; name?: unknown; photos?: unknown };
+
+/** 저장본에서 읽은 칸: 아는 id 만, 겹침 없이, 3개까지. 깨진 칸은 버린다. */
+function knownEntries(raw: unknown): SavedEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.map((entry) => (entry && typeof entry === "object" ? (entry as { id?: unknown }).id : undefined));
+  return raw
+    .filter((_, index) => PRODUCT_IDS.includes(ids[index] as ProductId) && ids.indexOf(ids[index]) === index)
+    .slice(0, PRODUCT_LIMITS.products) as SavedEntry[];
+}
+
+/** 서버 문서에 둔 칸 목록(`{ id, name }`)을 다듬는다. 사진은 참조에서 따로 채운다. */
+export function normalizeProductSlots(raw: unknown): Array<{ id: ProductId; name: string }> {
+  return knownEntries(raw).map((entry) => ({ id: entry.id, name: clipProductName(entry.name) }));
+}
+
+/**
+ * 로컬 초안에 둔 제품 칸을 다듬는다(상한: 제품 3·사진 4·이름 30자). 사진 다듬기는 초안 쪽 함수를
+ * 받아 쓴다 — 여기서 초안 파일을 부르면 서로 부르는 고리가 생긴다.
+ * 제품 1 이 없거나 칸이 아예 없으면 `null` — 부르는 쪽은 옛 한 장으로 읽는다.
+ */
+export function normalizeProducts(
+  raw: unknown,
+  normalizePhoto: (photo: PreparedImageDraft) => PreparedImageDraft | null,
+): PdpProductDraft[] | null {
+  if (!Array.isArray(raw)) return null;
+  const products = knownEntries(raw).map((entry) => ({
+    id: entry.id,
+    name: clipProductName(entry.name),
+    photos: (Array.isArray(entry.photos) ? (entry.photos as PreparedImageDraft[]) : [])
+      .map(normalizePhoto)
+      .filter((photo): photo is PreparedImageDraft => photo !== null)
+      .slice(0, PRODUCT_LIMITS.photos),
+  }));
+  return products.some((product) => product.id === "p1") ? products : null;
 }
 
 /**

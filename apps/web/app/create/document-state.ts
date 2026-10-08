@@ -3,7 +3,9 @@ import { DEFAULT_IMAGE_MODEL, PRODUCT_IDS, PRODUCT_LIMITS, type ProductId } from
 import { randomId } from "../../lib/browser-safe";
 import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
-import { primaryPhoto, productsFromLegacy, type PdpProductDraft } from "./products";
+import {
+  clipProductName, normalizeProductSlots, primaryPhoto, productsFromLegacy, withFirstProduct, type PdpProductDraft,
+} from "./products";
 
 export interface PdpSection extends SectionBlueprint { id: string; sourceSectionId: string; generatedAssetId?: string }
 type Settings = Pick<PdpDraftInput, "imageModel" | "copyIntensity" | "gapPolicy" | "desiredTone" | "look" |
@@ -29,6 +31,11 @@ export interface PdpDocumentV3 {
   originalAssetId?: string;
   /** 구성안을 만들 때 본 제품 목록의 열쇠(`GeneratedResult.analyzedProductsKey`). 화면이 붙인 값이다. */
   planningProductsKey?: string;
+  /**
+   * 제품 칸 목록(차례·이름). **사진 없는 칸도 여기 남는다** — 참조는 사진마다 하나라, 칸을 참조로만
+   * 되살리면 이름만 적은 칸이 사라지고 제품 1 사진을 다 지운 작업은 제품 1 없이 열린다. 옛 문서에는 없다.
+   */
+  productSlots?: Array<{ id: ProductId; name: string }>;
   sections: PdpSection[];
   blueprint: Omit<LandingPageBlueprint, "sections">;
   analyzedBlueprint?: LandingPageBlueprint | null;
@@ -124,6 +131,7 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       preserveProduct: input.preserveProduct ?? true, personSource: input.personSource },
     references, assets, originalAssetId: input.result ? addAsset({ base64: input.result.originalImage, mimeType: "image/jpeg" }) : undefined,
     planningProductsKey: input.result?.analyzedProductsKey,
+    productSlots: products.length ? products.map(({ id, name }) => ({ id, name })) : undefined,
     sections, blueprint, analyzedBlueprint: input.analyzedBlueprint, planningReview: input.result?.review,
     planningReadingStatus: input.result?.productReadingStatus, planningGapOutcome: input.result?.copyGapOutcome,
     planningExecutions: input.result?.planningExecutions ?? input.textDraft?.planningExecutions,
@@ -193,20 +201,28 @@ function preparedFromReference(doc: PdpDocumentV3, ref: Reference): PreparedImag
 }
 
 /**
- * 제품 참조를 제품별로 묶는다. `productId` 가 없으면(옛 문서) 제품 1, `photoIndex` 가 없으면 참조 차례.
- * 제품 차례는 참조에 처음 나온 차례다 — 저장할 때 제품 차례대로 실었다. 모르는 id 는 버린다.
+ * 제품 칸을 되살린다. 칸(차례·이름)은 `productSlots` 에서, 사진은 참조에서 채운다.
+ *
+ * `productSlots` 가 없으면(옛 문서) 참조에 처음 나온 차례로 칸을 만든다. 참조의 `productId` 가
+ * 없으면 제품 1, `photoIndex` 가 없으면 참조 차례. 모르는 id 는 버린다. 칸이 하나라도 있으면
+ * 제품 1 을 맨 앞에 둔다(로컬 초안 길과 같다). 제품 사진이 아예 없던 문서는 빈 목록.
  */
 function productsFromReferences(doc: PdpDocumentV3): PdpProductDraft[] {
   const photos = doc.references.flatMap((ref, order) => {
     const id = ref.productId ?? "p1";
     const photo = ref.role === "product" && PRODUCT_IDS.includes(id) ? preparedFromReference(doc, ref) : null;
-    return photo ? [{ id, name: ref.productName ?? "", order: typeof ref.photoIndex === "number" ? ref.photoIndex : order, photo }] : [];
+    return photo ? [{ id, name: clipProductName(ref.productName), order: typeof ref.photoIndex === "number" ? ref.photoIndex : order, photo }] : [];
   });
-  const ids = photos.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) === index).slice(0, PRODUCT_LIMITS.products);
-  return ids.map((id) => {
-    const mine = photos.filter((entry) => entry.id === id);
-    return { id, name: mine[0].name, photos: [...mine].sort((a, b) => a.order - b.order).map((entry) => entry.photo).slice(0, PRODUCT_LIMITS.photos) };
-  });
+  const saved = normalizeProductSlots(doc.productSlots);
+  const slots = saved.length ? saved : photos
+    .filter((entry, index) => photos.findIndex((other) => other.id === entry.id) === index)
+    .map(({ id, name }) => ({ id, name }));
+  if (slots.length === 0) return [];
+  return withFirstProduct(slots.map((slot) => ({
+    ...slot,
+    photos: photos.filter((entry) => entry.id === slot.id).sort((a, b) => a.order - b.order)
+      .map((entry) => entry.photo).slice(0, PRODUCT_LIMITS.photos),
+  })));
 }
 
 export function updatePdpDocument(doc: PdpDocumentV3, action:

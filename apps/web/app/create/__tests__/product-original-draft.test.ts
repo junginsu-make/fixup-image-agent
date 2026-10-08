@@ -112,13 +112,55 @@ describe("서버 문서의 제품 목록", () => {
   it("옛 문서(productId 없는 제품 참조 하나)는 제품 1·사진 1장", () => {
     const doc = createPdpDocument(draft({ base64: "ORIGINAL", mimeType: "image/png" }));
     const old: PdpDocumentV3 = {
-      ...doc, references: doc.references.map(({ productId: _id, productName: _name, photoIndex: _index, ...ref }) => ref),
+      ...doc, productSlots: undefined,
+      references: doc.references.map(({ productId: _id, productName: _name, photoIndex: _index, ...ref }) => ref),
     };
     const reopened = documentToDraft(old);
     expect(reopened.products).toHaveLength(1);
     expect(reopened.products?.[0].id).toBe("p1");
     expect(reopened.products?.[0].photos).toEqual([reopened.preparedImage]);
     expect(reopened.preparedImage?.original).toEqual({ base64: "ORIGINAL", mimeType: "image/png" });
+  });
+
+  it("제품 사진이 없는 옛 문서(글 경로 등)는 빈 목록", () => {
+    const doc = createPdpDocument({ ...draft(), preparedImage: null } as PdpDraftInput);
+    const reopened = documentToDraft({ ...doc, productSlots: undefined });
+    expect(reopened.products).toEqual([]);
+    expect(reopened.preparedImage).toBeNull();
+  });
+
+  it("사진 없는 칸도 이름과 함께 남는다", () => {
+    const products: PdpProductDraft[] = [{ id: "p1", name: "레몬맛", photos: [photo("a")] }, { id: "p2", name: "자몽맛", photos: [] }];
+    const reopened = documentToDraft(createPdpDocument(withProducts(products)));
+    expect(reopened.products).toEqual(products);
+  });
+
+  it("제품 1 사진을 다 지웠어도 제품 1 이 맨 앞에 빈 칸으로 남는다", () => {
+    const products: PdpProductDraft[] = [{ id: "p1", name: "", photos: [] }, { id: "p2", name: "", photos: [photo("c")] }];
+    const reopened = documentToDraft(createPdpDocument({ ...draft(), preparedImage: null, products } as PdpDraftInput));
+    expect(reopened.products).toEqual(products);
+    expect(reopened.preparedImage).toBeNull();
+  });
+
+  it("칸 목록이 없는 문서도 제품 1 을 맨 앞에 둔다", () => {
+    const products: PdpProductDraft[] = [{ id: "p1", name: "", photos: [] }, { id: "p2", name: "", photos: [photo("c")] }];
+    const doc = createPdpDocument({ ...draft(), preparedImage: null, products } as PdpDraftInput);
+    expect(documentToDraft({ ...doc, productSlots: undefined }).products).toEqual(products);
+  });
+
+  it("참조의 제품 이름이 글자가 아니면 비우고, 길면 30자로 자른다", () => {
+    const doc = createPdpDocument(withProducts(twoProducts));
+    const odd: PdpDocumentV3 = {
+      ...doc, productSlots: undefined,
+      references: doc.references.map((ref) => ({ ...ref, productName: ref.productId === "p1" ? 42 : "가".repeat(40) }) as never),
+    };
+    expect(documentToDraft(odd).products?.map((p) => p.name)).toEqual(["", "가".repeat(30)]);
+  });
+
+  it("칸 목록의 이름도 같은 규칙으로 다듬는다", () => {
+    const doc = createPdpDocument(withProducts(twoProducts));
+    const odd = { ...doc, productSlots: [{ id: "p1", name: 7 }, { id: "p9", name: "x" }, { id: "p2", name: "나".repeat(35) }] } as never;
+    expect(documentToDraft(odd).products?.map((p) => [p.id, p.name])).toEqual([["p1", ""], ["p2", "나".repeat(30)]]);
   });
 
   it("분석 일치 열쇠가 남는다", () => {

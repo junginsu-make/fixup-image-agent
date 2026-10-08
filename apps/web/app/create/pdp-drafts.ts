@@ -26,8 +26,7 @@ import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 import { selectExpiredDraftIds } from "./draft-retention";
 import { randomId } from "../../lib/browser-safe";
 import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
-import { PRODUCT_IDS, PRODUCT_LIMITS, type ProductId } from "@fixup/pdp-core";
-import { primaryPhoto, productsFromLegacy, type PdpProductDraft } from "./products";
+import { normalizeProducts, primaryPhoto, productsFromLegacy, type PdpProductDraft } from "./products";
 
 const PDP_DRAFT_DB = "hanirum-pdp-maker";
 const PDP_DRAFT_STORE = "drafts";
@@ -423,7 +422,7 @@ function buildDraftTitle(input: PdpDraftInput) {
 
 function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
   // 제품 칸이 있으면 그것이 기준이고 대표 사진은 거기서 뽑는다. 없으면 옛 한 장을 제품 1 로 읽는다.
-  const savedProducts = normalizeProducts(record.products);
+  const savedProducts = normalizeProducts(record.products, normalizePreparedImage);
   const products = savedProducts ?? productsFromLegacy(normalizePreparedImage(record.preparedImage));
   const preparedImage = savedProducts ? primaryPhoto(savedProducts) : normalizePreparedImage(record.preparedImage);
   const modelImage = normalizePreparedImage(record.modelImage);
@@ -509,32 +508,6 @@ function normalizePreparedImage(image: PreparedImageDraft | null | undefined): P
     fileName: image.fileName || "image",
     ...(original ? { original } : {}),
   };
-}
-
-/**
- * 저장된 제품 칸을 다듬는다. 아는 id 만, 겹침 없이, 상한(제품 3·사진 4·이름 30자)까지.
- * 제품 1 이 없거나 칸이 아예 없으면 `null` — 부르는 쪽은 옛 한 장으로 읽는다.
- */
-function normalizeProducts(raw: unknown): PdpProductDraft[] | null {
-  if (!Array.isArray(raw)) return null;
-  const seen = new Set<string>();
-  const products = raw
-    .filter((entry): entry is PdpProductDraft => {
-      const id = (entry as Partial<PdpProductDraft> | null)?.id;
-      if (!PRODUCT_IDS.includes(id as ProductId) || seen.has(id as string)) return false;
-      seen.add(id as string);
-      return true;
-    })
-    .slice(0, PRODUCT_LIMITS.products)
-    .map((entry) => ({
-      id: entry.id,
-      name: typeof entry.name === "string" ? Array.from(entry.name).slice(0, PRODUCT_LIMITS.nameChars).join("") : "",
-      photos: (Array.isArray(entry.photos) ? entry.photos : [])
-        .map(normalizePreparedImage)
-        .filter((photo): photo is PreparedImageDraft => photo !== null)
-        .slice(0, PRODUCT_LIMITS.photos),
-    }));
-  return products.some((product) => product.id === "p1") ? products : null;
 }
 
 /** 깨진/옛 레코드가 모르는 값을 물고 오면 화면이 엉뚱한 경고를 띄운다. */
