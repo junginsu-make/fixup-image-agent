@@ -10,6 +10,7 @@ import type {
   PersonSource,
   ProductBrief,
   ReferenceModelUsage,
+  ProductId,
   ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
@@ -21,6 +22,7 @@ import { ProductReadingNotice } from "./ProductReadingNotice";
 import { SectionPlanGaps } from "./SectionPlanGaps";
 import { PersonSourceChoice } from "./PersonSourceChoice";
 import { SectionAngleNote } from "./SectionAngleNote";
+import { SectionProductChips } from "./SectionProductChips";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
@@ -40,6 +42,8 @@ interface ScenarioEditorProps {
   referenceModelUsage?: ReferenceModelUsage | null;
   onReferenceModelRemove?: () => void;
   blueprint: LandingPageBlueprint;
+  /** 사진 경로의 제품 칸(설계 2026-10-08 §5). 둘 이상이면 섹션마다 칩이 뜬다. 글 경로는 안 넘긴다. */
+  products?: Array<{ id: ProductId; label: string }>;
   review?: BlueprintReview;
   /**
    * 사진에서 제품을 충분히 읽었는가. **사진 경로에서만 온다** — 글 경로는
@@ -189,6 +193,7 @@ function SectionCard({
   onRemove,
   characterId,
   characterAngles,
+  products,
 }: {
   section: SectionBlueprint;
   index: number;
@@ -207,6 +212,7 @@ function SectionCard({
   characterId: string | undefined;
   /** 직접 고른 각도. 있으면 자동이 안 돈다. */
   characterAngles: string[];
+  products?: Array<{ id: ProductId; label: string }>;
 }) {
   const counts = (section.evidence ?? []).reduce(
     (value, evidence) => {
@@ -253,6 +259,7 @@ function SectionCard({
       </div>
 
       <div className="grid gap-3">
+        <SectionProductChips products={products} selected={section.product_ids} onChange={(product_ids) => onPatch({ product_ids })} />
         <EditableField label="목표" value={section.goal} onChange={(goal) => onPatch({ goal })} />
         <EditableField
           label="헤드라인"
@@ -321,6 +328,7 @@ export function ScenarioEditor({
   referenceModelUsage,
   onReferenceModelRemove,
   blueprint,
+  products,
   review,
   productReadingStatus,
   gapOutcome,
@@ -600,6 +608,7 @@ export function ScenarioEditor({
             onRemove={() => removeSection(index)}
             characterId={characterId}
             characterAngles={characterAngles}
+            products={products}
           />
         ))}
       </div>

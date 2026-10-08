@@ -1,6 +1,8 @@
 import { API_BASE_URL } from "./pdp-utils";
 import { randomId } from "../../lib/browser-safe";
 import type { CreateMode } from "./create-steps";
+import { productFactsFrom, type LandingPageBlueprint, type PageProduct } from "@fixup/pdp-core";
+import { productsKey, type PdpProductDraft } from "./products";
 
 /**
  * **제품 원본은 한 번 올리고 주소로 쓴다**(설계 2026-10-08 §4).
@@ -133,4 +135,90 @@ export function photoForEditor(
   if (!prepared?.original) return undefined;
   const analysed = resultOriginal.replace(/^data:[^;,]+;base64,/, "");
   return analysed === prepared.base64 ? prepared.original : undefined;
+}
+
+export const PRODUCTS_CHANGED_MESSAGE = "제품 사진이 구성안을 만든 뒤에 바뀌었습니다. 구성안을 다시 만들어 주세요.";
+
+type Uploader = { urlFor(source: ProductPhotoSource): Promise<string> };
+/** `products` 는 한쪽에만 있지만 부르는 쪽이 꺼내 `page` 에 합칠 수 있게 두 모양 다 이름을 둔다. */
+export type ProductRequestFields =
+  | { originalImageBase64: string; products?: undefined }
+  | { productImageUrl: string; products?: PageProduct[] };
+
+type ProductRequestInput = {
+  startMode?: CreateMode;
+  products: readonly PdpProductDraft[];
+  /** 분석이 본 제품 목록의 열쇠(`productsKey`). 옛 작업에는 없다. */
+  analyzedProductsKey?: string;
+  readings?: LandingPageBlueprint["productReadings"];
+  /** 분석한 1024 사본(`result.originalImage`). 글 경로에서는 대표 이미지다. */
+  fallbackBase64: string;
+  uploader: Uploader;
+};
+
+/** 분석 요청이 `products` 를 싣는 기준과 같다(`analyze-request.ts`) — 제품 하나·사진 하나면 아니다. */
+const isSingle = (filled: readonly PdpProductDraft[]) =>
+  filled.length < 2 && !filled.some((product) => product.photos.length > 1);
+
+/** 사진 한 장의 주소. 원본이 있으면 원본, 없으면(옛 초안) 1024 사본. */
+const photoUrl = (photo: PdpProductDraft["photos"][number], uploader: Uploader) =>
+  uploader.urlFor(withoutDataUrl(photo.original ?? { base64: photo.base64, mimeType: photo.mimeType }));
+
+/** 사진은 차례대로 올린다 — 같은 사진이 두 번 동시에 올라가지 않게(캐시는 끝난 것만 안다). */
+async function pageProductsFor(
+  filled: readonly PdpProductDraft[],
+  readings: ProductRequestInput["readings"],
+  uploader: Uploader,
+): Promise<PageProduct[]> {
+  const result: PageProduct[] = [];
+  for (const product of filled) {
+    const imageUrls: string[] = [];
+    for (const photo of product.photos) imageUrls.push(await photoUrl(photo, uploader));
+    const name = product.name.trim();
+    const facts = productFactsFrom(readings?.find((reading) => reading.productId === product.id));
+    result.push({ id: product.id, ...(name ? { name } : {}), imageUrls, ...(facts ? { facts } : {}) });
+  }
+  return result;
+}
+
+/**
+ * 생성 요청의 제품 칸(설계 §6.1). 분석한 제품 그대로일 때만 원본을 올린다.
+ * - 글 경로: { originalImageBase64 } (지금 그대로)
+ * - 제품 하나·사진 하나: 2단계와 같은 { productImageUrl } (R4 대체 포함)
+ * - 그 밖: { productImageUrl: 제품 1 대표 주소, products: PageProduct[] } — 옛 서버도 대표로는 만든다
+ * - 분석 뒤 제품이 바뀌었고 사진이 여럿이면 ProductPhotoUploadError(PRODUCTS_CHANGED_MESSAGE)
+ *
+ * 묶음마다 불러도 된다 — 같은 사진은 캐시가 주소를 돌려준다.
+ */
+export async function productRequestFields(input: ProductRequestInput): Promise<ProductRequestFields> {
+  const { startMode, fallbackBase64, uploader } = input;
+  if (startMode === "text") return { originalImageBase64: fallbackBase64 };
+  const filled = input.products.filter((product) => product.photos.length > 0);
+  const known = input.analyzedProductsKey;
+  const matches = known !== undefined && known === productsKey(input.products);
+  if (isSingle(filled)) {
+    /*
+      2단계 몸통 그대로. 바뀌었으면 원본을 넘기지 않아 분석한 1024 사본으로 만든다(R4).
+      열쇠가 없는 옛 작업은 2단계처럼 분석한 사진과 견준다(`photoForEditor`).
+    */
+    const productPhoto = known === undefined || matches ? photoForEditor(filled[0]?.photos[0], fallbackBase64) : undefined;
+    return productImageFields({ startMode, productPhoto, fallbackBase64, uploader });
+  }
+  /*
+    새 사진과 옛 구성안·판독이 섞이면 안 된다. 열쇠가 없으면 분석이 이 제품들을 못 봤다(옛 작업에
+    사진을 더한 경우). 생성 전이라 크레딧은 안 나간다.
+  */
+  if (!matches) throw new ProductPhotoUploadError(PRODUCTS_CHANGED_MESSAGE);
+  const products = await pageProductsFor(filled, input.readings, uploader);
+  const primary = products.find((product) => product.id === "p1") ?? products[0]!;
+  return { productImageUrl: primary.imageUrls[0]!, products };
+}
+
+/** 일괄 생성의 묶음마다 부른다(`productImageFieldsOrThrow` 와 같은 까닭). */
+export async function productRequestFieldsOrThrow(input: ProductRequestInput): Promise<ProductRequestFields> {
+  try {
+    return await productRequestFields(input);
+  } catch (error) {
+    throw new Error(productPhotoErrorMessage(error));
+  }
 }

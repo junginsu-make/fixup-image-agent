@@ -1,4 +1,4 @@
-import { PRODUCT_IDS, PRODUCT_LIMITS, type ProductId } from "@fixup/pdp-core";
+import { PRODUCT_IDS, PRODUCT_LIMITS, normalizeProductIds, productLabel, type ProductId } from "@fixup/pdp-core";
 import type { PreparedImageDraft } from "./pdp-drafts";
 
 /**
@@ -159,4 +159,42 @@ export function productsKey(products: readonly PdpProductDraft[]): string {
       product.photos.map((photo) => [photo.base64.length, photo.base64.slice(-32)]),
     ]),
   );
+}
+
+/**
+ * 작업에 손댄 것이 있는가 — 사진이 한 장이라도 있거나 이름을 적은 칸이 있으면 그렇다.
+ * 제품 1 첫 사진(`preparedImage`)만 보면 제품 2 에만 사진을 넣거나 이름만 적은 작업이
+ * 「빈 작업」으로 보여, 임시저장도 「처음부터 다시」도 안 뜬다.
+ */
+export function hasProductContent(products: readonly PdpProductDraft[]): boolean {
+  return products.some((product) => product.photos.length > 0 || product.name.trim() !== "");
+}
+
+/** 구성안의 제품 칩. 사진이 있는 제품만 — 분석이 본 것도 그것뿐이다(`analyze-request.ts`). */
+export function productChips(products: readonly PdpProductDraft[]): Array<{ id: ProductId; label: string }> {
+  return products
+    .filter((product) => product.photos.length > 0)
+    .map((product) => ({ id: product.id, label: productLabel(product) }));
+}
+
+/**
+ * 섹션에서 켜진 제품. 배정이 없거나 모르는 id 뿐이면 모두 — 서버가 섹션 제품을 고르는 규칙과 같다
+ * (`normalizeProductIds`). 화면이 다르게 보이면 꺼 둔 줄 알았던 제품이 그림에 나온다.
+ */
+export function sectionProductsOn(all: readonly ProductId[], selected: readonly string[] | undefined): ProductId[] {
+  return normalizeProductIds(selected, all);
+}
+
+/**
+ * 칩 하나를 눌렀을 때의 새 배정(제품 차례). 마지막 하나는 끄지 않는다 — 제품 사진 없이
+ * 그리는 섹션은 없다(설계 §5).
+ */
+export function toggleSectionProduct(
+  all: readonly ProductId[],
+  selected: readonly string[] | undefined,
+  id: ProductId,
+): ProductId[] {
+  const on = sectionProductsOn(all, selected);
+  if (!on.includes(id)) return all.filter((each) => each === id || on.includes(each));
+  return on.length > 1 ? on.filter((each) => each !== id) : on;
 }

@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SectionBlueprint } from "@fixup/pdp-core";
 import { createEmptySection } from "../scenario-sections";
 
 /**
@@ -12,7 +13,12 @@ import { createEmptySection } from "../scenario-sections";
  * 「만드는 중」으로 남지 않는다.
  */
 
-const captured = vi.hoisted(() => ({ calls: [] as Array<{ path: string; body: Record<string, unknown> }>, batchOk: false }));
+const captured = vi.hoisted(() => ({
+  calls: [] as Array<{ path: string; body: Record<string, unknown> }>,
+  batchOk: false,
+  // 묶음 응답의 섹션 결과. 비면 그림 없이 성공만 답한다.
+  results: [] as unknown[],
+}));
 
 vi.mock("../pdp-utils", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -24,12 +30,13 @@ vi.mock("../pdp-utils", async (importOriginal) => {
       if (!captured.batchOk) return { ok: false, code: "quota_exceeded", message: "한도" };
       // 묶음이 성공해야 다음 묶음으로 넘어간다. 그림은 없어도 된다 — 요청 몸통만 본다.
       const requested = (body.sections as unknown[] | undefined)?.length ?? 0;
-      return { ok: true, results: [], requested, succeeded: 0, stopBatch: false };
+      return { ok: true, results: captured.results, requested, succeeded: captured.results.length, stopBatch: false };
     },
   };
 });
 
 import { PdpEditor } from "../PdpEditor";
+import { productsKey, type PdpProductDraft } from "../products";
 
 const 결과를 = (count: number) => ({
   originalImage: "AAAA",
@@ -49,17 +56,22 @@ const 단추 = (말: string) =>
   renderer.root.findAll((node) => node.type === "button" && 글자(node as never).includes(말));
 const 그려진글 = () => JSON.stringify(renderer.toJSON());
 
-const 띄우고누른다 = async (count = 2) => {
+const 사진칸 = (base64: string) => ({ base64, mimeType: "image/jpeg", previewUrl: "", fileName: "a.jpg" });
+// 분석한 사진(`originalImage: "AAAA"`)과 같은 제품 하나·사진 하나. 2단계와 같은 길로 간다.
+const 한제품: PdpProductDraft[] = [{ id: "p1", name: "", photos: [{ ...사진칸("AAAA"), original: { base64: "QUJD", mimeType: "image/jpeg" } }] }];
+
+const 띄우고누른다 = async (count = 2, products: PdpProductDraft[] = 한제품, result = 결과를(count)) => {
   await act(async () => {
     renderer = create(
       <PdpEditor
-        initialResult={결과를(count)}
+        initialResult={result}
         characterAngles={[]}
         aspectRatio="3:4"
         desiredTone=""
         onReset={() => {}}
         onSectionsChange={() => {}}
-        productPhoto={{ base64: "QUJD", mimeType: "image/jpeg" }}
+        products={products}
+        analyzedProductsKey={productsKey(products)}
       />,
     );
   });
@@ -79,6 +91,7 @@ const 올리기대답 = (status: number, body: unknown) =>
 beforeEach(() => {
   captured.calls.length = 0;
   captured.batchOk = false;
+  captured.results = [];
   vi.stubGlobal("window", {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -133,5 +146,98 @@ describe("제품 원본 올리기와 생성 요청", () => {
       "https://v3.fal.media/files/t2.jpg",
     ]);
     expect(올린수).toBe(2);
+  });
+});
+
+describe("여러 제품 작업의 생성 요청과 뺀 장수(설계 §6.1·§6.2)", () => {
+  const 두제품: PdpProductDraft[] = [
+    { id: "p1", name: "레몬맛", photos: [사진칸("QUJD"), 사진칸("QUJE")] },
+    { id: "p2", name: "", photos: [사진칸("QUJF")] },
+  ];
+
+  it("묶음 몸통의 page.products 에 두 제품이 주소로 실리고, 뺀 장수가 배지로 보인다", async () => {
+    captured.batchOk = true;
+    captured.results = [
+      { sectionId: "section-1", ok: true, imageBase64: "SU1H", mimeType: "image/png", productPhotosDropped: 2 },
+    ];
+    let 올린수 = 0;
+    vi.stubGlobal("fetch", async () => {
+      올린수 += 1;
+      const body = { ok: true, url: `https://v3.fal.media/files/u${올린수}.jpg`, expiresInMs: 3600000 };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    // 섹션은 부모가 쥔다(`onSectionsChange`). 결과가 섹션에 붙는 것까지 보려면 부모가 있어야 한다.
+    function EditorWithParent() {
+      const [result, setResult] = React.useState(결과를(1) as { blueprint: { sections: SectionBlueprint[] } });
+      return (
+        <PdpEditor
+          initialResult={result as never}
+          characterAngles={[]}
+          aspectRatio="3:4"
+          desiredTone=""
+          onReset={() => {}}
+          onSectionsChange={(next) => setResult((current) => ({
+            ...current,
+            blueprint: { ...current.blueprint, sections: typeof next === "function" ? next(current.blueprint.sections) : next },
+          }))}
+          products={두제품}
+          analyzedProductsKey={productsKey(두제품)}
+        />
+      );
+    }
+    await act(async () => {
+      renderer = create(<EditorWithParent />);
+    });
+    await act(async () => {
+      단추("1장 만들기")[0]!.props.onClick();
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await act(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    const 요청 = captured.calls.find((call) => call.path === "/pdp/images/batch");
+    expect(요청, "일괄 요청이 안 나갔다").toBeTruthy();
+    expect(요청!.body.productImageUrl).toBe("https://v3.fal.media/files/u1.jpg");
+    const page = 요청!.body.page as { products?: Array<{ id: string; name?: string; imageUrls: string[] }> };
+    expect(page.products).toEqual([
+      { id: "p1", name: "레몬맛", imageUrls: ["https://v3.fal.media/files/u1.jpg", "https://v3.fal.media/files/u2.jpg"] },
+      { id: "p2", imageUrls: ["https://v3.fal.media/files/u3.jpg"] },
+    ]);
+
+    await act(async () => {
+      renderer.root.find((node) => node.type === "button" && node.props["aria-pressed"] !== undefined && 글자(node as never) === "편집").props.onClick();
+    });
+    const 배지 = renderer.root.findAll((node) => typeof node.props.title === "string" && node.props.title === "사진이 많아 제품마다 앞쪽 사진만 썼습니다");
+    expect(배지.length, "뺀 장수 배지가 없다").toBeGreaterThan(0);
+    expect(그려진글()).toContain("사진 2장 줄임");
+  });
+
+  it("분석 뒤 제품이 바뀌었으면 요청이 안 나가고 다시 만들라고 말한다", async () => {
+    await act(async () => {
+      renderer = create(
+        <PdpEditor
+          initialResult={결과를(2)}
+          characterAngles={[]}
+          aspectRatio="3:4"
+          desiredTone=""
+          onReset={() => {}}
+          onSectionsChange={() => {}}
+          products={두제품}
+          analyzedProductsKey="옛 열쇠"
+        />,
+      );
+    });
+    await act(async () => {
+      단추("2장 만들기")[0]!.props.onClick();
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await act(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    expect(captured.calls.filter((call) => call.path.startsWith("/pdp/images"))).toEqual([]);
+    expect(그려진글()).toContain("제품 사진이 구성안을 만든 뒤에 바뀌었습니다");
   });
 });

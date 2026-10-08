@@ -5,7 +5,12 @@ import {
   ProductPhotoUploadError,
   PRODUCT_PHOTO_UPLOAD_FAILED,
   productPhotoErrorMessage,
+  productRequestFields,
+  productRequestFieldsOrThrow,
+  PRODUCTS_CHANGED_MESSAGE,
 } from "../product-photo-upload";
+import { productsKey } from "../products";
+import { productFactsFrom } from "@fixup/pdp-core";
 
 const 사진 = { base64: "QUJD", mimeType: "image/jpeg" };
 
@@ -128,5 +133,100 @@ describe("사용자에게 보이는 오류 문구", () => {
   it("그 밖의 오류는 고정 문구", () => {
     expect(productPhotoErrorMessage(new TypeError("crypto.subtle is undefined"))).toBe(PRODUCT_PHOTO_UPLOAD_FAILED);
     expect(PRODUCT_PHOTO_UPLOAD_FAILED).toBe("제품 사진을 올리지 못했습니다. 다시 시도해 주세요.");
+  });
+});
+
+describe("생성 요청의 제품 칸 — 여러 제품·여러 각도(설계 §6.1)", () => {
+  const 사진칸 = (base64: string, original?: string) => ({
+    base64,
+    mimeType: "image/jpeg",
+    previewUrl: "",
+    fileName: `${base64}.jpg`,
+    ...(original ? { original: { base64: original, mimeType: "image/png" } } : {}),
+  });
+  const 기록 = () => {
+    const seen: Array<{ base64: string; mimeType: string }> = [];
+    return {
+      seen,
+      uploader: { urlFor: async (source: { base64: string; mimeType: string }) => { seen.push(source); return `https://v3.fal.media/files/${source.base64}`; } },
+    };
+  };
+  const 판독 = (productId: "p1" | "p2", category: string) => ({
+    productId, category, visibleFacts: [`${category} 병`], labelText: [], distinctiveTraits: [], unknowns: [],
+  });
+
+  it("글 경로는 지금처럼 대표 이미지를 싣는다", async () => {
+    const { uploader, seen } = 기록();
+    expect(await productRequestFields({ startMode: "text", products: [], fallbackBase64: "KEYVISUAL", uploader }))
+      .toEqual({ originalImageBase64: "KEYVISUAL" });
+    expect(seen).toEqual([]);
+  });
+
+  it("제품 하나·사진 하나면 2단계 몸통과 같다 — 원본 주소 하나뿐, products 칸이 없다", async () => {
+    const { uploader } = 기록();
+    const products = [{ id: "p1" as const, name: "레몬맛", photos: [사진칸("SMALL", "BIG")] }];
+    const fields = await productRequestFields({
+      startMode: "image", products, analyzedProductsKey: productsKey(products), fallbackBase64: "SMALL", uploader,
+    });
+    expect(fields).toEqual({ productImageUrl: "https://v3.fal.media/files/BIG" });
+  });
+
+  it("제품 둘이면 사진마다 주소·제품마다 사실이 붙고, 대표 주소는 제품 1 첫 사진이다", async () => {
+    const { uploader, seen } = 기록();
+    const products = [
+      { id: "p1" as const, name: " 레몬맛 ", photos: [사진칸("L1", "L1BIG"), 사진칸("L2", "L2BIG")] },
+      { id: "p2" as const, name: "", photos: [사진칸("G1")] },
+    ];
+    const readings = [판독("p1", "레몬 음료"), 판독("p2", "자몽 음료")];
+    const fields = await productRequestFields({
+      startMode: "image", products, analyzedProductsKey: productsKey(products), readings, fallbackBase64: "L1", uploader,
+    });
+    expect(fields).toEqual({
+      productImageUrl: "https://v3.fal.media/files/L1BIG",
+      products: [
+        { id: "p1", name: "레몬맛", imageUrls: ["https://v3.fal.media/files/L1BIG", "https://v3.fal.media/files/L2BIG"], facts: productFactsFrom(readings[0]) },
+        { id: "p2", imageUrls: ["https://v3.fal.media/files/G1"], facts: productFactsFrom(readings[1]) },
+      ],
+    });
+    // 원본이 없는 사진은 1024 사본을 그 mime 으로 올린다.
+    expect(seen.map((source) => source.base64)).toEqual(["L1BIG", "L2BIG", "G1"]);
+  });
+
+  it("분석 뒤 제품이 바뀌었고 사진이 여럿이면 올리지 않고 멈춘다", async () => {
+    const { uploader, seen } = 기록();
+    const products = [{ id: "p1" as const, name: "", photos: [사진칸("A"), 사진칸("B")] }];
+    const pending = productRequestFields({
+      startMode: "image", products, analyzedProductsKey: "옛 열쇠", fallbackBase64: "A", uploader,
+    });
+    await expect(pending).rejects.toThrow(ProductPhotoUploadError);
+    await expect(pending).rejects.toThrow(PRODUCTS_CHANGED_MESSAGE);
+    expect(PRODUCTS_CHANGED_MESSAGE).toBe("제품 사진이 구성안을 만든 뒤에 바뀌었습니다. 구성안을 다시 만들어 주세요.");
+    expect(seen).toEqual([]);
+  });
+
+  it("분석 뒤 바뀌었어도 제품 하나·사진 하나면 분석한 1024 사본으로 만든다(R4)", async () => {
+    const { uploader, seen } = 기록();
+    const products = [{ id: "p1" as const, name: "", photos: [사진칸("NEW", "NEWBIG")] }];
+    const fields = await productRequestFields({
+      startMode: "image", products, analyzedProductsKey: "옛 열쇠", fallbackBase64: "OLD", uploader,
+    });
+    expect(fields).toEqual({ productImageUrl: "https://v3.fal.media/files/OLD" });
+    expect(seen).toEqual([{ base64: "OLD", mimeType: "image/jpeg" }]);
+  });
+
+  it("열쇠가 없는 옛 작업(제품 하나·사진 하나)은 2단계처럼 분석한 사진과 견준다", async () => {
+    const { uploader } = 기록();
+    const same = [{ id: "p1" as const, name: "", photos: [사진칸("SMALL", "BIG")] }];
+    expect(await productRequestFields({ startMode: "image", products: same, fallbackBase64: "data:image/jpeg;base64,SMALL", uploader }))
+      .toEqual({ productImageUrl: "https://v3.fal.media/files/BIG" });
+    expect(await productRequestFields({ startMode: "image", products: same, fallbackBase64: "OTHER", uploader }))
+      .toEqual({ productImageUrl: "https://v3.fal.media/files/OTHER" });
+  });
+
+  it("묶음용은 사용자 문구로 바꿔 던진다", async () => {
+    const { uploader } = 기록();
+    const products = [{ id: "p1" as const, name: "", photos: [사진칸("A"), 사진칸("B")] }];
+    await expect(productRequestFieldsOrThrow({ startMode: "image", products, analyzedProductsKey: "옛 열쇠", fallbackBase64: "A", uploader }))
+      .rejects.toThrow(PRODUCTS_CHANGED_MESSAGE);
   });
 });

@@ -43,8 +43,7 @@ import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
 import { ProductSlots, dropIntoProducts } from "./ProductSlots";
-import { primaryPhoto, productsFromLegacy, productsReady, type PdpProductDraft } from "./products";
-import { photoForEditor } from "./product-photo-upload";
+import { hasProductContent, primaryPhoto, productChips, productsFromLegacy, productsKey, productsReady, type PdpProductDraft } from "./products";
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
@@ -358,7 +357,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
   const selectedRatio = useMemo(() => RATIO_OPTIONS.find((option) => option.value === aspectRatio) ?? RATIO_OPTIONS[2], [aspectRatio]);
   const selectedToneLabel = desiredTone || "AI 자동 추천";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
-  const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || planInstruction.trim() || Object.values(sellerBrief).some(Boolean));
+  const hasDraftContent = Boolean(preparedImage || hasProductContent(products) || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || planInstruction.trim() || Object.values(sellerBrief).some(Boolean));
   /**
    * 넘친 입력 칸. **막기 전에 어느 칸인지 말한다**(U-08).
    *
@@ -1114,6 +1113,8 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
             strategyDirective,
             planInstruction,
             look,
+            // 제품이 여럿이거나 사진이 여럿이면 분석이 모두 본다(설계 §5).
+            products,
           }),
           // 기획의 입력이 아니라 **진행을 물어볼 번호**다.
           planProgressId: progressId,
@@ -1135,7 +1136,8 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         상태를 비우므로, 여기서 안 들고 있으면 되돌려도 레이어가 안 돌아온다.
       */
       setPreviousPlan(strategyDirective && result ? { result, editor: editorDraftState } : null);
-      setResult({ ...response.result, blueprint });
+      // 만들기 직전에 지금 제품 목록과 견준다 — 구성안 뒤에 사진이 바뀌었으면 원본을 안 넘긴다.
+      setResult({ ...response.result, blueprint, analyzedProductsKey: productsKey(products) });
       setAnalyzedBlueprint(blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
       // 받아 두지 않으면 화면은 늘 비어 있다.
@@ -1280,6 +1282,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
           attachmentIntents={attachmentIntents}
           onIntentChange={setIntent}
           blueprint={result.blueprint}
+          products={productChips(products)}
           referenceModelName={modelImage ? modelImageDisplayName : undefined}
           referenceModelUsage={modelImageUsage}
           onReferenceModelRemove={() => {
@@ -1378,7 +1381,8 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
         // 생성 결과를 서버에 적을 때 무엇의 것인지 묶는 값.
         draftId={activeDraftId}
-        productPhoto={photoForEditor(preparedImage, result.originalImage)}
+        products={products}
+        analyzedProductsKey={result.analyzedProductsKey}
         aspectRatio={aspectRatio}
         outputMode={outputMode}
         imageModel={imageModel}
@@ -1466,7 +1470,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {preparedImage ? (
+          {preparedImage || hasProductContent(products) ? (
             /* 옛 UI에서는 제목 자체가 이 동작을 하는 버튼이었다(보이지 않는 조작).
                저장 확인 후 작업을 비우는 실제 기능이므로 명시적 버튼으로 남긴다. */
             <Button variant="outline" size="sm" onClick={() => void handleGoToMain()}>

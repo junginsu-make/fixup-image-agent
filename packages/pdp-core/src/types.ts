@@ -134,6 +134,11 @@ export interface SectionBlueprint {
    * 없으면 모든 제품이다.
    */
   product_ids?: string[];
+  /**
+   * 이 그림을 만들 때 참조 상한 때문에 빼고 보낸 제품 사진 수(설계 §6.2). 화면이 생성 응답에서
+   * 옮겨 적고 배지로 보인다. 안 뺐으면 없다.
+   */
+  productPhotosDropped?: number;
 }
 
 /**
