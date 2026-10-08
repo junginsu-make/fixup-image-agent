@@ -9,7 +9,7 @@
  */
 
 import type { StepDefinition } from "@fixup/ui";
-import { VISIBLE_IMAGE_MODEL_IDS, imageModelName, imageModelSummary } from "@fixup/shared";
+import { VISIBLE_IMAGE_MODEL_IDS, imageModelName } from "@fixup/shared";
 import { REDESIGN_FAL_MODEL, analysisProviderFor, redesignFalModelFor, type AnalysisProvider } from "../../lib/redesign/model-choice";
 
 /*
@@ -160,15 +160,6 @@ export type ServerConfig = {
 export const knowledgeStorageKey = "hanirum-knowledge-items";
 export const projectDbName = "hanirum-redesign-projects";
 export const projectStoreName = "projects";
-
-/**
- * 설명서(`guide/redesign`)가 아직 두 칸으로 그린다 — 설명서 글은 따로 고친다(계획 Task 9).
- * 그때까지도 이름·설명은 정본에서 받는다. 옛 「정밀형」을 다시 적지 않는다.
- */
-export const models = {
-  openai: { label: imageModelName(REDESIGN_FAL_MODEL), hint: imageModelSummary(REDESIGN_FAL_MODEL) },
-  google: { label: imageModelName("nano-banana-pro"), hint: imageModelSummary("nano-banana-pro") },
-};
 
 /**
  * 작업·계획에 붙일 그림 모델 이름. 옛 작업(`imageModel` 없음)은 그때 그린

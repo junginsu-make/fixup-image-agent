@@ -1,6 +1,6 @@
 import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
-import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
+import { POSTER_RATIOS, VISIBLE_IMAGE_MODELS } from "@fixup/sns-core";
 import {
   IMAGE_CREDIT_POLICY, IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, withJosa,
 } from "@fixup/shared";
@@ -57,7 +57,7 @@ const ROLE_ITEMS = (["style", "preserve_product", "preserve_person", "preserve_p
  * 만든다(`sns-core` 의 `resolveFrom`). **이름을 손으로 적지 않는다.** 전에는
  * 「정밀형으로만」이라고 적어 두었는데 표준형·정밀형 플러스도 만든다.
  */
-const PIXEL_MODEL_NAMES = IMAGE_MODELS.filter((model) => model.pixelSizeLimits).map((model) => model.label).join("·");
+const PIXEL_MODEL_NAMES = VISIBLE_IMAGE_MODELS.filter((model) => model.pixelSizeLimits).map((model) => model.label).join("·");
 
 /** 비율 버튼의 이름표. 화면(`poster/new-client.tsx`)이 버튼에 그대로 적는 말이다. */
 const RATIO_LABEL = (id: string) => POSTER_RATIOS.find((ratio) => ratio.id === id)?.label ?? id;
@@ -254,7 +254,7 @@ export default function ImageGuidePage() {
             label="모델"
             columns={3}
             active={0}
-            items={IMAGE_MODELS.map((model) => ({ title: model.label }))}
+            items={VISIBLE_IMAGE_MODELS.map((model) => ({ title: model.label }))}
             note="고른 방식이 그 비율을 못 만들면 만들 수 있는 방식으로 바꾸고, 바꿨다고 여기 적습니다."
           />
           <MockChoices
@@ -382,7 +382,7 @@ export default function ImageGuidePage() {
               `약 290dpi로 나옵니다. ${withJosa(PIXEL_MODEL_NAMES, "으로로")} 만들고, 한 장에 ${큰그림크레딧}크레딧입니다`,
             ],
             ["화면으로만 볼 시안", "A4 비율 시안", `인쇄 해상도가 필요 없으면 이쪽이면 됩니다. 한 장에 ${보통크레딧}크레딧입니다`],
-            ["글자가 많이 들어간다", "정밀형", "글자가 가장 정확합니다"],
+            ["글자가 많이 들어간다", "표준형", "한글을 정확하게 그립니다"],
             ["제품이 실물 그대로 나와야 한다", "「제품 그대로 지키기」 추가", "형태·색·라벨이 유지됩니다"],
           ]}
         />

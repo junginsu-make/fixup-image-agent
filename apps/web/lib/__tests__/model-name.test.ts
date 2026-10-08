@@ -226,6 +226,16 @@ describe("회원 화면에 모델 이름이 없다", () => {
     expect(문자열들(목록!.source)).toContain("Claude Sonnet 5");
   });
 
+  it("사라진 등급 이름이 회원 글에 없다", () => {
+    const 사라진 = ["정밀형", "정밀형 플러스", "속도형 라이트", "경제형"];
+    const 걸린 = 화면들.flatMap(({ path, source }) =>
+      문자열들(source)
+        .filter((s) => 사라진.some((n) => s.includes(n)))
+        .map((s) => `${path}: ${s}`),
+    );
+    expect(걸린).toEqual([]);
+  });
+
   it("id 가 문장에 섞여 있지 않다", () => {
     const 섞인곳: string[] = [];
 

@@ -1,6 +1,6 @@
 import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
-import { CARD_RATIOS, IMAGE_MODELS, MAX_CARDS } from "@fixup/sns-core";
+import { CARD_RATIOS, MAX_CARDS, VISIBLE_IMAGE_MODELS } from "@fixup/sns-core";
 import {
   ATTACHMENT_ROLE_HINT,
   ATTACHMENT_ROLE_LABEL,
@@ -28,7 +28,7 @@ export const metadata = guideMetadata("/guide/cardnews");
 
 /** 화면에 뜨는 목록을 그대로 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const RATIO_ITEMS = CARD_RATIOS.map((ratio) => ({ title: ratio.id, hint: ratio.label }));
-const MODEL_NAMES = IMAGE_MODELS.map((model) => model.label).join(" · ");
+const MODEL_NAMES = VISIBLE_IMAGE_MODELS.map((model) => model.label).join(" · ");
 
 /** 역할 어휘도 코드가 단일 출처다. 여기 베껴 적으면 어휘가 바뀔 때 안내만 낡는다. */
 const ROLES: AttachmentRole[] = [
@@ -46,10 +46,10 @@ const LOOK_ITEMS = IMAGE_LOOKS.map((look) => ({ title: IMAGE_LOOK_LABEL[look] })
  * 모델마다 받는 첨부 장수. 손으로 적었다가 새 모델(정밀형 플러스)이 빠진 채
  * 낡았다(2026-09-29). 같은 장수끼리 묶어 「… 16장, … 14장」으로 낸다.
  */
-const REFERENCE_LIMITS = [...new Set(IMAGE_MODELS.map((model) => model.maxReferenceImages))]
+const REFERENCE_LIMITS = [...new Set(VISIBLE_IMAGE_MODELS.map((model) => model.maxReferenceImages))]
   .sort((a, b) => b - a)
   .map((max) => {
-    const names = IMAGE_MODELS.filter((model) => model.maxReferenceImages === max)
+    const names = VISIBLE_IMAGE_MODELS.filter((model) => model.maxReferenceImages === max)
       .map((model) => model.label)
       .join(" · ");
     return `${withJosa(names, "은는")} ${max}장`;
@@ -518,7 +518,7 @@ export default function CardNewsGuidePage() {
             },
             {
               q: "만든 그림의 글자가 원고와 다릅니다",
-              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 정밀형을 쓰세요. 글자가 가장 정확합니다.",
+              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 표준형을 쓰세요. 한글을 정확하게 그립니다.",
             },
             {
               q: "만드는 중에 다른 화면으로 가도 되나요",

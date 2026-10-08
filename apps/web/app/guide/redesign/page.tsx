@@ -1,12 +1,15 @@
 import { guideMetadata } from "../../../lib/seo/metadata";
-import { IMAGE_CREDIT_POLICY } from "@fixup/shared";
+import { IMAGE_CREDIT_POLICY, IMAGE_MODEL_NAMES } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockSteps } from "../_components/mockup";
-import { MAX_REFERENCE_IMAGES, REDESIGN_STEPS, models } from "../../redesign/redesign-model";
+import { MAX_REFERENCE_IMAGES, REDESIGN_STEPS } from "../../redesign/redesign-model";
 
 export const metadata = guideMetadata("/guide/redesign");
+
+/** 고르는 화면(`ImageModelPicker`)과 같은 세 모델 — 이름과 설명을 정본에서 받는다. */
+const 보이는모델 = IMAGE_MODEL_NAMES.filter((entry) => entry.visible);
 
 /** 화면의 세 화면 이름 그대로. */
 const 화면 = REDESIGN_STEPS.map((step) => step.label);
@@ -127,12 +130,9 @@ export default function RedesignGuidePage() {
           />
           <MockChoices
             label="이미지 생성 모델"
-            columns={2}
+            columns={3}
             active={0}
-            items={[
-              { title: models.openai.label, hint: models.openai.hint },
-              { title: models.google.label, hint: models.google.hint },
-            ]}
+            items={보이는모델.map((entry) => ({ title: entry.name }))}
           />
           <MockChoices
             label="결과 장수"
