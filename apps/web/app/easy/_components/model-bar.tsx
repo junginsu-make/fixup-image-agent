@@ -162,6 +162,7 @@ export function ImageModelMenu({
             value={value}
             ids={ids}
             legend="이미지 모델"
+            disabled={disabled}
             onChange={(id) => {
               onChange(id);
               close();

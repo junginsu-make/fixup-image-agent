@@ -51,6 +51,19 @@ describe("쉽게 모드 그림 모델 펼침 칸", () => {
     expect(panelOpen()).toBe(false);
   });
 
+  it("펼친 채로 잠기면 안의 고르기도 잠긴다", () => {
+    const onChange = mount();
+    act(() => { trigger().props.onClick(); });
+    expect(view.root.findByType(ImageModelPicker).props.disabled).toBeFalsy();
+    act(() => {
+      view.update(<ImageModelMenu models={models} value="gpt-image-2.5-flare" onChange={onChange} disabled />);
+    });
+    expect(trigger().props.disabled).toBe(true);
+    if (panelOpen()) expect(view.root.findByType(ImageModelPicker).props.disabled).toBe(true);
+    const radios = view.root.findAll((n) => n.type === "button" && n.props.role === "radio");
+    expect(radios.every((r) => r.props.disabled === true)).toBe(true);
+  });
+
   it("글 모델 메뉴가 아닌 이 칸은 Radix 메뉴를 쓰지 않는다", () => {
     const src = readFileSync(new URL("../_components/model-bar.tsx", import.meta.url), "utf8");
     const image = src.slice(src.indexOf("export function ImageModelMenu"), src.indexOf("export function EasyModelBar"));
