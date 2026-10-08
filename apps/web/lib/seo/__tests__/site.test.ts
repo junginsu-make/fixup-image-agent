@@ -19,6 +19,12 @@ describe("verificationMetadata", () => {
       other: { "naver-site-verification": "71bcc9f01c1627643f6ea41d7cabef997708066f" },
     });
   });
+  it("운영 값: 구글 서치 콘솔이 준 값도 기본으로 나간다", () => {
+    expect(verificationMetadata()).toMatchObject({
+      google: "PU2RGhUapDAvAYeduNewUKJFQrKLHwO_2lc1n47sm5g",
+      other: { "naver-site-verification": "71bcc9f01c1627643f6ea41d7cabef997708066f" },
+    });
+  });
   it("둘 다, 앞뒤 공백은 지운다", () => {
     expect(verificationMetadata({ google: " g ", naver: " n ", daumPin: "" })).toEqual({
       google: "g",
