@@ -373,6 +373,8 @@ export async function generateSectionImage(
   /** fal 이 실제로 만든 장수(재시도 포함). 호출자가 비용으로 기록한다. */
   generatedImages: number;
   qa?: { warnings: QaDefect[] };
+  /** 참조 상한 때문에 빼고 보낸 제품 사진 수(설계 §6.2). 안 뺐으면 칸이 없다. */
+  productPhotosDropped?: number;
 }> {
   const response = await controllerOf().generateImage(input, providers);
 
@@ -381,7 +383,8 @@ export async function generateSectionImage(
       imageBase64: response.imageBase64,
       mimeType: response.mimeType,
       generatedImages: response.generatedImages,
-      qa: response.qa
+      qa: response.qa,
+      ...(response.productPhotosDropped ? { productPhotosDropped: response.productPhotosDropped } : {})
     };
   }
 

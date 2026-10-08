@@ -8,7 +8,7 @@ import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
 import type { ProductFacts } from "./pdp.product-fidelity";
-import type { ProductId } from "./pdp.products";
+import type { PageProduct, ProductId } from "./pdp.products";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -407,6 +407,12 @@ export interface ReferenceImage {
    * 지키므로 서술이 필요 없지만, **색과 면의 쓰임새는 문장이 있어야 전달된다.**
    */
   description?: string;
+  /**
+   * **어느 제품의 몇 번째 사진인가**(설계 2026-10-08 §6.1). `anchor` 에만, 제품이 둘 이상이거나
+   * 사진이 둘 이상일 때만 붙는다 — 제품 하나·사진 하나면 1·2단계와 같은 이름표(`PRODUCT`)여야 한다.
+   * `label` 은 `PRODUCT 1 "레몬맛"` 처럼 다 만든 이름이다. 이름표와 제품 블록이 같은 글자를 쓰게.
+   */
+  product?: { id: ProductId; label: string; view: number; views: number };
 }
 
 export interface ImageGenOptions {
@@ -497,6 +503,12 @@ export interface ImageGenOptions {
    * 화면이 뽑아 보낸다(`productFactsFrom`). 글 경로에는 없다.
    */
   productFacts?: ProductFacts;
+  /**
+   * **이 섹션에 그릴 제품들**(3단계, 설계 §6.1). 섹션에 배정된 것만 온다 — 배정 안 된 제품의
+   * 사진을 보내면 모델이 그것도 그린다. 있으면 `productImageUrl`·`productFacts` 대신 이것으로
+   * 참조와 제품 블록을 만든다.
+   */
+  products?: PageProduct[];
 }
 
 /** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
@@ -722,6 +734,8 @@ export interface PdpGenerateImageSuccessResponse {
    */
   generatedImages: number;
   qa?: { warnings: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" };
+  /** 참조 상한 때문에 빼고 보낸 제품 사진 수(설계 §6.2). 안 뺐으면 칸이 없다. */
+  productPhotosDropped?: number;
 }
 
 export interface PdpValidateApiKeySuccessResponse {

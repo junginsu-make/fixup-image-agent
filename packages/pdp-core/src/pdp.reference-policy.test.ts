@@ -26,6 +26,53 @@ describe("참조 등급", () => {
   });
 });
 
+describe("여러 각도·여러 제품 이름표(설계 §6.1)", () => {
+  const view = (id: "p1" | "p2", label: string, viewNo: number, views: number, intent?: string): ReferenceImage => ({
+    kind: "anchor", base64: "", mimeType: "image/jpeg", url: `https://v3.fal.media/files/${id}-${viewNo}.jpg`,
+    product: { id, label, view: viewNo, views }, ...(intent ? { intent } : {}),
+  });
+  const refs = [
+    view("p1", 'PRODUCT 1 "레몬맛"', 1, 2),
+    view("p1", 'PRODUCT 1 "레몬맛"', 2, 2),
+    view("p2", "PRODUCT 2", 1, 1),
+    person,
+  ];
+  const count = (text: string, part: string) => text.split(part).length - 1;
+
+  it("제품·각도 이름표를 첨부 순서대로 단다", () => {
+    const directive = buildReferenceRoleDirective(refs);
+    const labels = directive.split("\n").filter((line) => line.startsWith("[Image "));
+    expect(labels).toEqual([
+      '[Image 1 — PRODUCT 1 "레몬맛", view 1 of 2]',
+      '[Image 2 — PRODUCT 1 "레몬맛", view 2 of 2]',
+      "[Image 3 — PRODUCT 2, view 1 of 1]",
+      "[Image 4 — PERSON]",
+    ]);
+  });
+
+  it("제품 규칙은 첫 앵커에서 한 번만, 같은 제품 문장도 한 번만", () => {
+    const directive = buildReferenceRoleDirective(refs);
+    expect(count(directive, "This is the product. Keep it recognisably the same product:")).toBe(1);
+    const same =
+      "Images 1–2 are the same single product photographed from different angles — one object, not several. Base each view on the photo closest to the angle the scene needs.";
+    expect(count(directive, same)).toBe(1);
+    expect(directive.indexOf(same)).toBeGreaterThan(directive.indexOf("[Image 1 —"));
+    expect(directive.indexOf(same)).toBeLessThan(directive.indexOf("[Image 2 —"));
+    // 사진이 한 장뿐인 제품에는 그 문장이 없다.
+    expect(directive).not.toMatch(/Images 3–3/);
+  });
+
+  it("제품 자리에 적은 말은 첫 앵커에만 붙는다", () => {
+    const directive = buildReferenceRoleDirective([
+      view("p1", 'PRODUCT 1 "레몬맛"', 1, 2, "병을 눕혀 주세요"),
+      view("p1", 'PRODUCT 1 "레몬맛"', 2, 2),
+      view("p2", "PRODUCT 2", 1, 1),
+    ]);
+    expect(count(directive, "병을 눕혀 주세요")).toBe(1);
+    expect(count(directive, "This is the product. Keep it recognisably the same product:")).toBe(1);
+  });
+});
+
 describe("역할 지시문", () => {
   it("첨부가 없으면 아무 말도 하지 않는다", () => {
     expect(buildReferenceRoleDirective([])).toBe("");

@@ -1,4 +1,5 @@
-import type { ProductFacts } from "./pdp.product-fidelity";
+import type { FidelityGroup, ProductFacts } from "./pdp.product-fidelity";
+import { IMAGE_MODELS, type ImageModelId, type ReferenceImage } from "./types";
 
 export const PRODUCT_IDS = ["p1", "p2", "p3"] as const;
 export type ProductId = (typeof PRODUCT_IDS)[number];
@@ -66,4 +67,67 @@ export function fitProductPhotos<T extends { imageUrls: string[] }>(
     products: products.map((product, i) => ({ ...product, imageUrls: product.imageUrls.slice(0, counts[i]) })),
     dropped: original - total,
   };
+}
+
+/**
+ * 섹션 제품 사진을 참조 상한에 맞춘다(설계 §6.2). 인물·캐릭터·레퍼런스 자리(`others`)를 먼저
+ * 빼고 남는 만큼만 싣는다 — 정체성 기준인 인물을 제품 사진 때문에 잃으면 안 된다. 그래도
+ * 넘치면 거절은 지금처럼 `assertReferenceBudget`(모르는 모델은 7장)이 한다.
+ */
+export function fitSectionProducts(
+  products: readonly PageProduct[] | undefined,
+  model: ImageModelId,
+  others: number,
+): { products: PageProduct[]; dropped: number } {
+  const usable = (products ?? []).filter((product) => product.imageUrls.length > 0);
+  const limit = IMAGE_MODELS.find((entry) => entry.id === model)?.maxReferenceImages ?? 7;
+  return fitProductPhotos(usable, limit - others);
+}
+
+/**
+ * 제품마다 사진을 차례대로 `anchor` 참조로 만든다(설계 §6.1). 제품 차례, 제품 안에서는 사진 차례.
+ *
+ * **제품 하나·사진 하나면 `product` 를 안 붙인다** — 이름표가 `[Image 1 — PRODUCT]` 그대로여야
+ * 1·2단계와 프롬프트가 같다(회귀 고정). 사용자가 제품 자리에 적은 말은 첫 사진에만 — 사진마다
+ * 되풀이하면 같은 문장이 규칙처럼 쌓인다.
+ */
+export function anchorsFromProducts(products: readonly PageProduct[], intent?: string): ReferenceImage[] {
+  const single = products.length === 1 && products[0]!.imageUrls.length === 1;
+  return products.flatMap((product, productIndex) => {
+    const name = product.name?.trim();
+    // 이름은 따옴표로 감싼다(JSON) — 줄바꿈·따옴표가 섞여도 이름표 밖으로 새지 않는다.
+    const label = `PRODUCT ${productIndex + 1}${name ? ` ${JSON.stringify(name)}` : ""}`;
+    return product.imageUrls.map((url, viewIndex): ReferenceImage => ({
+      kind: "anchor",
+      base64: "",
+      mimeType: "image/jpeg",
+      url,
+      intent: productIndex === 0 && viewIndex === 0 ? intent : undefined,
+      ...(single ? {} : { product: { id: product.id, label, view: viewIndex + 1, views: product.imageUrls.length } }),
+    }));
+  });
+}
+
+/**
+ * 첨부 배열에서 제품 블록의 묶음을 만든다 — 번호를 따로 세면 이름표와 어긋난다.
+ * 사실은 그 제품의 것. `products` 가 없을 때(1·2단계 호출)만 옛 `productFacts` 를 쓴다.
+ */
+export function fidelityGroups(
+  references: readonly ReferenceImage[],
+  products: readonly PageProduct[],
+  legacyFacts?: ProductFacts,
+): FidelityGroup[] {
+  return references.reduce<Array<FidelityGroup & { id?: ProductId }>>((groups, reference, index) => {
+    if (reference.kind !== "anchor") return groups;
+    const id = reference.product?.id;
+    const last = groups[groups.length - 1];
+    if (last && last.id === id) {
+      return [...groups.slice(0, -1), { ...last, imageNumbers: [...last.imageNumbers, index + 1] }];
+    }
+    const facts = products.length ? products.find((product) => !id || product.id === id)?.facts : legacyFacts;
+    return [
+      ...groups,
+      { id, ...(reference.product ? { label: reference.product.label } : {}), imageNumbers: [index + 1], ...(facts ? { facts } : {}) },
+    ];
+  }, []);
 }

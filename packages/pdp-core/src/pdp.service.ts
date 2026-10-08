@@ -78,7 +78,7 @@ import {
   productPhotosPrompt,
   settleProductPlan,
 } from "./pdp.analyze-products";
-import type { ProductId } from "./pdp.products";
+import { anchorsFromProducts, fidelityGroups, fitSectionProducts, type ProductId } from "./pdp.products";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
 import { buildStrategyDirective } from "./pdp.replan";
@@ -111,7 +111,7 @@ type QaResult = {
 };
 
 /** `generatedImages` 는 fal 이 실제로 만든 장수다(재시도 포함) — 비용 계산의 근거. */
-type SectionImageResult = GeneratedImagePayload & { qa?: QaResult; generatedImages: number };
+type SectionImageResult = GeneratedImagePayload & { qa?: QaResult; generatedImages: number; productPhotosDropped?: number };
 
 type ReferenceModelProfile = {
   genderPresentation: string;
@@ -761,7 +761,8 @@ ${analyzePrompt}`
       imageBase64: image.base64,
       mimeType: image.mimeType,
       generatedImages: image.generatedImages,
-      qa: image.qa ? { warnings: image.qa.warnings } : undefined
+      qa: image.qa ? { warnings: image.qa.warnings } : undefined,
+      ...(image.productPhotosDropped ? { productPhotosDropped: image.productPhotosDropped } : {})
     };
   }
 
@@ -778,7 +779,10 @@ ${analyzePrompt}`
   }): Promise<SectionImageResult> {
     const client = request.client ?? this.getClient();
     // 주소가 오면 몸통의 그림은 없다. 빈 값을 다듬으면 「그림이 깨졌다」로 던진다.
-    const originalImageBase64 = request.productImageUrl ? "" : sanitizeBase64Payload(request.originalImageBase64 ?? "");
+    // 제품 묶음(`options.products`)만 와도 같다 — 참조는 그 주소들로 만든다.
+    const originalImageBase64 = request.productImageUrl || request.options?.products?.some((product) => product.imageUrls.length)
+      ? ""
+      : sanitizeBase64Payload(request.originalImageBase64 ?? "");
     const section = normalizeSection(request.section, 0);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
@@ -824,6 +828,14 @@ ${analyzePrompt}`
     let lastRefOk = true;
     // 이전 attempt 에서 확인된 blocking. fail-open(QA 인프라 실패)이 known-bad 를 통과로 위장하지 못하게 유지.
     let sawBlockingOutcome: QaOutcome | null = null;
+    /*
+      **섹션 제품 사진**(설계 2026-10-08 §6.1·§6.2). 인물·캐릭터·레퍼런스 자리를 먼저 세고 남는
+      만큼만 싣는다. 시도마다 같으므로 한 번만 정한다. 비면 1·2단계처럼 앵커 한 장이다.
+    */
+    const personSlots = usesUploadedPerson ? (normalizedReferenceModel ? 1 : 0) : (options.characterReferences ?? []).length;
+    const fitted = fitSectionProducts(options.products, options.imageModel ?? DEFAULT_IMAGE_MODEL,
+      personSlots + (options.styleReferenceImages ?? []).length);
+    const dropped = fitted.dropped ? { productPhotosDropped: fitted.dropped } : {};
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       // 참조 이미지는 fal 에 원본 그대로 첨부된다(image_urls). 텍스트로 요약하지
@@ -863,7 +875,8 @@ ${analyzePrompt}`
           hasStyleReference: Boolean(styleReference),
         })
       ) {
-        references.push({
+        if (fitted.products.length) references.push(...anchorsFromProducts(fitted.products, options.attachmentIntents?.anchor));
+        else references.push({
           kind: "anchor",
           base64: originalImageBase64,
           mimeType: DEFAULT_IMAGE_MIME,
@@ -978,14 +991,12 @@ ${analyzePrompt}`
       // **제품 보존을 양 끝에서 한 번 더**(설계 2026-10-08 §6). 역할 지시(중간)는 그대로
       // 두고, 앞에서 「무엇을 지키고 무엇은 바꿔도 되는지」를, 뒤에서 「같은 제품인지」를
       // 말한다. 사용자 지시가 여전히 맨 앞·맨 뒤다.
-      const anchorNumber = references.findIndex((reference) => reference.kind === "anchor") + 1;
+      const groups = fidelityGroups(references, fitted.products, options.productFacts);
       const companion = references.some((reference) => reference.kind === "person")
         ? carried ? carriedSubjectNoun(carried.kind) : "person"
         : undefined;
-      const fidelityHead = anchorNumber
-        ? productFidelityHead({ imageNumber: anchorNumber, anchorRole, facts: options.productFacts, companion })
-        : "";
-      const fidelityTail = anchorNumber ? productFidelityTail({ imageNumber: anchorNumber, anchorRole }) : "";
+      const fidelityHead = productFidelityHead({ groups, anchorRole, companion });
+      const fidelityTail = productFidelityTail({ groups, anchorRole });
 
       const prompt = [
         userInstructionHead(options.userInstruction, { identityFirst: true }),
@@ -1023,7 +1034,7 @@ ${analyzePrompt}`
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
           prompt,
           // 제품이 실릴 때만 한 줄. Nano Banana Pro 는 이 문장을 system_prompt 로 받는다.
-          systemPrompt: [buildImageSystemPrompt(promptOptions), anchorNumber ? productFidelitySystemLine(anchorRole) : ""]
+          systemPrompt: [buildImageSystemPrompt(promptOptions), groups.length ? productFidelitySystemLine(anchorRole) : ""]
             .filter(Boolean)
             .join(" "),
           aspectRatio: request.aspectRatio,
@@ -1085,6 +1096,7 @@ ${analyzePrompt}`
         return {
           ...generatedImage,
           generatedImages,
+          ...dropped,
           qa: qaEnabled
             ? {
                 /*
@@ -1131,6 +1143,7 @@ ${analyzePrompt}`
     return {
       ...lastGeneratedImage,
       generatedImages,
+      ...dropped,
       qa: qaEnabled || refBlocking.length
         ? {
             passed: lastQaOutcome.blocking.length === 0 && lastRefOk,

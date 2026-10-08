@@ -81,33 +81,83 @@ function factsBlock(facts: ProductFacts): string[] {
   return lines;
 }
 
-export function productFidelityHead(input: {
-  imageNumber: number;
-  anchorRole: AnchorRole;
+/**
+ * 제품 하나의 첨부 번호 묶음(설계 §6.1). 첨부 배열에서 만든다(`fidelityGroups`) — 번호를 따로 세면
+ * 이름표와 어긋난다. `label` 은 제품이 여럿일 때만 쓴다.
+ */
+export interface FidelityGroup {
+  label?: string;
+  imageNumbers: number[];
   facts?: ProductFacts;
+}
+
+/** `Image 3` · `Images 1–2`. 한 제품의 사진은 붙어서 담기지만, 안 붙었으면 번호를 다 적는다. */
+function imagesPhrase(numbers: readonly number[]): string {
+  if (numbers.length === 1) return `Image ${numbers[0]}`;
+  const first = numbers[0]!;
+  const last = numbers[numbers.length - 1]!;
+  return last - first === numbers.length - 1 ? `Images ${first}–${last}` : `Images ${numbers.join(", ")}`;
+}
+
+/**
+ * 앞 문장. 제품 하나·사진 하나는 1·2단계 문장 그대로다(회귀 고정 — `pdp.single-product-lock.test.ts`).
+ * 제품이 여럿이면 제품마다 번호 줄을 두고 그 아래에 그 제품의 사실을 둔다 — 다른 제품의
+ * 사실로 읽히지 않게.
+ */
+function headOpening(groups: readonly FidelityGroup[]): string[] {
+  if (groups.length === 1) {
+    const only = groups[0]!;
+    const opening = only.imageNumbers.length === 1
+      ? `PRODUCT FIDELITY — ${imagesPhrase(only.imageNumbers)} is the real product being sold.`
+      : `PRODUCT FIDELITY — ${imagesPhrase(only.imageNumbers)} show the real product being sold — one product photographed from several angles.`;
+    return [`${opening} Reproduce this exact product, not a similar one.`];
+  }
+  return [
+    "PRODUCT FIDELITY — The attached product photos show the real products being sold. Reproduce each exact product, not a similar one.",
+    ...groups.flatMap((group) => [
+      `${group.label ?? "PRODUCT"} — ${imagesPhrase(group.imageNumbers)}`,
+      ...(group.facts ? factsBlock(group.facts) : []),
+    ]),
+    // 여럿을 한 장에 그리면 모델이 특징을 섞거나 하나로 합친다. 없는 제품을 더하는 것도 막는다.
+    "These are different products. Do not blend their features or merge them into one; draw each from its own photos. Do not add any product that is not attached.",
+  ];
+}
+
+export function productFidelityHead(input: {
+  groups: readonly FidelityGroup[];
+  anchorRole: AnchorRole;
   /** 함께 붙은 인물·캐릭터를 부르는 말. 없으면 그 줄을 안 싣는다. */
   companion?: string;
 }): string {
-  if (input.anchorRole === "mood-only") return "";
+  if (input.anchorRole === "mood-only" || input.groups.length === 0) return "";
   const { keep, free } = keepAndFree(input.anchorRole);
+  const single = input.groups.length === 1 ? input.groups[0] : undefined;
+  const subject = single ? "The product" : "The products";
   return [
-    `PRODUCT FIDELITY — Image ${input.imageNumber} is the real product being sold. Reproduce this exact product, not a similar one.`,
+    ...headOpening(input.groups),
     `Keep unchanged: ${keep}.`,
     `Free to change: ${free} — choose these for this section.`,
     "Showing the product from a new angle is expected; changing the product itself is not.",
-    ...(input.facts ? factsBlock(input.facts) : []),
+    // 제품이 하나면 사실은 지금 자리(이 아래)다. 여럿이면 제품 줄 아래에 이미 실었다.
+    ...(single?.facts ? factsBlock(single.facts) : []),
     ...(input.companion
-      ? [`The product and the ${input.companion} must both be clearly recognisable. Do not shrink, crop or hide one to make room for the other.`]
+      ? [`${subject} and the ${input.companion} must ${single ? "both" : "all"} be clearly recognisable. Do not shrink, crop or hide one to make room for the other.`]
       : []),
   ].join("\n");
 }
 
-export function productFidelityTail(input: { imageNumber: number; anchorRole: AnchorRole }): string {
-  if (input.anchorRole === "mood-only") return "";
+export function productFidelityTail(input: { groups: readonly FidelityGroup[]; anchorRole: AnchorRole }): string {
+  if (input.anchorRole === "mood-only" || input.groups.length === 0) return "";
   const same = input.anchorRole === "shape-only"
     ? "same shape, proportions and label text"
     : "same shape, proportions, colour, material and label text";
-  return `Final check: the product in your image must be the exact product in Image ${input.imageNumber} — ${same}. Only the camera, background and lighting may differ.`;
+  if (input.groups.length === 1) {
+    return `Final check: the product in your image must be the exact product in ${imagesPhrase(input.groups[0]!.imageNumbers)} — ${same}. Only the camera, background and lighting may differ.`;
+  }
+  const own = input.groups
+    .map((group) => `${group.label ?? "PRODUCT"}: ${imagesPhrase(group.imageNumbers)}`)
+    .join("; ");
+  return `Final check: each product must be the exact product in its own images (${own}) — ${same}. Only the camera, background and lighting may differ.`;
 }
 
 export function productFidelitySystemLine(anchorRole: AnchorRole): string {

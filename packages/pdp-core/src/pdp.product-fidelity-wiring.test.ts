@@ -106,3 +106,94 @@ describe("제품 블록 배선", () => {
     expect(refs[0]).toMatchObject({ url: "https://v3.fal.media/files/a/b.jpg" });
   });
 });
+
+/**
+ * **섹션 제품 사진만, 제품 차례·사진 차례로, 상한에 맞춰**(설계 §6.1·§6.2).
+ * fal 로 나가는 진짜 참조 배열과 결과를 붙잡는다.
+ */
+describe("여러 제품 배선", () => {
+  const urls = (id: string, n: number) => Array.from({ length: n }, (_, i) => `https://v3.fal.media/files/${id}-${i}.jpg`);
+  const character = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ base64: `CH${i}`, mimeType: "image/png", identityPrompt: "단발 여성", kind: "person", look: "photoreal" }));
+
+  async function run(options: Record<string, unknown>) {
+    const captured: Array<{ prompt: string; references: Array<{ kind: string; url?: string; base64: string }> }> = [];
+    const result = await (new PdpService() as never as { generateSectionImageInternal(input: unknown): Promise<{ productPhotosDropped?: number }> })
+      .generateSectionImageInternal({
+        // 계획 R7: 여러 제품 요청도 대표 주소를 함께 싣는다. 그래도 참조는 products 에서 만든다.
+        productImageUrl: "https://v3.fal.media/files/p1-0.jpg",
+        section: section(),
+        aspectRatio: "3:4",
+        options: { style: "studio", withModel: false, outputMode: "editable", ...options },
+        client: { llm: { generate: async () => ({ text: "{}" }) }, models: { generateContent: async () => ({ text: "{}" }) } },
+        generateImage: async (_m: unknown, input: (typeof captured)[number]) => {
+          captured.push(input);
+          return { base64: "IMG", mimeType: "image/jpeg" };
+        },
+      });
+    return { sent: captured[0]!, result };
+  }
+
+  it("섹션 제품 사진(제품 차례·사진 차례) → 인물 → 레퍼런스 순서로 보낸다", async () => {
+    const { sent, result } = await run({
+      withModel: true,
+      characterReferences: character(1),
+      styleReferenceImages: [{ base64: "REF", mimeType: "image/png" }],
+      products: [
+        { id: "p1", name: "레몬맛", imageUrls: urls("p1", 2) },
+        { id: "p2", name: "자몽맛", imageUrls: urls("p2", 1) },
+      ],
+    });
+    expect(sent.references.map((ref) => ref.url ?? `${ref.kind}:${ref.base64}`)).toEqual([
+      ...urls("p1", 2),
+      ...urls("p2", 1),
+      "person:CH0",
+      "style:REF",
+    ]);
+    expect(sent.prompt).toContain('[Image 3 — PRODUCT 2 "자몽맛", view 1 of 1]');
+    expect(sent.prompt).toContain('PRODUCT 1 "레몬맛" — Images 1–2');
+    expect(sent.prompt).toMatch(/each product must be the exact product in its own images/);
+    expect(result.productPhotosDropped).toBeUndefined();
+  });
+
+  it("Nano Banana Pro 에 제품 3×4 + 캐릭터 4각도면 14장에 맞추고 뺀 장수를 알린다", async () => {
+    const { sent, result } = await run({
+      imageModel: "nano-banana-pro",
+      withModel: true,
+      characterReferences: character(4),
+      products: [
+        { id: "p1", imageUrls: urls("p1", 4) },
+        { id: "p2", imageUrls: urls("p2", 4) },
+        { id: "p3", imageUrls: urls("p3", 4) },
+      ],
+    });
+    expect(sent.references.length).toBeLessThanOrEqual(14);
+    expect(sent.references.filter((ref) => ref.kind === "person")).toHaveLength(4);
+    expect(result.productPhotosDropped).toBe(2);
+    const sentUrls = sent.references.map((ref) => ref.url);
+    for (const id of ["p1", "p2", "p3"]) expect(sentUrls).toContain(`https://v3.fal.media/files/${id}-0.jpg`);
+  });
+
+  it("컨트롤러 응답에도 뺀 장수가 실리고, 안 뺐으면 칸이 없다", async () => {
+    const { PdpController } = await import("./pdp.controller");
+    const providers = {
+      llm: { generate: async () => ({ text: "{}" }) },
+      generateImage: async () => ({ base64: "IMG", mimeType: "image/jpeg" }),
+    } as never;
+    const body = (products: unknown) => ({
+      section: section(),
+      aspectRatio: "3:4",
+      options: { imageModel: "nano-banana-pro", withModel: true, characterReferences: character(4), products },
+    }) as never;
+    const many = [
+      { id: "p1", imageUrls: urls("p1", 4) },
+      { id: "p2", imageUrls: urls("p2", 4) },
+      { id: "p3", imageUrls: urls("p3", 4) },
+    ];
+    const dropped = await new PdpController().generateImage(body(many), providers);
+    expect(dropped).toMatchObject({ ok: true, productPhotosDropped: 2 });
+    const kept = await new PdpController().generateImage(body([{ id: "p1", imageUrls: urls("p1", 2) }]), providers);
+    expect(kept.ok).toBe(true);
+    expect("productPhotosDropped" in kept).toBe(false);
+  });
+});
