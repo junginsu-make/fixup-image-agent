@@ -1,5 +1,5 @@
-import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
-import { conceptOnlyNotice } from "@fixup/pdp-core";
+import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, PersonSource, ProductReading, ReferenceModelUsage } from "@fixup/pdp-core";
+import { conceptOnlyNotice, productFactsFrom } from "@fixup/pdp-core";
 
 /**
  * 페이지 전체가 공유하는 값을 **한 번만** 짓는다.
@@ -40,6 +40,8 @@ export interface PageWireInputs {
    * 자기 선택이 무시된 것을 안다.
    */
   personSource?: PersonSource;
+  /** 구성안의 제품 판독. 실물 사진 경로에서만 쓴다(설계 2026-10-08 §7). */
+  productReading?: Pick<ProductReading, "category" | "visibleFacts" | "labelText"> | null;
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   referenceModel?: { base64: string; mimeType: string; fileName?: string } | null;
   referenceModelUsage?: ReferenceModelUsage | null;
@@ -76,6 +78,8 @@ export function buildPageWire(input: PageWireInputs): PageImageWire {
       hasProductPhoto: input.anchorKind !== "key-visual",
     }).conceptOnly || undefined,
     personSource: input.personSource,
+    // 대표 이미지(글 경로)는 우리가 만든 그림이라 「제품 사실」이 없다.
+    productFacts: input.anchorKind === "key-visual" ? undefined : productFactsFrom(input.productReading),
     styleReference: input.styleReference,
     referenceModel: input.referenceModel
       ? {

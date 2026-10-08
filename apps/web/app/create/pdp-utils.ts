@@ -91,7 +91,73 @@ function toAnchorJpegDataUrl(sourceImage: HTMLImageElement) {
   return canvas.toDataURL("image/jpeg", ANCHOR_JPEG_QUALITY);
 }
 
-export async function prepareImageFile(file: File) {
+/** 그림 모델이 그대로 받는 형식. 다른 형식(HEIC 등)은 브라우저가 열 수 있으면 JPEG 로 바꾼다. */
+const ORIGINAL_TYPES = ["image/jpeg", "image/png", "image/webp"];
+/** 서버(`lib/pdp/product-photo.ts`)가 받는 상한과 같은 값. 넘으면 서버가 413 으로 돌려보낸다. */
+const ORIGINAL_MAX_BYTES = 20 * 1024 * 1024;
+const ORIGINAL_MAX_PIXELS = 40_000_000;
+/** 모델이 받는 최대 긴 변. 상한을 넘는 원본만 여기에 맞춘다. */
+export const ORIGINAL_FIT_EDGE = 3840;
+
+export type OriginalFit = { mode: "as-is" } | { mode: "fit"; width: number; height: number };
+
+/**
+ * **상한을 넘는 원본은 거절하지 않고 긴 변 3840 에 맞춘다**(최종 리뷰 A3, 판정 R3).
+ *
+ * 전에는 화면이 20MB 를 바로 거절했고, 40백만 화소는 분석(돈이 드는 단계)을 다 마친 뒤
+ * 올리기에서야 막혔다. 상한 안이면 그대로 — 원본을 줄이지 않는다(설계 D1).
+ * 긴 변이 이미 3840 아래인데 용량만 크면 크기는 두고 JPEG 로 다시 굽기만 한다.
+ */
+export function originalFitFor(input: { width: number; height: number; bytes: number }): OriginalFit {
+  const within = input.bytes <= ORIGINAL_MAX_BYTES && input.width * input.height <= ORIGINAL_MAX_PIXELS;
+  if (within) return { mode: "as-is" };
+  const scale = Math.min(1, ORIGINAL_FIT_EDGE / Math.max(input.width, input.height));
+  return {
+    mode: "fit",
+    width: Math.max(1, Math.round(input.width * scale)),
+    height: Math.max(1, Math.round(input.height * scale)),
+  };
+}
+
+/**
+ * 캔버스 결과를 원본 칸에 담을 수 있는가(최종 리뷰 C3).
+ *
+ * 브라우저는 캔버스가 제 한도를 넘으면 오류 없이 `"data:,"` 를 준다. 그것을 그대로 두면
+ * 빈 원본(`base64: ""`)이 임시저장에 남는다 — 차라리 원본을 버리고 1024 사본 길로 간다.
+ */
+export function usableOriginal(dataUrl: string): { base64: string; mimeType: string } | undefined {
+  const match = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl);
+  return match ? { base64: match[2]!, mimeType: match[1]! } : undefined;
+}
+
+function drawJpegDataUrl(sourceImage: HTMLImageElement, size: { width: number; height: number }) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("이미지 캔버스를 초기화하지 못했습니다.");
+  context.drawImage(sourceImage, 0, 0, size.width, size.height);
+  return canvas.toDataURL("image/jpeg", 0.95);
+}
+
+const base64Bytes = (dataUrl: string) => Math.floor(((dataUrl.split(",")[1] ?? "").length * 3) / 4);
+
+/** 모델에 넘길 원본. 못 만들면 없다고 답한다 — 편집기가 1024 사본을 올려 쓴다. */
+function originalOf(file: File, sourceDataUrl: string, sourceImage: HTMLImageElement) {
+  const size = { width: sourceImage.naturalWidth, height: sourceImage.naturalHeight };
+  if (ORIGINAL_TYPES.includes(file.type)) {
+    const fit = originalFitFor({ ...size, bytes: file.size });
+    return usableOriginal(fit.mode === "as-is" ? sourceDataUrl : drawJpegDataUrl(sourceImage, fit));
+  }
+  // HEIC 등: 같은 크기 JPEG 를 먼저 굽고, 그 결과가 상한을 넘을 때만 맞춘다.
+  const byPixels = originalFitFor({ ...size, bytes: 0 });
+  if (byPixels.mode === "fit") return usableOriginal(drawJpegDataUrl(sourceImage, byPixels));
+  const fullSize = drawJpegDataUrl(sourceImage, size);
+  const byBytes = originalFitFor({ ...size, bytes: base64Bytes(fullSize) });
+  return usableOriginal(byBytes.mode === "as-is" ? fullSize : drawJpegDataUrl(sourceImage, byBytes));
+}
+
+async function readWithPreview(file: File) {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const sourceImage = await loadImage(sourceDataUrl);
   const previewUrl = toAnchorJpegDataUrl(sourceImage);
@@ -102,11 +168,30 @@ export async function prepareImageFile(file: File) {
   }
 
   return {
-    base64,
-    mimeType: "image/jpeg" as const,
-    previewUrl,
-    fileName: file.name,
+    prepared: {
+      base64,
+      mimeType: "image/jpeg" as const,
+      previewUrl,
+      fileName: file.name,
+    },
+    sourceDataUrl,
+    sourceImage,
   };
+}
+
+/**
+ * 1024 사본(미리보기·분석용). 인물 사진은 이것만 쓴다 — 원본을 만들지도, 원본 상한을
+ * 걸지도 않는다(최종 리뷰 C1). 이번 변경 전과 같은 모양이다.
+ */
+export async function prepareImageFile(file: File) {
+  return (await readWithPreview(file)).prepared;
+}
+
+/** 제품 사진: 1024 사본과 **원본을 함께** 쥔다(설계 2026-10-08 D1·§4.6). */
+export async function prepareProductImageFile(file: File) {
+  const { prepared, sourceDataUrl, sourceImage } = await readWithPreview(file);
+  const original = originalOf(file, sourceDataUrl, sourceImage);
+  return { ...prepared, ...(original ? { original } : {}) };
 }
 
 /**

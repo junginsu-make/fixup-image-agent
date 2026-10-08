@@ -1,0 +1,239 @@
+{
+  "section": {
+    "section_id": "S1",
+    "section_name": "히어로",
+    "goal": "",
+    "headline": "촉촉함",
+    "headline_en": "",
+    "subheadline": "부제",
+    "subheadline_en": "",
+    "bullets": [],
+    "bullets_en": [],
+    "trust_or_objection_line": "",
+    "trust_or_objection_line_en": "",
+    "CTA": "",
+    "CTA_en": "",
+    "layout_notes": "",
+    "compliance_notes": "",
+    "image_id": "IMG_S1",
+    "purpose": "",
+    "prompt_ko": "제품 클로즈업",
+    "prompt_en": "product close-up",
+    "negative_prompt": "",
+    "style_guide": "",
+    "reference_usage": ""
+  },
+  "cases": {
+    "plain": {
+      "request": {
+        "originalImageBase64": "iVBORw0KGgo=",
+        "options": {}
+      },
+      "prompt": "PRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, colour, material and finish, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as a Korean woman in their 20s, and the setting must read as Korea.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (1) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep it recognisably the same product:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · colour, finish and material\n  · every logo, label and package text, spelled exactly as shown\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever redesign, restyle or substitute the product.\nMatch seams, hardware and surface finish as well — this is not a similar product, it is this exact product. Its identity must survive unchanged.\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions, colour, material and label text. Only the camera, background and lighting may differ.",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as a Korean woman in their 20s. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "iVBORw0KGgo=",
+          "url": null
+        }
+      ]
+    },
+    "facts": {
+      "request": {
+        "originalImageBase64": "iVBORw0KGgo=",
+        "options": {
+          "productFacts": {
+            "category": "음료 병",
+            "visibleFacts": [
+              "짙은 초록 유리병",
+              "은색 뚜껑"
+            ],
+            "labelText": [
+              "FIXUP",
+              "500ml"
+            ]
+          }
+        }
+      },
+      "prompt": "PRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, colour, material and finish, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\nProduct facts read from the photo (about the product itself — ignore anything that describes how the photo was taken, such as its angle or background):\n- Category: 음료 병\n- 짙은 초록 유리병\n- 은색 뚜껑\nLabel text: \"FIXUP\", \"500ml\". Render it exactly, but only where that face of the product is visible at the chosen angle. Never turn the product just to show the label, and never move the label to another face.\nIf any of this text disagrees with the attached photo, the photo is correct.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as a Korean woman in their 20s, and the setting must read as Korea.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (1) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep it recognisably the same product:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · colour, finish and material\n  · every logo, label and package text, spelled exactly as shown\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever redesign, restyle or substitute the product.\nMatch seams, hardware and surface finish as well — this is not a similar product, it is this exact product. Its identity must survive unchanged.\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions, colour, material and label text. Only the camera, background and lighting may differ.",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as a Korean woman in their 20s. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "iVBORw0KGgo=",
+          "url": null
+        }
+      ]
+    },
+    "character": {
+      "request": {
+        "originalImageBase64": "iVBORw0KGgo=",
+        "options": {
+          "withModel": true,
+          "characterReferences": [
+            {
+              "base64": "CH1",
+              "mimeType": "image/png",
+              "identityPrompt": "단발 여성",
+              "kind": "person",
+              "look": "photoreal"
+            },
+            {
+              "base64": "CH2",
+              "mimeType": "image/png",
+              "identityPrompt": "단발 여성",
+              "kind": "person",
+              "look": "photoreal"
+            }
+          ]
+        }
+      },
+      "prompt": "PRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, colour, material and finish, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\nThe product and the person must both be clearly recognisable. Do not shrink, crop or hide one to make room for the other.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"required — the supplied reference person, exactly as shown must appear.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (3) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep it recognisably the same product:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · colour, finish and material\n  · every logo, label and package text, spelled exactly as shown\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever redesign, restyle or substitute the product.\nMatch seams, hardware and surface finish as well — this is not a similar product, it is this exact product. Its identity must survive unchanged.\n\n[Image 2 — PERSON]\nThis is the person for this page. Whenever a person appears, it must be recognisably this same person:\n  · face and facial geometry, body proportions, hairstyle, skin tone\nTheir expression, pose, clothing styling and framing follow the scene description.\nDo not beautify, slim, age, de-age or restyle them, and never blend in another face. Someone who knows this person must recognise them immediately.\n\n[Image 3 — PERSON]\nThis is the person for this page. Whenever a person appears, it must be recognisably this same person:\n  · face and facial geometry, body proportions, hairstyle, skin tone\nTheir expression, pose, clothing styling and framing follow the scene description.\nDo not beautify, slim, age, de-age or restyle them, and never blend in another face. Someone who knows this person must recognise them immediately.\n\nImages of this person (2 of them) are the SAME character seen from different angles. They are identity references, not scenes to copy: use them together to keep one consistent face, body and hair. Do NOT reproduce their poses, camera angles, framing, clothing or backgrounds — compose the scene this card asks for. Generate exactly one person.\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nThe person's identity: 단발 여성.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions, colour, material and label text. Only the camera, background and lighting may differ.",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. Required subject: the supplied reference person, exactly as shown must appear. Preserve their identity exactly. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "iVBORw0KGgo=",
+          "url": null
+        },
+        {
+          "kind": "person",
+          "base64": "CH1",
+          "url": null
+        },
+        {
+          "kind": "person",
+          "base64": "CH2",
+          "url": null
+        }
+      ]
+    },
+    "everything": {
+      "request": {
+        "productImageUrl": "https://v3.fal.media/files/a/lemon.jpg",
+        "options": {
+          "productFacts": {
+            "category": "음료 병",
+            "visibleFacts": [
+              "짙은 초록 유리병",
+              "은색 뚜껑"
+            ],
+            "labelText": [
+              "FIXUP",
+              "500ml"
+            ]
+          },
+          "withModel": true,
+          "characterReferences": [
+            {
+              "base64": "CH1",
+              "mimeType": "image/png",
+              "identityPrompt": "단발 여성",
+              "kind": "person",
+              "look": "photoreal"
+            },
+            {
+              "base64": "CH2",
+              "mimeType": "image/png",
+              "identityPrompt": "단발 여성",
+              "kind": "person",
+              "look": "photoreal"
+            }
+          ],
+          "styleReferenceImages": [
+            {
+              "base64": "REF",
+              "mimeType": "image/png",
+              "description": "dark olive bands"
+            }
+          ],
+          "userInstruction": "왼쪽에 놓아 주세요",
+          "attachmentIntents": {
+            "anchor": "병을 눕혀 주세요"
+          }
+        }
+      },
+      "prompt": "USER INSTRUCTION (composition and scene only; preserved identity constraints remain mandatory):\n왼쪽에 놓아 주세요\n\nPRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, colour, material and finish, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\nProduct facts read from the photo (about the product itself — ignore anything that describes how the photo was taken, such as its angle or background):\n- Category: 음료 병\n- 짙은 초록 유리병\n- 은색 뚜껑\nLabel text: \"FIXUP\", \"500ml\". Render it exactly, but only where that face of the product is visible at the chosen angle. Never turn the product just to show the label, and never move the label to another face.\nIf any of this text disagrees with the attached photo, the photo is correct.\nThe product and the person must both be clearly recognisable. Do not shrink, crop or hide one to make room for the other.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"required — the supplied reference person, exactly as shown must appear.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (4) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep it recognisably the same product:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · colour, finish and material\n  · every logo, label and package text, spelled exactly as shown\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever redesign, restyle or substitute the product.\nMatch seams, hardware and surface finish as well — this is not a similar product, it is this exact product. Its identity must survive unchanged.\nUSER INSTRUCTION for composition and pose. Keep all identity constraints above; never change the product or character to satisfy this instruction:\n병을 눕혀 주세요\n\n[Image 2 — PERSON]\nThis is the person for this page. Whenever a person appears, it must be recognisably this same person:\n  · face and facial geometry, body proportions, hairstyle, skin tone\nTheir expression, pose, clothing styling and framing follow the scene description.\nDo not beautify, slim, age, de-age or restyle them, and never blend in another face. Someone who knows this person must recognise them immediately.\n\n[Image 3 — PERSON]\nThis is the person for this page. Whenever a person appears, it must be recognisably this same person:\n  · face and facial geometry, body proportions, hairstyle, skin tone\nTheir expression, pose, clothing styling and framing follow the scene description.\nDo not beautify, slim, age, de-age or restyle them, and never blend in another face. Someone who knows this person must recognise them immediately.\n\n[Image 4 — DESIGN REFERENCE]\nThis is a design reference. Imitate its design language only:\n  · layout and composition, colour palette, typography (weight, width, character), text treatment, overall mood and theme\n  · how each colour is used — which colours fill surfaces and bands, which are only type, which are accents. Reproduce that usage, not just the colours themselves.\nDo NOT copy anything else from it — not its product, not its people, not its text content, not its specific scene. Nothing from this image appears literally in the output.\nHow this reference uses its design language:\ndark olive bands\n\nImages of this person (2 of them) are the SAME character seen from different angles. They are identity references, not scenes to copy: use them together to keep one consistent face, body and hair. Do NOT reproduce their poses, camera angles, framing, clothing or backgrounds — compose the scene this card asks for. Generate exactly one person.\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nPriority when instructions conflict: the PRESERVED SUBJECT > the USER INSTRUCTION > the REFERENCE image > the scene description.\nWhen they conflict: the product and the person win over the design reference. The design reference governs the surrounding design only.\n\nThe person's identity: 단발 여성.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions, colour, material and label text. Only the camera, background and lighting may differ.\n\nBefore drawing, re-read the USER INSTRUCTION and make sure it is satisfied: 왼쪽에 놓아 주세요",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. Required subject: the supplied reference person, exactly as shown must appear. Preserve their identity exactly. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "",
+          "url": "https://v3.fal.media/files/a/lemon.jpg"
+        },
+        {
+          "kind": "person",
+          "base64": "CH1",
+          "url": null
+        },
+        {
+          "kind": "person",
+          "base64": "CH2",
+          "url": null
+        },
+        {
+          "kind": "style",
+          "base64": "REF",
+          "url": null
+        }
+      ]
+    },
+    "urlFacts": {
+      "request": {
+        "productImageUrl": "https://v3.fal.media/files/a/lemon.jpg",
+        "options": {
+          "productFacts": {
+            "category": "음료 병",
+            "visibleFacts": [
+              "짙은 초록 유리병",
+              "은색 뚜껑"
+            ],
+            "labelText": [
+              "FIXUP",
+              "500ml"
+            ]
+          }
+        }
+      },
+      "prompt": "PRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, colour, material and finish, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\nProduct facts read from the photo (about the product itself — ignore anything that describes how the photo was taken, such as its angle or background):\n- Category: 음료 병\n- 짙은 초록 유리병\n- 은색 뚜껑\nLabel text: \"FIXUP\", \"500ml\". Render it exactly, but only where that face of the product is visible at the chosen angle. Never turn the product just to show the label, and never move the label to another face.\nIf any of this text disagrees with the attached photo, the photo is correct.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as a Korean woman in their 20s, and the setting must read as Korea.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (1) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep it recognisably the same product:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · colour, finish and material\n  · every logo, label and package text, spelled exactly as shown\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever redesign, restyle or substitute the product.\nMatch seams, hardware and surface finish as well — this is not a similar product, it is this exact product. Its identity must survive unchanged.\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions, colour, material and label text. Only the camera, background and lighting may differ.",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as a Korean woman in their 20s. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: reproduce that exact product in every section while choosing a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "",
+          "url": "https://v3.fal.media/files/a/lemon.jpg"
+        }
+      ]
+    },
+    "shapeOnly": {
+      "request": {
+        "productImageUrl": "https://v3.fal.media/files/a/lemon.jpg",
+        "options": {
+          "preserveProductImage": false,
+          "styleReferenceImages": [
+            {
+              "base64": "REF",
+              "mimeType": "image/png",
+              "description": "dark olive bands"
+            }
+          ]
+        }
+      },
+      "prompt": "PRODUCT FIDELITY — Image 1 is the real product being sold. Reproduce this exact product, not a similar one.\nKeep unchanged: silhouette and proportions, defining parts, seams and hardware, and every logo and label text on the faces that are visible.\nFree to change: colour palette, material finish (follow the design reference), camera angle, distance, crop, background, lighting and where the product sits in the frame — choose these for this section.\nShowing the product from a new angle is expected; changing the product itself is not.\n\n{\n  \"task\": \"korean_ecommerce_detail_page_section\",\n  \"format\": {\n    \"orientation\": \"vertical\",\n    \"target\": \"mobile\",\n    \"static_image\": true\n  },\n  \"scene\": {\n    \"subject\": \"product close-up\",\n    \"setting\": \"a controlled studio set with crisp lighting and an intentional backdrop\",\n    \"location\": \"Korea\",\n    \"people\": \"optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as a Korean woman in their 20s, and the setting must read as Korea.\"\n  },\n  \"layout\": \"compose it the way this message deserves\",\n  \"forbidden\": [\n    \"buttons\",\n    \"arrows\",\n    \"clickable controls\",\n    \"invented numbers\",\n    \"invented brand names\",\n    \"watermarks\"\n  ],\n  \"realism\": {\n    \"must\": [\n      \"real photograph\",\n      \"natural material texture\",\n      \"physical light\"\n    ],\n    \"must_not\": [\n      \"3D render\",\n      \"illustration\",\n      \"stock photo look\",\n      \"waxy over-smoothed skin\"\n    ]\n  },\n  \"section\": {\n    \"name\": \"히어로\"\n  },\n  \"guide_priority\": \"the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint\",\n  \"text_in_image\": \"no text at all — no letters, numbers, logos or watermarks anywhere in the image\"\n}\n\nStudy every attached image closely before drawing. They are the source of truth for what they define — reproduce what you actually see in them. Do not approximate them from memory, and never substitute a generic stand-in.\n\nReference images (2) are attached in this order. Each has a different job — do not mix them up:\n\n[Image 1 — PRODUCT]\nThis is the product. Keep its form and its text, but let the design reference decide its colours:\n  · silhouette and defining features, real proportions of the object itself (a tall slim bottle must not become short and wide)\n  · every logo, label and package text, spelled exactly as shown\nIts colour palette, finish and material may be restyled to match the design reference. Nothing else about it may change.\nDo NOT copy the reference's camera angle, crop, distance, background or lighting — the scene description decides those. Show this same product in a newly composed image.\nNever substitute a different product, and never invent one. This is the product being sold.\n\n[Image 2 — DESIGN REFERENCE]\nThis is a design reference. Imitate its design language only:\n  · layout and composition, colour palette, typography (weight, width, character), text treatment, overall mood and theme\n  · how each colour is used — which colours fill surfaces and bands, which are only type, which are accents. Reproduce that usage, not just the colours themselves.\nDo NOT copy anything else from it — not its product, not its people, not its text content, not its specific scene. Nothing from this image appears literally in the output.\nHow this reference uses its design language:\ndark olive bands\n\nGive each preserved subject an explicit, deliberate place in the composition: decide where it sits, how large it reads, what overlaps it, and how the eye reaches it. A preserved subject must be clearly visible and legible at a glance — never cropped away, never buried behind other elements, never reduced to a tiny detail.\n\nWhen they conflict: the product and the person win over the design reference. The design reference governs the surrounding design only.\n\nFinal check: the product in your image must be the exact product in Image 1 — same shape, proportions and label text. Only the camera, background and lighting may differ.",
+      "systemPrompt": "You are a world-class art director, graphic designer and illustrator.\nWork at the level of an award-winning studio: deliberate composition, confident typography,\nintentional colour, and craft in every detail. Never settle for a generic, templated look.\nCraft is how you execute the brief — it never overrides it. Follow every instruction below exactly;\ndo not substitute your own taste for what was asked, and do not add elements nobody asked for. You are art-directing Korean e-commerce detail page sections. Read the brief carefully and render exactly what it asks for — nothing more. People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as a Korean woman in their 20s. Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo. Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections. Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour. Never draw buttons, arrows or other clickable controls — these are static images. The attached product photo is the real product being sold: keep its shape, proportions and label text in every section, let its colour and finish follow the design reference, and choose a fresh camera angle and scene for each one.",
+      "references": [
+        {
+          "kind": "anchor",
+          "base64": "",
+          "url": "https://v3.fal.media/files/a/lemon.jpg"
+        },
+        {
+          "kind": "style",
+          "base64": "REF",
+          "url": null
+        }
+      ]
+    }
+  }
+}

@@ -91,6 +91,11 @@ const 성공묶음 = (장수: number) => ({
 });
 
 beforeEach(() => {
+  // 편집기는 요청 전에 제품 원본을 /pdp/product-photo 로 올려 주소를 받는다. 그 자리만 대답한다.
+  vi.stubGlobal("fetch", async () => new Response(
+    JSON.stringify({ ok: true, url: "https://v3.fal.media/files/t.jpg", expiresAt: Date.now() + 3600000 }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  ));
   captured.pending.length = 0;
   vi.stubGlobal("window", {
     addEventListener: vi.fn(), removeEventListener: vi.fn(), confirm: () => true,

@@ -102,6 +102,7 @@ describe("길마다 실패를 주입해 본 시험이 있다", () => {
     "pdp/images/batch/route.ts": "pdp/__tests__/route-reliability.test.ts",
     "pdp/key-visual/route.ts": "pdp/__tests__/route-reliability.test.ts",
     "pdp/plan-from-text/route.ts": "pdp/__tests__/route-reliability.test.ts",
+    "pdp/product-photo/route.ts": "pdp/__tests__/product-photo-route.test.ts",
     "pdp/style-references/route.ts": "pdp/__tests__/style-references-usage.test.ts",
     "redesign/generate/route.ts": "redesign/__tests__/settlement.test.ts",
     "redesign/edit-section/route.ts": "redesign/__tests__/settlement.test.ts",

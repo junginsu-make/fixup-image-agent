@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PRODUCT_IDS, PRODUCT_LIMITS } from "@fixup/pdp-core";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
@@ -33,13 +34,23 @@ export const assetSchema = z.object({
 }).strict();
 export type DocumentAsset = z.infer<typeof assetSchema>;
 const imageReference=z.object({$asset:z.string(),format:z.enum(["base64","dataUrl"])}).strict();
+/*
+  제품 칸(설계 2026-10-08 §3.2)의 값도 모양을 본다(보안 리뷰 L5). `.passthrough()` 라 선언하지 않으면
+  무엇이든 지나간다. 이름은 화면이 코드 포인트 30자로 자르므로 UTF-16 으로 60 까지 받는다. 없으면 옛 문서다.
+*/
+const productIdField=z.enum(PRODUCT_IDS);
+const productNameField=z.string().max(PRODUCT_LIMITS.nameChars*2);
 const bodySchema=z.object({
   sections:z.array(z.object({
     section_id:z.string().min(1).max(120),section_name:z.string().optional(),
     headline:z.string().optional(),prompt_ko:z.string().optional(),prompt_en:z.string().optional(),
     generatedImage:imageReference.or(z.literal("")).optional(),
   }).passthrough()).max(30),
-  references:z.array(z.object({role:z.enum(["product","person","character","style"]),assetId:z.string().min(1),enabled:z.boolean()}).passthrough()).max(200).default([]),
+  references:z.array(z.object({role:z.enum(["product","person","character","style"]),assetId:z.string().min(1),enabled:z.boolean(),
+    productId:productIdField.optional(),productName:productNameField.optional(),
+    photoIndex:z.number().int().min(0).max(PRODUCT_LIMITS.photos-1).optional()}).passthrough()).max(200).default([]),
+  productSlots:z.array(z.object({id:productIdField,name:productNameField}).passthrough()).max(PRODUCT_LIMITS.products).optional(),
+  planningProductsKey:z.string().max(4000).optional(),
   inputs:z.object({additionalInfo:z.string().default("")}).passthrough().default({additionalInfo:""}),
   settings:z.object({desiredTone:z.string().default(""),aspectRatio:z.enum(["1:1","3:4","4:3","9:16","16:9"]).default("9:16")}).passthrough().default({desiredTone:"",aspectRatio:"9:16"}),
   blueprint:z.record(z.string(),z.json()).default({}),
@@ -186,6 +197,9 @@ export function validateDocument(value: unknown, userId: string, id: string): Se
   visit(doc as unknown as Json);
   for(const ref of body.data.references){
     if(ref.role!=="character" && !Object.hasOwn(doc.assets,ref.assetId))throw new DocumentError(400,"첨부 그림이 누락됐습니다.");
+    // 제품 원본(설계 2026-10-08 §4.6): 참조 안의 `originalAssetId` 도 문서에 실린 그림이어야 한다.
+    const originalId=(ref as {originalAssetId?:unknown}).originalAssetId;
+    if(originalId!==undefined && (typeof originalId!=="string" || !Object.hasOwn(doc.assets,originalId)))throw new DocumentError(400,"첨부 그림이 누락됐습니다.");
   }
   if(typeof doc.body.originalAssetId==="string" && !Object.hasOwn(doc.assets,doc.body.originalAssetId))throw new DocumentError(400,"원본 그림이 누락됐습니다.");
   if (!Array.isArray(doc.body.sections) || doc.body.sections.length > 30) throw new DocumentError(400, "섹션 정보가 올바르지 않습니다.");

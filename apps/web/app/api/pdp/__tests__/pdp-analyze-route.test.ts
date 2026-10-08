@@ -166,3 +166,13 @@ describe("구성·문구 요청과 그림체", () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe("여러 제품", () => {
+  it("products 를 코어까지 그대로 넘긴다", async () => {
+    const products = [{ id: "p1", name: "컵", photos: [{ imageBase64: "AAAA", mimeType: "image/png" }] }];
+    const response = await POST(요청({ imageBase64: "PRODUCT", mimeType: "image/png", products }));
+
+    expect(response.status).toBe(200);
+    expect((analyzed[0] as { products?: unknown }).products).toEqual(products);
+  });
+});

@@ -13,6 +13,8 @@ import type { PersonSource } from "./pdp.person-source";
 import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
+import type { ProductFacts } from "./pdp.product-fidelity";
+import type { PageProduct, ProductId } from "./pdp.products";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -133,6 +135,16 @@ export interface SectionBlueprint {
   /** 글기반 생성의 근거 스키마. 없으면 이 기능 도입 전 구성안이다. */
   evidenceVersion?: 1;
   evidence?: CopyEvidence[];
+  /**
+   * 이 섹션에 실을 제품. 기획이 정하고 사용자가 구성안에서 바꾼다.
+   * 없으면 모든 제품이다.
+   */
+  product_ids?: string[];
+  /**
+   * 이 그림을 만들 때 참조 상한 때문에 빼고 보낸 제품 사진 수(설계 §6.2). 화면이 생성 응답에서
+   * 옮겨 적고 배지로 보인다. 안 뺐으면 없다.
+   */
+  productPhotosDropped?: number;
 }
 
 /**
@@ -157,6 +169,8 @@ export interface LandingPageBlueprint {
    * 선택 필드다 — 저장해 둔 초안과 텍스트 시작 경로에는 없다.
    */
   productReading?: ProductReading;
+  /** 제품이 둘 이상일 때 제품마다 읽은 사실. 하나면 `productReading` 만 쓴다. */
+  productReadings?: Array<ProductReading & { productId: ProductId }>;
   executiveSummary: string;
   scorecard: ScorecardItem[];
   blueprintList: string[];
@@ -196,6 +210,14 @@ export interface GeneratedResult {
    * 저장해 둔 초안에도 없다.
    */
   review?: BlueprintReview;
+  /**
+   * 이 구성안을 만들 때 본 제품 목록의 열쇠(설계 2026-10-08 §3).
+   *
+   * **화면이 붙이는 값, 서버는 모른다.** 분석이 성공하면 화면이 그때의 제품 목록으로
+   * 붙이고, 만들기 직전에 지금 목록과 견줘 구성안 뒤에 제품·사진이 바뀌었는지 본다.
+   * 옛 작업에는 없다.
+   */
+  analyzedProductsKey?: string;
 }
 
 // ── 이미지 생성 모델 ─────────────────────────────────────────────
@@ -407,6 +429,11 @@ export interface ReferenceImage {
   base64: string;
   mimeType: string;
   /**
+   * **이미 올려 둔 주소**(설계 2026-10-08 §4). 있으면 `base64` 대신 이것을 fal 에 넘긴다.
+   * 원본 사진을 요청마다 몸통에 싣지 않으려는 것이다 — 서버가 큰 그림을 30~90초 쥐고 있게 된다.
+   */
+  url?: string;
+  /**
    * 디자인 레퍼런스가 **디자인 언어를 어떻게 쓰는지** 적은 서술. `style` 에만 쓴다.
    *
    * 이미지만 보내면 모델이 색을 글자색으로만 쓰고 면으로는 쓰지 않는다 —
@@ -414,6 +441,12 @@ export interface ReferenceImage {
    * 지키므로 서술이 필요 없지만, **색과 면의 쓰임새는 문장이 있어야 전달된다.**
    */
   description?: string;
+  /**
+   * **어느 제품의 몇 번째 사진인가**(설계 2026-10-08 §6.1). `anchor` 에만, 제품이 둘 이상이거나
+   * 사진이 둘 이상일 때만 붙는다 — 제품 하나·사진 하나면 1·2단계와 같은 이름표(`PRODUCT`)여야 한다.
+   * `label` 은 `PRODUCT 1 "레몬맛"` 처럼 다 만든 이름이다. 이름표와 제품 블록이 같은 글자를 쓰게.
+   */
+  product?: { id: ProductId; label: string; view: number; views: number };
 }
 
 export interface ImageGenOptions {
@@ -499,6 +532,17 @@ export interface ImageGenOptions {
    * 지어낸 물건이 **실제 제품처럼 보이지 않게** 한다.
    */
   conceptOnly?: boolean;
+  /**
+   * **사진에서 읽은 제품 사실**(설계 2026-10-08 §7). 구성안의 `productReading` 에서
+   * 화면이 뽑아 보낸다(`productFactsFrom`). 글 경로에는 없다.
+   */
+  productFacts?: ProductFacts;
+  /**
+   * **이 섹션에 그릴 제품들**(3단계, 설계 §6.1). 섹션에 배정된 것만 온다 — 배정 안 된 제품의
+   * 사진을 보내면 모델이 그것도 그린다. 있으면 `productImageUrl`·`productFacts` 대신 이것으로
+   * 참조와 제품 블록을 만든다.
+   */
+  products?: PageProduct[];
 }
 
 /** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
@@ -603,6 +647,14 @@ export interface KeyVisualSuccessResponse {
   mimeType: string;
 }
 
+/** 분석 요청이 싣는 제품 하나. 사진은 화면이 만든 1024 사본이다. */
+export interface PdpAnalyzeProduct {
+  id: ProductId;
+  name?: string;
+  /** 1..4장, 대표가 먼저. */
+  photos: Array<{ imageBase64: string; mimeType: string }>;
+}
+
 export interface PdpAnalyzeRequest {
   /**
    * 파는 사람만 아는 것. 전부 선택 입력이다 (→ `pdp.seller-brief.ts`).
@@ -630,8 +682,14 @@ export interface PdpAnalyzeRequest {
   copyIntensity?: CopyIntensity;
   /** 근거가 없는 자리를 어떻게 할 것인가. */
   gapPolicy?: GapPolicy;
+  /** 옛 호출·검증용. `products` 가 있으면 그림으로는 그쪽을 싣는다(제품 1 대표와 같다). */
   imageBase64: string;
   mimeType: string;
+  /**
+   * 제품별 사진(설계 2026-10-08 §5). 제품 차례, 제품 안에서는 사진 차례로 싣는다.
+   * 없으면 `imageBase64` 한 장 — 지금 그대로다.
+   */
+  products?: PdpAnalyzeProduct[];
   modelImageBase64?: string;
   modelImageMimeType?: string;
   modelImageFileName?: string;
@@ -686,7 +744,10 @@ export interface PdpAnalyzeSuccessResponse {
 export type ImageGenOptionsInput = Partial<ImageGenOptions>;
 
 export interface PdpGenerateImageRequest {
-  originalImageBase64: string;
+  /** 옛 길·글 경로. `productImageUrl` 이 있으면 안 쓴다. */
+  originalImageBase64?: string;
+  /** 제품 원본을 올려 둔 fal 주소(설계 2026-10-08 §4). */
+  productImageUrl?: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
   desiredTone?: string;
@@ -707,6 +768,8 @@ export interface PdpGenerateImageSuccessResponse {
    */
   generatedImages: number;
   qa?: { warnings: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" };
+  /** 참조 상한 때문에 빼고 보낸 제품 사진 수(설계 §6.2). 안 뺐으면 칸이 없다. */
+  productPhotosDropped?: number;
 }
 
 export interface PdpValidateApiKeySuccessResponse {

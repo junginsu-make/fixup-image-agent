@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IMAGE_STALE_NOTICE, imageStampOf, isImageStale } from "./pdp.image-freshness";
+import { sectionScenePrompt } from "./pdp.scene-prompt";
 import type { SectionBlueprint } from "./types";
 
 /**
@@ -140,5 +141,32 @@ describe("낡은 그림 옆에 붙일 말", () => {
 
   it("**줄표를 안 쓴다**", () => {
     expect(IMAGE_STALE_NOTICE).not.toContain("—");
+  });
+});
+
+describe("섹션 제품 배정도 자국에 들어간다", () => {
+  // 이 작업 전의 공식 그대로. product_ids 가 없거나 [p1] 이면 자국이 이것과 같아야 옛 그림이 낡음이 되지 않는다.
+  const 옛자국 = (s: SectionBlueprint) =>
+    [s.headline ?? "", s.subheadline ?? "", (s.bullets ?? []).join(""), sectionScenePrompt(s), s.prompt_ko ?? ""].join("");
+
+  it("product_ids 가 없거나 [p1] 이면 자국이 이전 공식과 같다", () => {
+    expect(imageStampOf(섹션())).toBe(옛자국(섹션()));
+    expect(imageStampOf(섹션({ product_ids: ["p1"] }))).toBe(옛자국(섹션()));
+  });
+
+  it("그 밖의 배정은 자국 끝에 |products: 가 붙는다", () => {
+    expect(imageStampOf(섹션({ product_ids: ["p2"] }))).toBe(`${옛자국(섹션())}|products:p2`);
+    expect(imageStampOf(섹션({ product_ids: ["p1", "p2"] }))).toBe(`${옛자국(섹션())}|products:p1,p2`);
+  });
+
+  it("[p1,p2] 로 만든 그림의 배정을 [p1] 로 바꾸면 낡음이다", () => {
+    const before = 그림있는섹션({ product_ids: ["p1", "p2"] });
+    expect(isImageStale(before)).toBe(false);
+    expect(isImageStale({ ...before, product_ids: ["p1"] })).toBe(true);
+  });
+
+  it("배정을 안 건드린 옛 그림은 낡음이 아니다", () => {
+    expect(isImageStale(그림있는섹션({ product_ids: ["p1"] }))).toBe(false);
+    expect(isImageStale(그림있는섹션())).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PdpService } from "./pdp.service";
 
 import type { SectionBlueprint } from "./types";
+import { productFidelitySystemLine } from "./pdp.product-fidelity";
 function section(): SectionBlueprint {
   return {
     section_id: "S1", section_name: "히어로", goal: "",
@@ -52,6 +53,25 @@ const baseline = JSON.parse(
   redesign: string;
 };
 
+/**
+ * 이 고정본은 **제품 보존 블록(2026-10-08)이 생기기 전** 출력이다. 그 블록은 일부러
+ * 새로 들어갔으므로 비교 전에 걷어 낸다 — 걷어 내고도 같아야 「사람 캐릭터 문장은
+ * 한 글자도 안 바뀐다」가 계속 참이다. 블록 자체는 pdp.product-fidelity-wiring.test.ts 가 잰다.
+ */
+function withoutProductBlock(captured: { prompt: string; systemPrompt: string }) {
+  return {
+    prompt: captured.prompt
+      .split("\n\n")
+      .filter((paragraph) => !paragraph.startsWith("PRODUCT FIDELITY") && !paragraph.startsWith("Final check:"))
+      .join("\n\n"),
+    // 어느 제품 줄이 붙었든(보존·shape-only) 걷어 낸다 — 한쪽만 걷으면 다른 쪽이 붙은 경우를 「바뀌었다」로 잘못 읽는다.
+    systemPrompt: (["identity", "shape-only"] as const).reduce(
+      (text, role) => text.replace(` ${productFidelitySystemLine(role)}`, ""),
+      captured.systemPrompt,
+    ),
+  };
+}
+
 async function capture(options: Record<string, unknown>) {
   const service = new PdpService();
   let prompt = "";
@@ -70,7 +90,7 @@ async function capture(options: Record<string, unknown>) {
       return { base64: "IMG", mimeType: "image/jpeg" };
     },
   });
-  return { prompt, systemPrompt };
+  return withoutProductBlock({ prompt, systemPrompt });
 }
 
 type Extra = Record<string, unknown>;

@@ -1,8 +1,11 @@
 import type { CopyGapOutcome, LandingPageBlueprint, SectionBlueprint, BlueprintReview, PdpLlmExecution, ProductReadingStatus } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, PRODUCT_IDS, PRODUCT_LIMITS, type ProductId } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
 import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
+import {
+  clipProductName, normalizeProductSlots, primaryPhoto, productsFromLegacy, withFirstProduct, type PdpProductDraft,
+} from "./products";
 
 export interface PdpSection extends SectionBlueprint { id: string; sourceSectionId: string; generatedAssetId?: string }
 type Settings = Pick<PdpDraftInput, "imageModel" | "copyIntensity" | "gapPolicy" | "desiredTone" | "look" |
@@ -20,9 +23,19 @@ export interface PdpDocumentV3 {
   inputs: Pick<PdpDraftInput, "additionalInfo" | "sellerBrief" | "modelImageUsage" | "textDraft" | "attachmentIntents" | "styleReferenceEnabled">;
   settings: Settings;
   references: Array<{ role: "product" | "person" | "character" | "style"; assetId: string;
-    enabled: boolean; instruction?: string; characterId?: string; angles?: string[] }>;
+    enabled: boolean; instruction?: string; characterId?: string; angles?: string[];
+    /** 제품 참조만: 사용자가 올린 원본. `assetId` 는 1024 사본(미리보기·분석)이다. */ originalAssetId?: string;
+    /** 제품 참조만(설계 2026-10-08 §3.2): 어느 제품의 몇째 사진인가. 옛 문서에는 없다 — 그때는 제품 1, 참조 차례. */
+    productId?: ProductId; productName?: string; photoIndex?: number }>;
   assets: Record<string, Asset>;
   originalAssetId?: string;
+  /** 구성안을 만들 때 본 제품 목록의 열쇠(`GeneratedResult.analyzedProductsKey`). 화면이 붙인 값이다. */
+  planningProductsKey?: string;
+  /**
+   * 제품 칸 목록(차례·이름). **사진 없는 칸도 여기 남는다** — 참조는 사진마다 하나라, 칸을 참조로만
+   * 되살리면 이름만 적은 칸이 사라지고 제품 1 사진을 다 지운 작업은 제품 1 없이 열린다. 옛 문서에는 없다.
+   */
+  productSlots?: Array<{ id: ProductId; name: string }>;
   sections: PdpSection[];
   blueprint: Omit<LandingPageBlueprint, "sections">;
   analyzedBlueprint?: LandingPageBlueprint | null;
@@ -68,8 +81,8 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       .find((asset) => asset.base64 === image.base64 && asset.mimeType === image.mimeType);
     const id = existing?.id ?? randomId(); assets[id] = { ...existing, ...image, id }; return id;
   };
-  const references: PdpDocumentV3["references"] = [];
-  if (input.preparedImage) references.push({ role: "product", assetId: addAsset(input.preparedImage), enabled: true, instruction: input.attachmentIntents?.anchor });
+  const products = input.products?.length ? input.products : productsFromLegacy(input.preparedImage);
+  const references: PdpDocumentV3["references"] = productReferences(products, addAsset, input.attachmentIntents?.anchor);
   if (input.modelImage) references.push({ role: "person", assetId: addAsset(input.modelImage), enabled: true, instruction: input.attachmentIntents?.person });
   if (input.characterId) references.push({ role: "character", assetId: input.characterId, enabled: true,
     characterId: input.characterId, angles: input.characterAngles ?? [], instruction: input.attachmentIntents?.person });
@@ -117,6 +130,8 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       desiredTone: input.desiredTone, look: input.look ?? "photoreal", userInstruction: input.userInstruction ?? "", planInstruction: input.planInstruction, aspectRatio: input.aspectRatio,
       preserveProduct: input.preserveProduct ?? true, personSource: input.personSource },
     references, assets, originalAssetId: input.result ? addAsset({ base64: input.result.originalImage, mimeType: "image/jpeg" }) : undefined,
+    planningProductsKey: input.result?.analyzedProductsKey,
+    productSlots: products.length ? products.map(({ id, name }) => ({ id, name })) : undefined,
     sections, blueprint, analyzedBlueprint: input.analyzedBlueprint, planningReview: input.result?.review,
     planningReadingStatus: input.result?.productReadingStatus, planningGapOutcome: input.result?.copyGapOutcome,
     planningExecutions: input.result?.planningExecutions ?? input.textDraft?.planningExecutions,
@@ -128,11 +143,8 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
 
 export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
   const find = (role: PdpDocumentV3["references"][number]["role"]) => doc.references.find((ref) => ref.role === role);
-  const prepared = (role: "product" | "person"): PreparedImageDraft | null => {
-    const ref = find(role); const asset = ref && doc.assets[ref.assetId];
-    return asset ? { base64: asset.base64, mimeType: asset.mimeType, fileName: asset.fileName ?? "image",
-      previewUrl: asset.previewUrl ?? `data:${asset.mimeType};base64,${asset.base64}` } : null;
-  };
+  const person = find("person");
+  const products = productsFromReferences(doc);
   const style = find("style"); const styleAsset = style && doc.assets[style.assetId];
   const blueprint = { ...doc.blueprint, sections: doc.sections };
   return {
@@ -141,9 +153,11 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
     imageModel: pdpImageModelOrDefault(doc.settings.imageModel),
     appState: doc.stage === "planning" ? "processing" : doc.stage === "editor" ? "editor"
       : doc.stage === "outline" && doc.originalAssetId ? "scenario" : "upload",
-    preparedImage: prepared("product"), modelImage: prepared("person"), modelImageUsage: doc.inputs.modelImageUsage,
+    // 대표 사진은 옛 코드가 읽는 한 장이라 제품 목록과 함께 돌려준다.
+    preparedImage: primaryPhoto(products), products, modelImage: person ? preparedFromReference(doc, person) : null, modelImageUsage: doc.inputs.modelImageUsage,
     result: doc.originalAssetId ? { originalImage: doc.assets[doc.originalAssetId].base64, blueprint, review: doc.planningReview, planningExecutions: doc.planningExecutions,
-      productReadingStatus: doc.planningReadingStatus, copyGapOutcome: doc.planningGapOutcome } : null,
+      productReadingStatus: doc.planningReadingStatus, copyGapOutcome: doc.planningGapOutcome,
+      ...(doc.planningProductsKey ? { analyzedProductsKey: doc.planningProductsKey } : {}) } : null,
     additionalInfo: doc.inputs.additionalInfo, sellerBrief: doc.inputs.sellerBrief, textDraft: doc.inputs.textDraft,
     startMode: doc.sourceMode === "text" ? "text" : "image", characterId: find("character")?.characterId,
     characterAngles: find("character")?.angles ?? [],
@@ -153,6 +167,62 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
     editorState: doc.editor ? { ...doc.editor, sections: doc.sections, sectionKeys: doc.sections.map((section) => section.id) } : null,
     notice: doc.notice, snapshotOf: doc.snapshotOf,
   };
+}
+
+type Reference = PdpDocumentV3["references"][number];
+type AddAsset = (image: Omit<Asset, "id">) => string;
+
+/**
+ * 제품 사진마다 참조 하나(설계 2026-10-08 §3.2). 지시는 제품 1 첫 사진에만 둔다 — 첨부 지시 칸이
+ * 제품 1 대표 사진에 붙은 것이라, 사진마다 복사하면 다시 열 때 어느 것이 진짜인지 모른다.
+ */
+function productReferences(products: readonly PdpProductDraft[], addAsset: AddAsset, instruction: string | undefined): Reference[] {
+  return products.flatMap((product) => product.photos.map((photo, photoIndex): Reference => {
+    const { original, base64, mimeType, fileName, previewUrl } = photo;
+    return {
+      role: "product",
+      // 사본 그림에는 사본 칸만 넣는다. 통째로 넘기면 원본이 사본 안에 한 벌 더 담긴다.
+      assetId: addAsset({ base64, mimeType, fileName, previewUrl }),
+      // 원본은 따로 둔다. 1024 사본(미리보기·분석)과 원본(그림 모델)은 쓰임이 다르다.
+      ...(original ? { originalAssetId: addAsset({ base64: original.base64, mimeType: original.mimeType }) } : {}),
+      productId: product.id, productName: product.name, photoIndex,
+      enabled: true,
+      instruction: product.id === "p1" && photoIndex === 0 ? instruction : undefined,
+    };
+  }));
+}
+
+function preparedFromReference(doc: PdpDocumentV3, ref: Reference): PreparedImageDraft | null {
+  const asset = doc.assets[ref.assetId];
+  const originalAsset = ref.originalAssetId ? doc.assets[ref.originalAssetId] : undefined;
+  return asset ? { base64: asset.base64, mimeType: asset.mimeType, fileName: asset.fileName ?? "image",
+    previewUrl: asset.previewUrl ?? `data:${asset.mimeType};base64,${asset.base64}`,
+    ...(originalAsset ? { original: { base64: originalAsset.base64, mimeType: originalAsset.mimeType } } : {}) } : null;
+}
+
+/**
+ * 제품 칸을 되살린다. 칸(차례·이름)은 `productSlots` 에서, 사진은 참조에서 채운다.
+ *
+ * `productSlots` 가 없으면(옛 문서) 참조에 처음 나온 차례로 칸을 만든다. 참조의 `productId` 가
+ * 없으면 제품 1, `photoIndex` 가 없으면 참조 차례. 모르는 id 는 버린다. 칸이 하나라도 있으면
+ * 제품 1 을 맨 앞에 둔다(로컬 초안 길과 같다). 제품 사진이 아예 없던 문서는 빈 목록.
+ */
+function productsFromReferences(doc: PdpDocumentV3): PdpProductDraft[] {
+  const photos = doc.references.flatMap((ref, order) => {
+    const id = ref.productId ?? "p1";
+    const photo = ref.role === "product" && PRODUCT_IDS.includes(id) ? preparedFromReference(doc, ref) : null;
+    return photo ? [{ id, name: clipProductName(ref.productName), order: typeof ref.photoIndex === "number" ? ref.photoIndex : order, photo }] : [];
+  });
+  const saved = normalizeProductSlots(doc.productSlots);
+  const slots = saved.length ? saved : photos
+    .filter((entry, index) => photos.findIndex((other) => other.id === entry.id) === index)
+    .map(({ id, name }) => ({ id, name }));
+  if (slots.length === 0) return [];
+  return withFirstProduct(slots.map((slot) => ({
+    ...slot,
+    photos: photos.filter((entry) => entry.id === slot.id).sort((a, b) => a.order - b.order)
+      .map((entry) => entry.photo).slice(0, PRODUCT_LIMITS.photos),
+  })));
 }
 
 export function updatePdpDocument(doc: PdpDocumentV3, action:

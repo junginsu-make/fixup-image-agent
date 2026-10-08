@@ -26,6 +26,7 @@ import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 import { selectExpiredDraftIds } from "./draft-retention";
 import { randomId } from "../../lib/browser-safe";
 import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
+import { normalizeProducts, primaryPhoto, productsFromLegacy, type PdpProductDraft } from "./products";
 
 const PDP_DRAFT_DB = "hanirum-pdp-maker";
 const PDP_DRAFT_STORE = "drafts";
@@ -118,6 +119,11 @@ export interface PreparedImageDraft {
   mimeType: string;
   previewUrl: string;
   fileName: string;
+  /**
+   * **사용자가 올린 원본**(설계 2026-10-08 §4.6). 그림 모델에는 이것을 올린 주소가 간다.
+   * 위의 `base64` 는 미리보기·분석용 1024px 사본이다. 옛 초안에는 없다.
+   */
+  original?: { base64: string; mimeType: string };
 }
 
 /** 텍스트 경로의 중간 상태도 초안의 일부다. 컴포넌트 수명과 분리한다. */
@@ -162,7 +168,13 @@ export interface PdpDraftRecord {
   createdAt: string;
   updatedAt: string;
   appState: PdpAppState;
+  /**
+   * 대표 사진(제품 1 첫 사진). 제품 칸이 생긴 뒤에도 함께 둔다 — 옛 코드·옛 서버가 이것만 읽는다.
+   * `products` 가 있으면 다시 읽을 때 `primaryPhoto(products)` 로 맞춘다.
+   */
   preparedImage: PreparedImageDraft | null;
+  /** 제품 칸(설계 2026-10-08 §3). 옛 초안에는 없다 — 그때는 `preparedImage` 한 장을 제품 1 로 읽는다. */
+  products?: PdpProductDraft[];
   modelImage: PreparedImageDraft | null;
   modelImageUsage: ReferenceModelUsage | null;
   result: GeneratedResult | null;
@@ -409,7 +421,10 @@ function buildDraftTitle(input: PdpDraftInput) {
 }
 
 function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
-  const preparedImage = normalizePreparedImage(record.preparedImage);
+  // 제품 칸이 있으면 그것이 기준이고 대표 사진은 거기서 뽑는다. 없으면 옛 한 장을 제품 1 로 읽는다.
+  const savedProducts = normalizeProducts(record.products, normalizePreparedImage);
+  const products = savedProducts ?? productsFromLegacy(normalizePreparedImage(record.preparedImage));
+  const preparedImage = savedProducts ? primaryPhoto(savedProducts) : normalizePreparedImage(record.preparedImage);
   const modelImage = normalizePreparedImage(record.modelImage);
   const result = normalizeGeneratedResult(record.result, preparedImage, record.editorState);
   const normalizedSections = Array.isArray(result?.blueprint.sections)
@@ -433,6 +448,7 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     appState:
       record.appState === "scenario" || record.appState === "editor" ? record.appState : "upload",
     preparedImage,
+    products,
     modelImage,
     modelImageUsage:
       record.modelImageUsage === "all-sections" || record.modelImageUsage === "hero-only"
@@ -474,18 +490,23 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
   };
 }
 
-function normalizePreparedImage(image: PreparedImageDraft | null | undefined) {
+function normalizePreparedImage(image: PreparedImageDraft | null | undefined): PreparedImageDraft | null {
   if (!image?.base64 || !image.mimeType) {
     return null;
   }
 
   const previewUrl = image.previewUrl || `data:${image.mimeType};base64,${image.base64}`;
+  // 원본(설계 2026-10-08 §4.6)도 남긴다. 빠뜨리면 로컬 초안을 다시 열 때마다 1024 사본으로 만들게 된다.
+  const original = image.original?.base64 && image.original.mimeType
+    ? { base64: image.original.base64, mimeType: image.original.mimeType }
+    : undefined;
 
   return {
     base64: image.base64,
     mimeType: image.mimeType,
     previewUrl,
     fileName: image.fileName || "image",
+    ...(original ? { original } : {}),
   };
 }
 
@@ -528,6 +549,8 @@ function normalizeGeneratedResult(
         ? { productReadingStatus: result.productReadingStatus }
         : {}),
       ...(result.copyGapOutcome ? { copyGapOutcome: result.copyGapOutcome } : {}),
+      // 분석이 본 제품 목록의 열쇠. 버리면 다시 연 작업에서 구성안 뒤에 제품이 바뀌었는지 가릴 수 없다.
+      ...(typeof result.analyzedProductsKey === "string" ? { analyzedProductsKey: result.analyzedProductsKey } : {}),
     };
   }
 

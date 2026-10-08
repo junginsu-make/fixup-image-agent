@@ -99,6 +99,11 @@ const 가라앉힌다 = async () => {
 };
 
 beforeEach(() => {
+  // 편집기는 요청 전에 제품 원본을 /pdp/product-photo 로 올려 주소를 받는다. 그 자리만 대답한다.
+  vi.stubGlobal("fetch", async () => new Response(
+    JSON.stringify({ ok: true, url: "https://v3.fal.media/files/t.jpg", expiresAt: Date.now() + 3600000 }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  ));
   captured.asked.length = 0;
   // 경과 시간 표시가 `window.setInterval` 을 쓴다. 없으면 마운트가 터진다.
   vi.stubGlobal("window", {

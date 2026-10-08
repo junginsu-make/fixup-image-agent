@@ -9,6 +9,7 @@ import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
   carriedIdentityLine,
+  carriedSubjectNoun,
   userInstructionHead,
   userInstructionTail,
   resolveLook,
@@ -41,6 +42,7 @@ import {
   buildImageSystemPrompt,
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
+import { productFidelityHead, productFidelitySystemLine, productFidelityTail } from "./pdp.product-fidelity";
 import { anchorRoleFor, shouldSendAnchor } from "./pdp.product-anchor";
 import type { AnchorKind } from "./pdp.product-anchor";
 import { resolvePersonSource } from "./pdp.person-source";
@@ -67,6 +69,16 @@ import {
   normalizeProductReading,
   productReadingStatus,
 } from "./pdp.product-reading";
+import {
+  PRODUCT_READINGS_SCHEMA,
+  SECTION_PRODUCT_IDS_SCHEMA,
+  carryProductReadings,
+  normalizeProductReadings,
+  planAnalyzeProducts,
+  productPhotosPrompt,
+  settleProductPlan,
+} from "./pdp.analyze-products";
+import { anchorsFromProducts, fidelityGroups, fitSectionProducts, type ProductId } from "./pdp.products";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
 import { buildStrategyDirective } from "./pdp.replan";
@@ -99,7 +111,7 @@ type QaResult = {
 };
 
 /** `generatedImages` 는 fal 이 실제로 만든 장수다(재시도 포함) — 비용 계산의 근거. */
-type SectionImageResult = GeneratedImagePayload & { qa?: QaResult; generatedImages: number };
+type SectionImageResult = GeneratedImagePayload & { qa?: QaResult; generatedImages: number; productPhotosDropped?: number };
 
 type ReferenceModelProfile = {
   genderPresentation: string;
@@ -289,6 +301,20 @@ export class PdpService {
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const referenceModelImage = normalizeReferenceModelImage(request.modelImageBase64, request.modelImageMimeType);
+    /*
+      **제품별 사진을 제품 차례·사진 차례로 싣는다**(설계 2026-10-08 §5).
+      `imageBase64` 는 위에서 그대로 검사한다 — 옛 호출과 결과의 `originalImage` 가
+      그것을 쓴다. `products` 가 없으면 그 한 장이 지금처럼 간다.
+    */
+    const productPlan = planAnalyzeProducts(request.products, (photo) => ({
+      base64: sanitizeBase64Payload(photo.imageBase64),
+      mimeType: normalizeMimeType(photo.mimeType),
+    }));
+    const productImages = productPlan
+      ? productPlan.products.flatMap((product) => product.photos)
+      : [{ base64: normalizedImage, mimeType }];
+    // 고를 제품이 없으면 묻지 않는다. 스키마 칸이 늘면 제품 하나인 요청도 달라진다.
+    const multiProduct = (productPlan?.knownIds.length ?? 1) > 1;
     const client = this.getClient(resolved.llm);
     if (referenceModelImage) 알린다("reference");
     const referenceModelProfile =
@@ -348,6 +374,11 @@ export class PdpService {
           따르라」가 실린다 — 모델은 없는 것을 상상해 `style_guide` 를 채운다.
         */
         look: resolveLook(request.look ?? "photoreal", Boolean(styleReferenceForPlan)),
+        products: productPlan?.products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          photoCount: product.photos.length,
+        })),
       },
     );
 
@@ -367,7 +398,7 @@ export class PdpService {
         contents: [
           {
             parts: [
-              buildHighResolutionInlinePart(mimeType, normalizedImage),
+              ...productImages.map((image) => buildHighResolutionInlinePart(image.mimeType, image.base64)),
               ...(referenceModelImage ? [buildHighResolutionInlinePart(referenceModelImage.mimeType, referenceModelImage.base64)] : []),
               // 디자인 레퍼런스는 맨 뒤다. 제품이 첫 그림이어야 프롬프트의
               // 「이 제품」이 가리키는 것이 어긋나지 않는다.
@@ -392,6 +423,7 @@ ${analyzePrompt}`
             // 제품 사실이 뒤에 쓰는 카피의 조건이 된다 — 호출을 늘리지 않고 순서를 만든다.
             properties: {
               productReading: PRODUCT_READING_SCHEMA,
+              ...(multiProduct ? { productReadings: PRODUCT_READINGS_SCHEMA } : {}),
               // 섹션보다 앞이다. 먼저 정한 디자인이 뒤에 쓰는 장면의 조건이 된다.
               designSystem: DESIGN_SYSTEM_SCHEMA,
               executiveSummary: { type: Type.STRING },
@@ -418,6 +450,8 @@ ${analyzePrompt}`
                     section_id: { type: Type.STRING },
                     section_name: { type: Type.STRING },
                     goal: { type: Type.STRING },
+                    // 카피·장면보다 앞이다. 누구를 보여 줄지 정하고 그 제품의 글을 쓰게 한다.
+                    ...(multiProduct ? { product_ids: SECTION_PRODUCT_IDS_SCHEMA } : {}),
                     headline: { type: Type.STRING },
                     headline_en: { type: Type.STRING },
                     subheadline: { type: Type.STRING },
@@ -451,7 +485,8 @@ ${analyzePrompt}`
         }
       });
 
-      return parseBlueprintResponse(response);
+      // 섹션 배정·제품별 판독을 이 요청의 제품에 맞춘다. 재작성도 이 길을 지난다.
+      return settleProductPlan(parseBlueprintResponse(response), productPlan);
     }, retries, 1500, true);
 
     /**
@@ -530,7 +565,8 @@ ${analyzePrompt}`
             아래 근거 구조 실패 처리는 같은 위험을 알고 「섹션만 갈아
             끼운다」고 적어 두었는데, 이 자리에는 그 보호가 없었다.
           */
-          blueprint = carryProductReading(revised, blueprint);
+          // 제품별 판독도 같은 까닭으로 잇는다.
+          blueprint = carryProductReadings(carryProductReading(revised, blueprint), blueprint);
           review = revisedReview;
         }
       } catch (error) {
@@ -664,7 +700,8 @@ ${analyzePrompt}`
   }
 
   async generateSectionImage(request: {
-    originalImageBase64: string;
+    originalImageBase64?: string;
+    productImageUrl?: string;
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
@@ -724,12 +761,14 @@ ${analyzePrompt}`
       imageBase64: image.base64,
       mimeType: image.mimeType,
       generatedImages: image.generatedImages,
-      qa: image.qa ? { warnings: image.qa.warnings } : undefined
+      qa: image.qa ? { warnings: image.qa.warnings } : undefined,
+      ...(image.productPhotosDropped ? { productPhotosDropped: image.productPhotosDropped } : {})
     };
   }
 
   private async generateSectionImageInternal(request: {
-    originalImageBase64: string;
+    originalImageBase64?: string;
+    productImageUrl?: string;
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
@@ -739,7 +778,11 @@ ${analyzePrompt}`
     generateImage?: ImageGenerator;
   }): Promise<SectionImageResult> {
     const client = request.client ?? this.getClient();
-    const originalImageBase64 = sanitizeBase64Payload(request.originalImageBase64);
+    // 주소가 오면 몸통의 그림은 없다. 빈 값을 다듬으면 「그림이 깨졌다」로 던진다.
+    // 제품 묶음(`options.products`)만 와도 같다 — 참조는 그 주소들로 만든다.
+    const originalImageBase64 = request.productImageUrl || request.options?.products?.some((product) => product.imageUrls.length)
+      ? ""
+      : sanitizeBase64Payload(request.originalImageBase64 ?? "");
     const section = normalizeSection(request.section, 0);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
@@ -785,6 +828,14 @@ ${analyzePrompt}`
     let lastRefOk = true;
     // 이전 attempt 에서 확인된 blocking. fail-open(QA 인프라 실패)이 known-bad 를 통과로 위장하지 못하게 유지.
     let sawBlockingOutcome: QaOutcome | null = null;
+    /*
+      **섹션 제품 사진**(설계 2026-10-08 §6.1·§6.2). 인물·캐릭터·레퍼런스 자리를 먼저 세고 남는
+      만큼만 싣는다. 시도마다 같으므로 한 번만 정한다. 비면 1·2단계처럼 앵커 한 장이다.
+    */
+    const personSlots = usesUploadedPerson ? (normalizedReferenceModel ? 1 : 0) : (options.characterReferences ?? []).length;
+    const fitted = fitSectionProducts(options.products, options.imageModel ?? DEFAULT_IMAGE_MODEL,
+      personSlots + (options.styleReferenceImages ?? []).length);
+    const dropped = fitted.dropped ? { productPhotosDropped: fitted.dropped } : {};
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       // 참조 이미지는 fal 에 원본 그대로 첨부된다(image_urls). 텍스트로 요약하지
@@ -824,10 +875,12 @@ ${analyzePrompt}`
           hasStyleReference: Boolean(styleReference),
         })
       ) {
-        references.push({
+        if (fitted.products.length) references.push(...anchorsFromProducts(fitted.products, options.attachmentIntents?.anchor));
+        else references.push({
           kind: "anchor",
           base64: originalImageBase64,
           mimeType: DEFAULT_IMAGE_MIME,
+          ...(request.productImageUrl ? { url: request.productImageUrl } : {}),
           intent: options.attachmentIntents?.anchor,
         });
       }
@@ -934,8 +987,20 @@ ${analyzePrompt}`
       // 사용자가 직접 친 말은 **맨 앞과 맨 뒤에 두 번** 넣는다. 2026-09-04 실측에서
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 — 긴
       // 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
+      //
+      // **제품 보존을 양 끝에서 한 번 더**(설계 2026-10-08 §6). 역할 지시(중간)는 그대로
+      // 두고, 앞에서 「무엇을 지키고 무엇은 바꿔도 되는지」를, 뒤에서 「같은 제품인지」를
+      // 말한다. 사용자 지시가 여전히 맨 앞·맨 뒤다.
+      const groups = fidelityGroups(references, fitted.products, options.productFacts);
+      const companion = references.some((reference) => reference.kind === "person")
+        ? carried ? carriedSubjectNoun(carried.kind) : "person"
+        : undefined;
+      const fidelityHead = productFidelityHead({ groups, anchorRole, companion });
+      const fidelityTail = productFidelityTail({ groups, anchorRole });
+
       const prompt = [
         userInstructionHead(options.userInstruction, { identityFirst: true }),
+        fidelityHead,
         buildImageJson(section, promptOptions),
         buildReferenceRoleDirective(references, {
           hasUserInstruction: Boolean(options.userInstruction),
@@ -945,6 +1010,7 @@ ${analyzePrompt}`
         }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",
+        fidelityTail,
         userInstructionTail(options.userInstruction),
       ]
         .filter(Boolean)
@@ -967,7 +1033,10 @@ ${analyzePrompt}`
         // 적힌 번호와 실제 첨부 순서가 갈라진다 — 한쪽만 고치는 날 조용히 어긋난다.
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
           prompt,
-          systemPrompt: buildImageSystemPrompt(promptOptions),
+          // 제품이 실릴 때만 한 줄. Nano Banana Pro 는 이 문장을 system_prompt 로 받는다. 제품이 여럿이면 여럿을 말한다.
+          systemPrompt: [buildImageSystemPrompt(promptOptions), groups.length ? productFidelitySystemLine(anchorRole, groups.length) : ""]
+            .filter(Boolean)
+            .join(" "),
           aspectRatio: request.aspectRatio,
           references
         });
@@ -1027,6 +1096,7 @@ ${analyzePrompt}`
         return {
           ...generatedImage,
           generatedImages,
+          ...dropped,
           qa: qaEnabled
             ? {
                 /*
@@ -1073,6 +1143,7 @@ ${analyzePrompt}`
     return {
       ...lastGeneratedImage,
       generatedImages,
+      ...dropped,
       qa: qaEnabled || refBlocking.length
         ? {
             passed: lastQaOutcome.blocking.length === 0 && lastRefOk,
@@ -1405,8 +1476,14 @@ export function buildAnalyzePrompt(
      * 지시를 받는다.
      */
     look?: ImageLook;
+    /**
+     * 실은 제품 사진의 차례(설계 2026-10-08 §5). 제품이 하나·사진이 하나면 아무
+     * 말도 더하지 않는다 — 프롬프트가 지금과 한 글자도 다르지 않아야 한다.
+     */
+    products?: ReadonlyArray<{ id: ProductId; name?: string; photoCount: number }>;
   },
 ) {
+  const productPhotos = productPhotosPrompt(extras?.products ?? []);
   const referenceModelPrompt = referenceModelProfile
     ? `[참고 모델 이미지가 함께 제공됨]: 모델이 포함되는 컷은 업로드된 동일 인물의 정체성을 유지해야 합니다.
 - 유지할 핵심 특성: ${referenceModelProfile.keepTraits.join(", ")}
@@ -1494,7 +1571,7 @@ export function buildAnalyzePrompt(
   return `
 이 제품 이미지를 분석하여 상세페이지 전체 블루프린트를 설계해주세요.
 
-${buildSellerBriefPrompt(sellerBrief)}
+${productPhotos ? `${productPhotos}\n\n` : ""}${buildSellerBriefPrompt(sellerBrief)}
 
 ${intensityRules(copyIntensity)}
 
@@ -1872,6 +1949,7 @@ function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
     글 경로와 **같은 함수**를 쓴다.
   */
   const designSystem = normalizeDesignSystem(input.designSystem);
+  const productReadings = normalizeProductReadings(input.productReadings);
   const sections = Array.isArray(input.sections)
     ? clampSections(input.sections)
         .map((section, index) => normalizeSection(section, index))
@@ -1883,6 +1961,8 @@ function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
     // 여기서 빠뜨리면 읽어낸 제품 사실이 조용히 사라진다. 필드를 하나씩 나열하는
     // 함수는 새 값을 삼킨다 — 이 저장소에서 이미 두 번 겪었다.
     productReading: normalizeProductReading(input.productReading),
+    // 제품별 판독도 같은 까닭으로 여기서 적어 둔다. 아는 id 인지는 `settleProductPlan` 이 본다.
+    ...(productReadings ? { productReadings } : {}),
     executiveSummary: asString(input.executiveSummary),
     scorecard: Array.isArray(input.scorecard)
       ? input.scorecard.map((item) => ({
@@ -1940,6 +2020,15 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
     */
     ...(section.evidenceVersion === 1
       ? { evidenceVersion: 1 as const, evidence: normalizeSectionEvidence(section.evidence) }
+      : {}),
+    /*
+      **섹션 제품을 버리지 않는다**(설계 2026-10-08 §5). 위 근거와 같은 함정이다 —
+      목록에 없으면 기획이 정하고 사용자가 고친 배정이 조용히 사라진다.
+      여기서는 글자만 남기고, 아는 id 로 다듬는 일은 부르는 쪽이 한다(분석은
+      `settleProductPlan`, 생성은 `productsForSection`).
+    */
+    ...(Array.isArray(section.product_ids)
+      ? { product_ids: section.product_ids.filter((id): id is string => typeof id === "string") }
       : {}),
   };
 }

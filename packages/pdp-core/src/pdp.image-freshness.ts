@@ -38,13 +38,18 @@ export type ImageStamp = string;
 export function imageStampOf(section: SectionBlueprint | null | undefined): ImageStamp {
   if (!section) return "";
   // 신뢰문장은 안 센다 — 그림에 안 그린다(2026-09-23, `pdp.image-prompt.ts`).
-  return [
+  const base = [
     section.headline ?? "",
     section.subheadline ?? "",
     (section.bullets ?? []).join(""),
     sectionScenePrompt(section),
     section.prompt_ko ?? "",
   ].join("");
+  // 섹션에 실은 제품이 다르면 다른 그림이다. 없거나 ["p1"] 이면 붙이지 않는다 —
+  // 제품이 하나이던 때 만든 옛 그림이 한꺼번에 「낡음」이 되면 사용자가 표시를 무시하게 된다.
+  const ids = section.product_ids;
+  const isDefault = !ids || (ids.length === 1 && ids[0] === "p1");
+  return isDefault ? base : `${base}|products:${ids.join(",")}`;
 }
 
 /**

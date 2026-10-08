@@ -169,3 +169,50 @@ describe("구성·문구 요청과 그림체", () => {
     expect(Object.keys(buildAnalyzeRequest(기본))).not.toContain("userInstruction");
   });
 });
+
+/**
+ * **제품 칸**(설계 2026-10-08 §3·§5). 제품이 하나·사진이 하나면 몸통이 1·2단계와
+ * 같아야 한다 — `products` 칸 자체가 없다. `imageBase64` 는 늘 제품 1 대표다.
+ */
+describe("제품 목록", () => {
+  const 사진 = (tag: string) => ({ base64: tag, mimeType: "image/jpeg", fileName: `${tag}.jpg`, previewUrl: "" });
+
+  it("제품 하나·사진 하나면 `products` 칸이 없다", () => {
+    const body = buildAnalyzeRequest({ ...기본, products: [{ id: "p1", name: "", photos: [제품] }] });
+    expect(Object.keys(body)).not.toContain("products");
+    expect(body.imageBase64).toBe("PRODUCT");
+  });
+
+  it("제품 목록을 안 주면 지금 그대로다", () => {
+    expect(Object.keys(buildAnalyzeRequest(기본))).not.toContain("products");
+  });
+
+  it("한 제품에 사진이 둘이면 싣는다", () => {
+    const body = buildAnalyzeRequest({
+      ...기본,
+      preparedImage: 사진("A") as never,
+      products: [{ id: "p1", name: "", photos: [사진("A"), 사진("B")] }],
+    });
+    expect(body.products).toEqual([
+      { id: "p1", photos: [{ imageBase64: "A", mimeType: "image/jpeg" }, { imageBase64: "B", mimeType: "image/jpeg" }] },
+    ]);
+    expect(body.imageBase64).toBe("A");
+  });
+
+  it("제품이 둘이면 이름과 함께 싣고, 대표는 제품 1 첫 사진이다", () => {
+    const body = buildAnalyzeRequest({
+      ...기본,
+      preparedImage: 사진("A") as never,
+      products: [
+        { id: "p1", name: " 레몬맛 ", photos: [사진("A")] },
+        { id: "p2", name: "", photos: [사진("C")] },
+      ],
+    });
+    expect(body.products).toEqual([
+      { id: "p1", name: "레몬맛", photos: [{ imageBase64: "A", mimeType: "image/jpeg" }] },
+      { id: "p2", photos: [{ imageBase64: "C", mimeType: "image/jpeg" }] },
+    ]);
+    expect(body.imageBase64).toBe("A");
+    expect(body.mimeType).toBe("image/jpeg");
+  });
+});

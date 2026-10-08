@@ -170,8 +170,9 @@ export function chunkForModel<T>(items: readonly T[], model: ImageModelId): T[][
   return chunks;
 }
 
+/** 올려 둔 주소가 있으면 그대로, 없으면 `data:` 로 싣는다. */
 function toDataUri(reference: ReferenceImage) {
-  return `data:${reference.mimeType};base64,${reference.base64}`;
+  return reference.url || `data:${reference.mimeType};base64,${reference.base64}`;
 }
 
 export function buildFalPayload(model: ImageModelId, input: ImageProviderInput): FalPayload {

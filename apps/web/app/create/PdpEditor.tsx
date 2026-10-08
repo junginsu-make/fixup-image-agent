@@ -81,6 +81,13 @@ import { EmphasisWordPicker } from "./EmphasisWordPicker";
 import { keepWordsPresentIn } from "./emphasis-words";
 import { COPY_SLOTS, overlayStyleFor, type CopyOverlayType } from "./copy-slots";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
+import {
+  createProductPhotoUploader,
+  productPhotoErrorMessage,
+  productRequestFields,
+  productRequestFieldsOrThrow,
+} from "./product-photo-upload";
+import type { PdpProductDraft } from "./products";
 import { ReviewPanel } from "./ReviewPanel";
 import { ScorecardPanel } from "./ScorecardPanel";
 import {
@@ -206,6 +213,10 @@ interface PdpEditorProps {
   // 단계 표시줄은 4단계를 모두 그리므로 1·2단계 라벨도 계속 보인다.
   // 텍스트로 시작한 작업에 "이미지 업로드"가 뜨지 않게 시작 방식을 넘겨받는다.
   startMode?: CreateMode;
+  /** 화면의 제품 칸(설계 2026-10-08 §3). 사진마다 원본을 올려 주소로 보낸다. 없으면 1024 사본. */
+  products?: readonly PdpProductDraft[];
+  /** 구성안을 만들 때 본 제품 목록의 열쇠. 지금 목록과 다르면 원본을 넘기지 않는다(R4). */
+  analyzedProductsKey?: string;
   /**
    * 파는 것이 무엇인가(N-2, 설계 §9.1).
    *
@@ -283,7 +294,7 @@ type BatchImagesResponse =
       requested: number;
       succeeded: number;
       results: Array<
-        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" } }
+        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" }; productPhotosDropped?: number }
         | { sectionId: string; ok: false; code?: string; message?: string }
       >;
       stopBatch?: boolean;
@@ -326,6 +337,8 @@ export function PdpEditor({
   look = "photoreal",
   userInstruction = "",
   startMode = "image",
+  products = [],
+  analyzedProductsKey,
   productKind,
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
@@ -495,6 +508,7 @@ export function PdpEditor({
   const previewStageRef = useRef<HTMLDivElement>(null);
   const resizeSessionRef = useRef<Record<string, { width: number; height: number; fontSize: number }>>({});
   const generationLockRef = useRef(false);
+  const productUploaderRef = useRef(createProductPhotoUploader());
   const retryRequestKeysRef = useRef<Record<string, string>>({});
 
   const currentSection = sections[currentSectionIndex];
@@ -1634,6 +1648,8 @@ export function PdpEditor({
       referenceModelUsage,
       // 둘 다 골랐을 때 누구를 쓸지. 안 넘기면 서버가 말없이 업로드를 쓴다(U-04).
       personSource,
+      // 사진에서 읽은 제품 사실. 그림 프롬프트의 제품 블록에 실린다(설계 2026-10-08 §7).
+      productReading: initialResult.blueprint.productReading,
     });
 
   /**
@@ -1675,8 +1691,28 @@ export function PdpEditor({
       return { ok: false, stopBatch: true };
     }
 
+    // 원본 올리기(수 초)부터 「만드는 중」이다(최종 리뷰 I5) — 그동안 다른 생성을 막고 카드에 보인다.
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setInFlightKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
+    let productRequest: Awaited<ReturnType<typeof productRequestFields>>;
+    try {
+      productRequest = await productRequestFields({
+        startMode,
+        products,
+        analyzedProductsKey,
+        readings: initialResult.blueprint.productReadings,
+        fallbackBase64: initialResult.originalImage,
+        uploader: productUploaderRef.current,
+      });
+    } catch (error) {
+      // 조용히 낮은 화질로 내려가지 않는다(설계 §4.6). 생성 전이라 크레딧은 안 나갔다.
+      setGeneratingKeys((current) => current.filter((key) => key !== sectionKey));
+      setInFlightKeys((current) => current.filter((key) => key !== sectionKey));
+      setErrorMessage(productPhotoErrorMessage(error));
+      return { ok: false, stopBatch: true };
+    }
+    // 제품이 여럿이면 `products` 는 페이지 칸으로 간다(설계 §4.5).
+    const { products: pageProducts, ...productFields } = productRequest;
     setErrorMessage("");
     const requestKey = retryRequestKeysRef.current[sectionKey] ?? randomId();
     retryRequestKeysRef.current[sectionKey] = requestKey;
@@ -1686,14 +1722,14 @@ export function PdpEditor({
         method: "POST",
         headers: { "x-idempotency-key": requestKey },
         body: JSON.stringify({
-          originalImageBase64: initialResult.originalImage,
+          ...productFields,
           // 서버가 이 한 장도 남기고 라이브러리를 맞춘다(`librarySyncFields`).
           ...librarySyncFields(),
           section,
           aspectRatio,
           desiredTone: desiredTone || undefined,
           sectionIndex: index,
-          page: pageWire(),
+          page: { ...pageWire(), ...(pageProducts ? { products: pageProducts } : {}) },
           options: {
             ...options,
             isRegeneration: Boolean(section.generatedImage),
@@ -1749,6 +1785,8 @@ export function PdpEditor({
           qaWarnings: response.qa?.warnings,
           // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
           qaStatus: response.qa?.status,
+          // 참조 상한 때문에 뺀 제품 사진 수(설계 §6.2). 안 뺐으면 지운다.
+          productPhotosDropped: response.productPhotosDropped,
         }),
       );
       setNotice(`${getDisplaySectionName(section)} 이미지를 만들었습니다.`);
@@ -1871,6 +1909,15 @@ export function PdpEditor({
 
     try {
       for (const chunk of chunks) {
+        // 묶음마다 주소를 확인한다 — 만료가 가까울 때만 다시 올린다(A1). 실패하면 아래 catch 가 문구를 보이고 이 묶음은 안 나간다.
+        const { products: pageProducts, ...productFields } = await productRequestFieldsOrThrow({
+          startMode,
+          products,
+          analyzedProductsKey,
+          readings: initialResult.blueprint.productReadings,
+          fallbackBase64: initialResult.originalImage,
+          uploader: productUploaderRef.current,
+        });
         /*
           **다시 눌러도 같은 열쇠로 간다**(K-05).
 
@@ -1890,7 +1937,7 @@ export function PdpEditor({
           method: "POST",
           headers: { "x-idempotency-key": chunkRequestKey },
           body: JSON.stringify({
-            originalImageBase64: initialResult.originalImage,
+            ...productFields,
             // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
             ...librarySyncFields(),
             sections: chunk.map(({ section }) => section),
@@ -1901,7 +1948,7 @@ export function PdpEditor({
             desiredTone: desiredTone || undefined,
             characterId,
             characterAngles,
-            page: pageWire(),
+            page: { ...pageWire(), ...(pageProducts ? { products: pageProducts } : {}) },
             // 사용자가 섹션마다 고른 값. 전에는 일괄이 이것을 통째로 무시하고
             // style 을 lifestyle 로 박아 보냈다 — 한 장만 다시 만들면 studio 라
             // 같은 페이지 안에서 결이 갈렸다.
@@ -1982,6 +2029,7 @@ export function PdpEditor({
               imageStamp: imageStampOf(보낸것.get(key) ?? item),
               qaWarnings: outcome.qa?.warnings,
               qaStatus: outcome.qa?.status,
+              productPhotosDropped: outcome.productPhotosDropped,
             };
           }),
         );
@@ -3535,6 +3583,14 @@ export function PdpEditor({
                     title={currentSection.qaWarnings.map((defect) => defect.evidence).filter(Boolean).join(" · ")}
                   >
                     {currentSection.qaWarnings.some(isBlockingDefect) ? "⚠ 브랜드/왜곡 확인" : "⚠ 오타 의심"}
+                  </Badge>
+                ) : null}
+                {currentSection.productPhotosDropped ? (
+                  // 참조 상한 때문에 뒤쪽 각도 사진을 뺐다(설계 §6.2). 말없이 빼면 왜 그 각도가 안 나왔는지 모른다.
+                  <Badge variant="outline" title="사진이 많아 제품마다 앞쪽 사진만 썼습니다">
+                    {`사진 ${currentSection.productPhotosDropped}장 줄임`}
+                    {/* `title` 은 화면 낭독기·터치에서 안 보인다 — 까닭을 글로도 싣는다. */}
+                    <span className="sr-only">{". 사진이 많아 제품마다 앞쪽 사진만 썼습니다"}</span>
                   </Badge>
                 ) : null}
                 <Badge variant="secondary">레이어 {currentLayers.length}개</Badge>

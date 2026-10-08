@@ -244,6 +244,11 @@ export function buildReferenceRoleDirective(
    */
   const styleCount = references.filter((reference) => reference.kind === "style").length;
   let stylePart = 0;
+  /*
+    제품 사진이 여럿이면(설계 2026-10-08 §6.1) 제품 규칙은 **첫 앵커에서 한 번만** 말한다. 사진마다
+    되풀이하면 프롬프트가 규칙으로 찬다 — 디자인 조각과 같은 이유다.
+  */
+  const firstAnchor = references.findIndex((reference) => reference.kind === "anchor");
 
   references.forEach((reference, index) => {
     const isSlice = reference.kind === "style" && styleCount > 1;
@@ -251,14 +256,18 @@ export function buildReferenceRoleDirective(
     const label = reference.kind === "person" && character
       ? carriedCharacterLabel(character.kind)
       : ROLE_LABEL[reference.kind];
+    const product = reference.kind === "anchor" ? reference.product : undefined;
     lines.push(
       isSlice
         ? `[Image ${index + 1} — ${label}, part ${stylePart} of ${styleCount}]`
-        : `[Image ${index + 1} — ${label}]`,
+        : product
+          ? `[Image ${index + 1} — ${product.label}, view ${product.view} of ${product.views}]`
+          : `[Image ${index + 1} — ${label}]`,
     );
+    const laterAnchor = reference.kind === "anchor" && index !== firstAnchor;
     const intent = reference.intent?.trim();
     if (intent) {
-      if (isIdentityReference(reference.kind)) lines.push(...rulesFor(reference.kind));
+      if (isIdentityReference(reference.kind) && !laterAnchor) lines.push(...rulesFor(reference.kind));
       /**
        * **설계 4-1 A안 — 자리별로.**
        *
@@ -290,7 +299,7 @@ export function buildReferenceRoleDirective(
        * 그런 요청은 화면에서 결을 함께 바꾸도록 안내한다. 여기서 결까지 풀면
        * 「배치를 왼쪽으로」 한 줄에 사진이 만화가 되는 일이 생긴다.
        */
-    } else if (!isSlice || stylePart === 1) {
+    } else if ((!isSlice || stylePart === 1) && !laterAnchor) {
       // 조각마다 같은 규칙을 되풀이하면 프롬프트가 규칙으로 찬다. 첫 조각에서
       // 한 번만 말하고, 나머지 조각은 번호로만 잇는다.
       lines.push(...rulesFor(reference.kind));
@@ -301,6 +310,13 @@ export function buildReferenceRoleDirective(
             "different — use the part that matches the section being made.",
         );
       }
+    }
+    // 한 제품의 여러 사진을 물건 여럿으로 읽으면 한 장에 같은 병이 둘 그려진다. 그 제품 첫 사진 아래 한 번.
+    if (product && product.view === 1 && product.views > 1) {
+      lines.push(
+        `Images ${index + 1}–${index + product.views} are the same single product photographed from different angles — ` +
+          "one object, not several. Base each view on the photo closest to the angle the scene needs.",
+      );
     }
     // 서술은 이미지를 대체하지 않는다. 이미지가 전달하지 못한 **쓰임새**를 보탠다.
     // 그래서 규칙 뒤에 붙이고, 무엇에 대한 말인지 한 줄로 밝힌다.
