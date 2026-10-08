@@ -3589,6 +3589,8 @@ export function PdpEditor({
                   // 참조 상한 때문에 뒤쪽 각도 사진을 뺐다(설계 §6.2). 말없이 빼면 왜 그 각도가 안 나왔는지 모른다.
                   <Badge variant="outline" title="사진이 많아 제품마다 앞쪽 사진만 썼습니다">
                     {`사진 ${currentSection.productPhotosDropped}장 줄임`}
+                    {/* `title` 은 화면 낭독기·터치에서 안 보인다 — 까닭을 글로도 싣는다. */}
+                    <span className="sr-only">{" — 사진이 많아 제품마다 앞쪽 사진만 썼습니다"}</span>
                   </Badge>
                 ) : null}
                 <Badge variant="secondary">레이어 {currentLayers.length}개</Badge>

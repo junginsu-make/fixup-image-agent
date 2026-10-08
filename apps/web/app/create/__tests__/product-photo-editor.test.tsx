@@ -262,6 +262,9 @@ describe("여러 제품 작업의 생성 요청과 뺀 장수(설계 §6.1·§6.
     const 배지 = renderer.root.findAll((node) => typeof node.props.title === "string" && node.props.title === "사진이 많아 제품마다 앞쪽 사진만 썼습니다");
     expect(배지.length, "뺀 장수 배지가 없다").toBeGreaterThan(0);
     expect(그려진글()).toContain("사진 2장 줄임");
+    // 3단계 최종 C1: 까닭이 `title` 에만 있으면 화면 낭독기·터치에서는 안 보인다.
+    const 숨은글 = 배지[0]!.findAll((node) => node.type === "span" && node.props.className === "sr-only");
+    expect(숨은글.map((node) => node.children.join(""))).toEqual([" — 사진이 많아 제품마다 앞쪽 사진만 썼습니다"]);
   });
 
   it("분석 뒤 제품이 바뀌었으면 요청이 안 나가고 다시 만들라고 말한다", async () => {

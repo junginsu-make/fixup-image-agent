@@ -1,13 +1,14 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { ImagePlus, Loader2, Plus, Star, Trash2, X } from "lucide-react";
 import { PRODUCT_LIMITS, productLabel, type ProductId } from "@fixup/pdp-core";
-import { Badge, Button, Input } from "@fixup/ui";
+import { Badge, Button, Input, cn } from "@fixup/ui";
 import type { PreparedImageDraft } from "./pdp-drafts";
 import { prepareProductImageFile } from "./pdp-utils";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
+import { ACCEPT_ANY_IMAGE, joinMessages, useImageDropTarget } from "../_components/image-drop";
 import {
   addPhotos, addProduct, makePrimary, removePhoto, removeProduct, renameProduct, withFirstProduct,
   type PdpProductDraft,
@@ -53,6 +54,14 @@ async function prepareInOrder(files: readonly File[], prepare: Prepare) {
 export interface Placement {
   products?: PdpProductDraft[];
   error?: string;
+  /** 어느 제품에 몇 장을 넣었는가. 알림이 제품을 부른다(최종 리뷰 I4). */
+  placed?: { id: ProductId; count: number };
+}
+
+/** 「레몬맛에 사진 2장을 넣었습니다.」 — 이름이 없으면 「제품 2에 …」. 넣은 뒤의 이름으로 부른다. */
+export function placedMessage(placement: Placement): string {
+  const product = placement.products?.find((each) => each.id === placement.placed?.id);
+  return product && placement.placed ? `${productLabel(product)}에 사진 ${placement.placed.count}장을 넣었습니다.` : "";
 }
 
 /**
@@ -75,7 +84,8 @@ async function placeFiles(
   if (!id) return { error: NO_ROOM_MESSAGE };
   const added = addPhotos(latest, id, prepared.photos);
   const messages = [prepared.error, added.skipped > 0 ? skippedMessage(added.skipped) : undefined].filter(Boolean);
-  return { products: added.products, ...(messages.length ? { error: messages.join(" ") } : {}) };
+  const placed = { id, count: prepared.photos.length - added.skipped };
+  return { products: added.products, placed, ...(messages.length ? { error: messages.join(" ") } : {}) };
 }
 
 /** 칸 바깥에 끌어다 놓거나 붙여넣은 사진: 사진 자리가 남은 첫 제품에 넣는다. */
@@ -91,8 +101,11 @@ interface ProductSlotsProps {
   products: readonly PdpProductDraft[];
   onChange: (products: PdpProductDraft[]) => void;
   onError: (message: string) => void;
-  /** 사진을 넘침 없이 넣었다 — 앞서 띄운 오류(예: 못 여는 형식)를 지울 때다. */
-  onSuccess?: () => void;
+  /**
+   * 사진을 넘침 없이 넣었다 — 앞서 띄운 오류(예: 못 여는 형식)를 지울 때다. `message` 는 어느 제품에
+   * 몇 장을 넣었는지(끌어다 놓기가 알릴 말이 있으면 뒤에 잇는다).
+   */
+  onSuccess?: (message: string) => void;
   /** 시험이 브라우저 캔버스 없이 돌도록 바꿔 끼우는 자리. */
   prepare?: Prepare;
 }
@@ -107,7 +120,7 @@ export function ProductSlots({ products, onChange, onError, onSuccess, prepare =
   const edit = (change: (current: PdpProductDraft[]) => PdpProductDraft[]) =>
     onChange(change(withFirstProduct(latest.current)));
 
-  const addFiles = async (id: ProductId, files: readonly File[]) => {
+  const addFiles = async (id: ProductId, files: readonly File[], dropNotice?: string) => {
     setBusy((current) => [...current, id]);
     // 준비하는 사이 그 칸을 뺐으면 사진 자리가 남은 첫 제품으로 — 없는 칸을 「다 찼다」고 하지 않는다.
     const pick = (current: readonly PdpProductDraft[]) =>
@@ -116,7 +129,7 @@ export function ProductSlots({ products, onChange, onError, onSuccess, prepare =
     setBusy((current) => current.filter((busyId) => busyId !== id));
     if (outcome.products) onChange(outcome.products);
     if (outcome.error) onError(outcome.error);
-    else if (outcome.products) onSuccess?.();
+    else if (outcome.products) onSuccess?.(joinMessages(placedMessage(outcome), dropNotice));
   };
 
   return (
@@ -128,9 +141,10 @@ export function ProductSlots({ products, onChange, onError, onSuccess, prepare =
           busy={busy.includes(product.id)}
           onRename={(name) => edit((current) => renameProduct(current, product.id, name))}
           onRemove={product.id === "p1" ? undefined : () => edit((current) => removeProduct(current, product.id))}
-          onAddFiles={(files) => addFiles(product.id, files)}
+          onAddFiles={(files, dropNotice) => addFiles(product.id, files, dropNotice)}
           onPrimary={(index) => edit((current) => makePrimary(current, product.id, index))}
           onRemovePhoto={(index) => edit((current) => removePhoto(current, product.id, index))}
+          onError={onError}
         />
       ))}
       <div className="flex flex-wrap items-center gap-2">
@@ -155,16 +169,60 @@ interface ProductSlotCardProps {
   onRename: (name: string) => void;
   /** 없으면 뺄 수 없는 칸(제품 1). */
   onRemove?: () => void;
-  onAddFiles: (files: readonly File[]) => Promise<void>;
+  onAddFiles: (files: readonly File[], dropNotice?: string) => Promise<void>;
   onPrimary: (index: number) => void;
   onRemovePhoto: (index: number) => void;
+  /** 카드에 놓은 것을 하나도 받지 못했을 때 그 까닭(받지 않는 형식 등). */
+  onError: (message: string) => void;
 }
 
-function ProductSlotCard({ product, busy, onRename, onRemove, onAddFiles, onPrimary, onRemovePhoto }: ProductSlotCardProps) {
+/**
+ * **카드마다 끌어다 놓기·붙여넣기를 받는다**(최종 리뷰 I4). 바깥 칸 하나만 받을 때는 제품 2
+ * 카드에 놓아도 사진 자리가 남은 첫 제품에 들어갔다 — 다른 제품이 된다.
+ *
+ * 카드가 받은 것은 바깥 칸(화면의 「제품 사진 넣는 칸」)으로 올려 보내지 않는다 — 올라가면 같은
+ * 사진이 첫 제품에 한 번 더 들어간다. 손잡이는 받았을 때만 기본 동작을 막으므로 그것으로 가린다.
+ */
+function useCardDropTarget(onAddFiles: ProductSlotCardProps["onAddFiles"], onError: (message: string) => void) {
+  const drop = useImageDropTarget({
+    disabled: false,
+    multiple: true,
+    accept: ACCEPT_ANY_IMAGE,
+    onFiles: (files, notice) => void onAddFiles(files, notice),
+    onMessage: onError,
+  });
+  const keepInside = (event: { defaultPrevented: boolean; stopPropagation(): void }) => {
+    if (event.defaultPrevented) event.stopPropagation();
+  };
+  const handlers = {
+    ...drop.handlers,
+    onDrop(event: DragEvent<HTMLElement>) {
+      drop.handlers.onDrop(event);
+      keepInside(event);
+    },
+    onPaste(event: ClipboardEvent<HTMLElement>) {
+      drop.handlers.onPaste(event);
+      keepInside(event);
+    },
+  };
+  return { over: drop.over, handlers };
+}
+
+function ProductSlotCard({ product, busy, onRename, onRemove, onAddFiles, onPrimary, onRemovePhoto, onError }: ProductSlotCardProps) {
   const nameId = useId();
   const label = productLabel(product);
+  const drop = useCardDropTarget(onAddFiles, onError);
   return (
-    <section aria-label={label} className="rounded-md bg-background p-3 shadow-[var(--shadow-ring)]">
+    <section
+      aria-label={label}
+      // 카드를 눌러 두고 Ctrl+V 로 붙여넣을 수 있게 초점을 받는다.
+      tabIndex={0}
+      {...drop.handlers}
+      className={cn(
+        "rounded-md bg-background p-3 shadow-[var(--shadow-ring)] outline-none focus-within:ring-2 focus-within:ring-primary/30",
+        drop.over && "bg-primary-soft ring-2 ring-primary/40",
+      )}
+    >
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <label htmlFor={nameId} className="mb-1 block text-meta text-subtle-foreground">
@@ -239,6 +297,9 @@ function PhotoAdder({ count, busy, onAddFiles }: { count: number; busy: boolean;
       <input
         accept="image/*"
         className="sr-only"
+        // 보이는 「사진 더하기」 단추가 연다 — 숨긴 칸이 탭 차례에 끼면 아무것도 안 보이는 곳에 초점이 간다.
+        tabIndex={-1}
+        aria-hidden
         multiple
         type="file"
         ref={inputRef}

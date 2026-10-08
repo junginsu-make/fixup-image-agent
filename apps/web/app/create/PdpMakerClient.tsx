@@ -42,7 +42,7 @@ import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
-import { ProductSlots, dropIntoProducts } from "./ProductSlots";
+import { ProductSlots, dropIntoProducts, placedMessage } from "./ProductSlots";
 import { hasProductContent, primaryPhoto, productChips, productsFromLegacy, productsKey, productsReady, type PdpProductDraft } from "./products";
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
@@ -444,7 +444,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     setErrorMessage("");
     setErrorDetail("");
     setShowErrorDetail(false);
-    setNotice(joinMessages(`사진 ${files.length}장을 준비했습니다. 설정을 확인한 뒤 AI 분석을 시작해 보세요.`, dropNotice));
+    setNotice(joinMessages(placedMessage(outcome), "설정을 확인한 뒤 AI 분석을 시작해 보세요.", dropNotice));
   };
 
   const handleModelImage = async (file: File, dropNotice?: string) => {
@@ -1701,7 +1701,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
               <SectionHeading
                 step={1}
                 title="원본 이미지 업로드"
-                desc="한 장만 올려도 됩니다. 업로드 후 AI 전송용으로 자동 압축합니다."
+                desc="한 장만 올려도 됩니다. 같은 제품의 다른 각도는 한 칸에, 다른 제품은 칸을 추가해 넣어 주세요. 원본 화질 그대로 그림에 씁니다."
               />
 
               <DropPasteHint locked={false} className="mt-1" />
@@ -1709,9 +1709,9 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
               <ProductSlots
                 products={products}
                 onChange={setProducts}
-                // 옛 「로그 보기」 내용이 새 문구에 붙지 않게 함께 뗀다. 넣기에 성공하면 앞 오류를 지운다(옛 한 장 칸과 같다).
+                // 옛 「로그 보기」 내용이 새 문구에 붙지 않게 함께 뗀다. 넣기에 성공하면 앞 오류를 지우고 어느 제품에 넣었는지 알린다.
                 onError={(message) => { setErrorMessage(message); setErrorDetail(""); setShowErrorDetail(false); }}
-                onSuccess={() => { setErrorMessage(""); setErrorDetail(""); setShowErrorDetail(false); }}
+                onSuccess={(message) => { setErrorMessage(""); setErrorDetail(""); setShowErrorDetail(false); setNotice(message); }}
               />
 
             </div>

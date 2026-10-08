@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import React from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PreparedImageDraft } from "../pdp-drafts";
 import type { PdpProductDraft } from "../products";
 
@@ -31,11 +31,21 @@ let renderer: ReactTestRenderer;
 let changes: PdpProductDraft[][] = [];
 let errors: string[] = [];
 let cleared = 0;
+let notices: string[] = [];
+
+// 칸마다 끌어다 놓기를 받는다 — 그 손잡이가 화면 전체의 파일 놓기를 막으려 window 에 건다.
+beforeAll(() => {
+  vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+});
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 const 칸을그린다 = async (initial: PdpProductDraft[], prepare = 가짜준비) => {
   changes = [];
   errors = [];
   cleared = 0;
+  notices = [];
   function Host() {
     const [products, setProducts] = React.useState(initial);
     return (
@@ -44,7 +54,7 @@ const 칸을그린다 = async (initial: PdpProductDraft[], prepare = 가짜준�
         prepare={prepare}
         onChange={(next) => { changes.push(next); setProducts(next); }}
         onError={(message) => errors.push(message)}
-        onSuccess={() => { cleared += 1; }}
+        onSuccess={(message) => { cleared += 1; notices.push(message); }}
       />
     );
   }
@@ -197,6 +207,71 @@ describe("이름", () => {
   });
 });
 
+/**
+ * **제품 카드마다 끌어다 놓기·붙여넣기를 받는다**(최종 리뷰 I4). 바깥 칸 하나만 받을 때는
+ * 제품 2 카드에 놓아도 사진 자리가 남은 첫 제품(제품 1)에 들어갔다 — 다른 제품이 된다.
+ */
+describe("제품 카드에 끌어다 놓기·붙여넣기", () => {
+  const 옮김 = (files: File[], kind: "drop" | "paste") => {
+    const data = { types: ["Files"], files, items: [], dropEffect: "" };
+    return {
+      defaultPrevented: false,
+      preventDefault() { this.defaultPrevented = true; },
+      stopPropagation: vi.fn(),
+      currentTarget: { contains: () => true },
+      target: {},
+      ...(kind === "drop" ? { dataTransfer: data } : { clipboardData: data }),
+    };
+  };
+  const 카드 = (index: number) => renderer.root.findAll((node) => node.type === "section")[index]!;
+  const 기다린다 = async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+    }
+  };
+
+  it("제품 2 카드에 놓으면 제품 2 에 들어가고, 바깥 칸으로 올라가지 않는다", async () => {
+    await 칸을그린다([제품("p1", 1), 제품("p2", 1)]);
+    const event = 옮김([파일("a.jpg"), 파일("b.jpg")], "drop");
+    await act(async () => { 카드(1).props.onDrop(event); });
+    await 기다린다();
+    expect(마지막().map((product) => [product.id, product.photos.length])).toEqual([["p1", 1], ["p2", 3]]);
+    expect(event.stopPropagation).toHaveBeenCalled();
+    expect(notices).toEqual(["제품 2에 사진 2장을 넣었습니다."]);
+  });
+
+  it("카드에 붙여넣으면 그 제품에 넣고, 알림이 제품 이름을 부른다", async () => {
+    await 칸을그린다([제품("p1", 1, "레몬맛"), 제품("p2", 0)]);
+    const event = 옮김([파일("a.jpg")], "paste");
+    await act(async () => { 카드(0).props.onPaste(event); });
+    await 기다린다();
+    expect(마지막()[0]!.photos.map((photo) => photo.fileName)).toEqual(["p1-1.jpg", "a.jpg"]);
+    expect(event.stopPropagation).toHaveBeenCalled();
+    expect(notices).toEqual(["레몬맛에 사진 1장을 넣었습니다."]);
+  });
+
+  it("파일 고르기로 넣어도 같은 알림이다", async () => {
+    await 칸을그린다([제품("p1", 0)]);
+    await 파일고른다(0, [파일("a.jpg")]);
+    expect(notices).toEqual(["제품 1에 사진 1장을 넣었습니다."]);
+  });
+
+  it("카드를 누르고 붙여넣을 수 있게 카드가 초점을 받는다", async () => {
+    await 칸을그린다([제품("p1", 1), 제품("p2", 0)]);
+    expect([0, 1].map((index) => 카드(index).props.tabIndex)).toEqual([0, 0]);
+  });
+});
+
+/** 숨긴 파일 칸은 탭 차례에 들지 않는다 — 보이는 「사진 더하기」 단추가 연다(C2). */
+describe("숨긴 파일 칸", () => {
+  it("탭으로 가지 않고 읽어 주지도 않는다", async () => {
+    await 칸을그린다([제품("p1", 1)]);
+    const input = renderer.root.find((node) => node.type === "input" && node.props.type === "file");
+    expect(input.props.tabIndex).toBe(-1);
+    expect(input.props["aria-hidden"]).toBe(true);
+  });
+});
+
 describe("바깥 칸에 끌어다 놓기·붙여넣기", () => {
   it("사진 자리가 남은 첫 제품에 넣는다", async () => {
     const products = [제품("p1", 4), 제품("p2", 3), 제품("p3", 0)];
@@ -256,7 +331,17 @@ describe("상세페이지 화면 연결", () => {
     const at = client.indexOf("<ProductSlots");
     const tag = client.slice(at, client.indexOf("/>", at));
     expect(tag).toMatch(/onError=\{\(message\) => \{ setErrorMessage\(message\); setErrorDetail\(""\);/);
-    expect(tag).toMatch(/onSuccess=\{\(\) => \{ setErrorMessage\(""\); setErrorDetail\(""\);/);
+    expect(tag).toMatch(/onSuccess=\{\(message\) => \{ setErrorMessage\(""\); setErrorDetail\(""\); setShowErrorDetail\(false\); setNotice\(message\);/);
     expect(client).toContain("상품 사진 한 장이면 됩니다. 다른 각도·다른 제품도 함께 올릴 수 있습니다.");
+  });
+
+  it("바깥 칸에 놓았을 때도 알림이 어느 제품에 넣었는지 부른다", () => {
+    expect(client).toContain("setNotice(joinMessages(placedMessage(outcome), \"설정을 확인한 뒤 AI 분석을 시작해 보세요.\", dropNotice));");
+  });
+
+  // 3단계 T18: 「업로드 후 자동 압축합니다」는 이제 틀린 말이다 — 원본 화질 그대로 그림에 쓴다.
+  it("올리기 칸 머리말이 여러 각도·여러 제품과 원본 화질을 말한다", () => {
+    expect(client).toContain("한 장만 올려도 됩니다. 같은 제품의 다른 각도는 한 칸에, 다른 제품은 칸을 추가해 넣어 주세요. 원본 화질 그대로 그림에 씁니다.");
+    expect(client).not.toContain("업로드 후 AI 전송용으로 자동 압축합니다.");
   });
 });

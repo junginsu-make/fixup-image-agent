@@ -4,6 +4,8 @@ import type { ProductId } from "@fixup/pdp-core";
 import { cn } from "@fixup/ui";
 import { sectionProductsOn, toggleSectionProduct } from "./products";
 
+const LOCKED_REASON = "섹션마다 제품이 하나는 있어야 합니다";
+
 /**
  * **이 섹션 그림에 나올 제품**(설계 2026-10-08 §5). 눌러서 켜고 끈다.
  *
@@ -37,7 +39,7 @@ export function SectionProductChips({
             data-product-chip={product.id}
             aria-pressed={active}
             aria-disabled={locked || undefined}
-            title={locked ? "섹션마다 제품이 하나는 있어야 합니다" : undefined}
+            title={locked ? LOCKED_REASON : undefined}
             onClick={() => {
               if (!locked) onChange(toggleSectionProduct(all, selected, product.id));
             }}
@@ -48,6 +50,8 @@ export function SectionProductChips({
             )}
           >
             {product.label}
+            {/* `title` 은 화면 낭독기·터치에서 안 보인다 — 왜 안 꺼지는지 글로도 싣는다. */}
+            {locked ? <span className="sr-only">{` (${LOCKED_REASON})`}</span> : null}
           </button>
         );
       })}

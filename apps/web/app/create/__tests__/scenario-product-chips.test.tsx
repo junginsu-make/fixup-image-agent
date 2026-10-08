@@ -111,6 +111,16 @@ describe("구성안의 제품 칩", () => {
     expect(바뀐것).toEqual([]);
   });
 
+  // 3단계 최종 C1: 까닭이 `title` 에만 있으면 화면 낭독기·터치에서는 왜 안 꺼지는지 모른다.
+  it("끌 수 없는 칩은 까닭을 화면 낭독기용 글로도 싣는다", async () => {
+    await 띄운다(구성안(["p2"]), 두제품);
+    const [p1, p2] = 칩들();
+    const 숨은글 = (chip: typeof p1) =>
+      chip!.findAll((node) => node.type === "span" && node.props.className === "sr-only").map((node) => node.children.join(""));
+    expect(숨은글(p2)).toEqual([" (섹션마다 제품이 하나는 있어야 합니다)"]);
+    expect(숨은글(p1)).toEqual([]);
+  });
+
   it("꺼진 것을 켜면 제품 차례대로 둘 다", async () => {
     await 띄운다(구성안(["p2"]), 두제품);
     await act(async () => {
