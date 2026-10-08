@@ -19,8 +19,12 @@ import { STYLE_REFERENCE_MAX_PIXELS } from "./reference-limits";
  */
 export const PRODUCT_PHOTO_MAX_BYTES = 20 * 1024 * 1024;
 export const PRODUCT_PHOTO_MAX_EDGE = 3840;
-/** 임시값 — 0단계 실측 전, 설계 §9.1. fal 이 4032px 을 그대로 받아 쓰면 끈다. */
-export const FIT_TO_MODEL_EDGE = true;
+/**
+ * **끈다** — 0단계 실측(2026-10-08, 설계 §9.1)에서 GPT Image 2.5·Nano Banana Pro 편집이
+ * 4032px 참조를 둘 다 그대로 받아 만들었다. 원본을 그대로 넘긴다(사용자 결정 D1).
+ * 화면은 40백만 화소·20MB 를 넘는 사진만 고를 때 3840 으로 맞춘다(Ruling R3).
+ */
+export const FIT_TO_MODEL_EDGE = false;
 /**
  * 한 번에 펼치는 원본 수. 40백만 화소 한 장을 펼치면 수백 MB 다 — 운영 램 911MB 에서
  * 둘을 넘기면 돌고 있는 서비스가 밀린다. 넘는 요청은 차례를 기다린다.

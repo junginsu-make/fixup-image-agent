@@ -68,6 +68,14 @@ describe("원본 손질", () => {
     expect(kept.ok && kept.bytes.equals(bytes)).toBe(true);
   });
 
+  it("기본값은 원본 그대로 — 0단계 실측에서 두 모델이 4032px 을 받았다", async () => {
+    const bytes = await jpeg(4032, 3024);
+    const inspected = await inspectProductPhoto(bytes);
+    if (!inspected.ok) throw new Error("검사 실패");
+    const kept = await normalizeProductPhoto(bytes, inspected);
+    expect(kept.ok && kept.bytes.equals(bytes)).toBe(true);
+  });
+
   it("회전 정보가 있으면 바로 세워 굽는다 — 모델이 누운 사진으로 읽지 않게", async () => {
     const bytes = await jpeg(300, 200, 6);
     const prepared = await prepare(bytes, false);
