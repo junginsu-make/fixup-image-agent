@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button, cn } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_LABEL } from "@fixup/shared";
-import { IMAGE_MODELS } from "@fixup/sns-core";
+import { ImageModelPicker } from "../../_components/image-model-picker";
 import { CARD_COUNTS, CARD_LANGUAGES, CARD_LANGUAGE_LABEL, CARD_RATIOS, type CardOptions } from "../cardnews-options";
 import type { EasyCardnewsView } from "../cardnews-view";
 import { EasyCardnewsCaption } from "./cardnews-caption";
@@ -71,8 +71,8 @@ export function EasyCardnewsCard({
               onPick={(v) => 조건("count", v === "auto" ? "auto" : Number(v) as CardOptions["count"])} disabled={busy} />
             <Choice label="언어" value={view.options.language} items={CARD_LANGUAGES.map((id) => [id, CARD_LANGUAGE_LABEL[id]])}
               onPick={(v) => 조건("language", v as CardOptions["language"])} disabled={busy} />
-            <Choice label="모델" value={view.options.modelId} items={IMAGE_MODELS.map((m) => [m.id, m.label])}
-              onPick={(v) => 조건("modelId", v)} disabled={busy} />
+            <ImageModelPicker value={view.options.modelId} legend="모델"
+              onChange={(v) => { if (v !== view.options.modelId) 조건("modelId", v); }} disabled={busy} />
             <Choice label="그림체" value={view.options.look} items={IMAGE_LOOKS.map((id) => [id, IMAGE_LOOK_LABEL[id]])}
               onPick={(v) => 조건("look", v as CardOptions["look"])} disabled={busy} />
           </div>

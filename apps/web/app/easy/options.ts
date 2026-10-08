@@ -1,4 +1,4 @@
-import { roleOf, type AttachmentRole, type StoredAttachmentData } from "@fixup/shared";
+import { imageModelName, roleOf, type AttachmentRole, type StoredAttachmentData } from "@fixup/shared";
 
 /**
  * **이 이미지가 어떤 조건으로 만들어졌나** (2026-09-21 사용자 — 「결과물 밑에
@@ -47,7 +47,7 @@ export function easyOptionLines(options: EasyImageOptions | undefined): string[]
   if (!options) return [];
 
   const lines: string[] = [];
-  if (options.model) lines.push(options.model);
+  if (options.model) lines.push(imageModelName(options.model));
   if (options.ratio) lines.push(options.ratio);
   if (options.width && options.height) lines.push(`${options.width} × ${options.height}`);
   // 0장은 「안 붙이고 만들었다」는 뜻이라 적을 값어치가 있다. 모르면 안 적는다.
@@ -70,7 +70,7 @@ export function easyOptionMeta(options: EasyImageOptions | undefined): Array<[st
   if (!options) return [];
 
   const rows: Array<[string, string]> = [];
-  if (options.model) rows.push(["이미지 모델", options.model]);
+  if (options.model) rows.push(["이미지 모델", imageModelName(options.model)]);
   if (options.ratio) rows.push(["비율", options.ratio]);
   if (options.width && options.height) rows.push(["크기", `${options.width} × ${options.height}`]);
   if (typeof options.references === "number") rows.push(["참고 이미지", `${options.references}장`]);

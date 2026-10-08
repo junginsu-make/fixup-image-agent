@@ -63,3 +63,10 @@ describe("카드뉴스 그림체 고르기", () => {
     expect(source).not.toContain('kind === "keep_identity"');
   });
 });
+
+describe("카드뉴스 이미지 모델 고르기", () => {
+  it("ImageModelPicker 를 쓰고 select 를 쓰지 않는다", () => {
+    expect(source).toContain("<ImageModelPicker");
+    expect(source).not.toContain('id="sns-model"');
+  });
+});
