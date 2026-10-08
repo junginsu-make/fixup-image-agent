@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **285개**, 저장 기록(커밋, 합치기 제외) **1,076개**, 배포 꾸러미(릴리스) **242개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **286개**, 저장 기록(커밋, 합치기 제외) **1,078개**, 배포 꾸러미(릴리스) **244개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 37 | 241 | 50 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 38 | 243 | 52 |
 
 <a id="w-2026-08-31"></a>
 
@@ -511,8 +511,10 @@
 - 「N장 더 만들기」는 저장된 캐릭터에 각도를 더합니다. 한 장이 실패해도 남은 장을 마저 만들고, 이미 만든 장 값은 다시 내지 않습니다.
 - 관리자 계정은 라이브러리 「캐릭터」에서 모든 회원의 캐릭터와 만든 사람을 봅니다.
 - 라이브러리 캐릭터 카드는 정면 한 장만 보이고, 누르면 옆으로 넘겨 다른 각도를 봅니다.
+- 라이브러리 캐릭터 카드가 작업물 카드와 똑같이 동작합니다. 카드 어디를 눌러도 큰 창이 열리고, 과정 보기는 모서리 아이콘으로 옮겼습니다.
+- 라이브러리 위쪽 「캐릭터」 단추 옆에 캐릭터 개수가 보입니다.
 
-**운영 배포 21회**
+**운영 배포 22회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -535,8 +537,9 @@
 - 10/8 `20261008T013733Z-52126f57` · [#304](https://github.com/junginsu-make/fixup-image-agent/pull/304)
 - 10/8 `20261008T035018Z-b20d346b` · [#306](https://github.com/junginsu-make/fixup-image-agent/pull/306)
 - 10/8 `20261008T051238Z-dfe579c2` · [#308](https://github.com/junginsu-make/fixup-image-agent/pull/308)
+- 10/8 `20261008T055755Z-1eff3436` · [#310](https://github.com/junginsu-make/fixup-image-agent/pull/310)
 
-<details><summary>이 주의 작업 묶음 37개</summary>
+<details><summary>이 주의 작업 묶음 38개</summary>
 
 
 **10/6**
@@ -584,6 +587,7 @@
 - [#304](https://github.com/junginsu-make/fixup-image-agent/pull/304) feat(seo): 구글 서치 콘솔 소유 확인 값 <sub>검색 노출 · +7 / −1 · 운영 반영 10/8</sub>
 - [#306](https://github.com/junginsu-make/fixup-image-agent/pull/306) feat: 라이브러리 거르기 한 줄·그림 없는 작업 숨김·광고소재 묶음 저장 <sub>광고 규격 · 라이브러리 · +1,042 / −145 · 운영 반영 10/8</sub>
 - [#308](https://github.com/junginsu-make/fixup-image-agent/pull/308) feat: 캐릭터 자동 저장·관리자 전체 보기·라이브러리 카드 정면 한 장 <sub>캐릭터 · 관리자 · 라이브러리 · +841 / −114 · 운영 반영 10/8</sub>
+- [#310](https://github.com/junginsu-make/fixup-image-agent/pull/310) fix: 라이브러리 캐릭터 카드를 작업물과 같게, 「캐릭터」 단추에 개수 <sub>캐릭터 · 라이브러리 · +242 / −28 · 운영 반영 10/8</sub>
 
 </details>
 
