@@ -34,6 +34,15 @@ describe("대조표", () => {
     expect(defaults[0]!.label).toBe("표준형");
   });
 
+  /** 관리자는 숨긴 모델도 본다. 어느 것이 회원에게 보이는지 칸으로 알린다. */
+  it("보임 여부를 표시한다", () => {
+    const rows = modelCatalog();
+    const visible = rows.filter((row) => row.visible).map((row) => row.id);
+
+    expect(visible).toEqual(["gpt-image-2.5-flare", "nano-banana-pro", "nano-banana-2.1"]);
+    expect(rows.find((row) => row.id === "nano-banana")?.visible).toBe(false);
+  });
+
   it("두 종점을 모두 준다", () => {
     const economy = modelCatalog().find((row) => row.id === "nano-banana")!;
 

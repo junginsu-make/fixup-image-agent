@@ -61,6 +61,10 @@ describe("모델 대조표", () => {
     }
   });
 
+  it("보임 여부 칸을 그린다", () => {
+    expect(panel).toContain("{row.visible ?");
+  });
+
   /** 지금 모델 여섯이 다 나오는지 — 하나라도 빠지면 대조표가 아니다. */
   it("코드에 있는 모델을 전부 담는다", () => {
     const rows = modelCatalog();
