@@ -16,7 +16,7 @@ import {
   cn,
 } from "@fixup/ui";
 import {
-  type ImageLook,
+  imageModelName, type ImageLook,
 } from "@fixup/shared";
 import { runTranscriptStep } from "./transcript-step";
 import { randomId } from "../../lib/browser-safe";
@@ -33,12 +33,11 @@ import {
   knowledgeStorageKey,
   loadKnowledgeItems,
   loadProjects,
-  models,
+  analysisProviderFor, missingServerKeyMessage, providerModelNames, REDESIGN_FAL_MODEL,
   type GenerationPlan,
   type GenerationProgress,
   type GenerationSummary,
   type KnowledgeItem,
-  type Model,
   type Project,
   type SectionResult,
   type ServerConfig,
@@ -75,7 +74,9 @@ export function RedesignWizard() {
   const [view, setView] = React.useState<View>("dashboard");
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [activeProject, setActiveProject] = React.useState<Project | null>(null);
-  const [selectedModel, setSelectedModel] = React.useState<Model>("openai");
+  // 화면은 그림 모델을 고르고, 분석 AI 는 그것을 따른다(2026-10-08).
+  const [selectedImageModel, setSelectedImageModel] = React.useState<string>(REDESIGN_FAL_MODEL);
+  const selectedModel = analysisProviderFor(selectedImageModel);
   const [channel, setChannel] = React.useState("스마트스토어");
   // 캐릭터 만들기에서 만든 등장인물. 고르면 섹션마다 같은 사람이 나온다.
   const [characterId, setCharacterId] = React.useState("");
@@ -188,11 +189,8 @@ export function RedesignWizard() {
       return null;
     }
 
-    const hasKey = selectedModel === "openai" ? serverConfig.serverOpenaiKeyConfigured : serverConfig.serverGoogleKeyConfigured;
-    if (!hasKey) {
-      setToast(`${models[selectedModel].label} 운영자 서버 키가 설정되지 않았습니다.`);
-      return null;
-    }
+    const keyMessage = missingServerKeyMessage(serverConfig, selectedImageModel);
+    if (keyMessage) { setToast(keyMessage); return null; }
 
     if (outputCount > 1 && !baseProject) {
       reportClientLog("generate-sequence:start", {
@@ -230,7 +228,7 @@ export function RedesignWizard() {
       append: Boolean(baseProject)
     });
     setGenerationPlan({
-      model: selectedModel,
+      model: selectedModel, imageModel: selectedImageModel,
       count: outputCount,
       displayCount,
       displayIndex,
@@ -245,7 +243,7 @@ export function RedesignWizard() {
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
     const requestIdentity = requestIdentityOf({
-      model: selectedModel,
+      model: selectedModel, imageModel: selectedImageModel,
       startSection,
       count: outputCount,
       baseProject,
@@ -293,7 +291,7 @@ export function RedesignWizard() {
         : "";
       appendGenerateFields(form, {
         uploadFiles, knowledgeText, useKnowledge: useSharedKnowledge, request,
-        model: selectedModel, channel, ratio, look,
+        model: selectedModel, imageModel: selectedImageModel, channel, ratio, look,
         count: outputCount, startSection, rolloutRequest: outputRolloutRequest, transcript,
         characterId, characterAngles,
         // 쪼개 부르는 자리와, 앞 청크가 이미 한 기획(F-7-7).
@@ -364,7 +362,7 @@ export function RedesignWizard() {
         skipped: 0,
         finishedAt: Date.now(),
       });
-      setToast(data.project.warning || `${models[selectedModel].label}로 ${succeeded}장 생성 완료 · 성공한 이미지만 차감됐습니다.`);
+      setToast(data.project.warning || `${imageModelName(selectedImageModel)}으로 ${succeeded}장 생성 완료 · 성공한 이미지만 차감됐습니다.`);
 
       /**
        * **만든 즉시 서버에 올린다.**
@@ -618,7 +616,8 @@ export function RedesignWizard() {
     }
   }
 
-  async function editSection(sectionId: string, editRequest: string, model: Model) {
+  async function editSection(sectionId: string, editRequest: string, imageModel: string) {
+    const model = analysisProviderFor(imageModel);
     const project = currentProject;
     const section = project?.sections.find((candidate) => candidate.id === sectionId);
     const trimmedEditRequest = editRequest.trim();
@@ -630,23 +629,20 @@ export function RedesignWizard() {
       setToast("저장된 이미지가 없는 섹션은 수정할 수 없습니다. 다시 생성한 뒤 시도해주세요.");
       return;
     }
-    const hasKey = model === "openai" ? serverConfig.serverOpenaiKeyConfigured : serverConfig.serverGoogleKeyConfigured;
-    if (!hasKey) {
-      setToast(`${models[model].label} 운영자 서버 키가 설정되지 않았습니다.`);
-      return;
-    }
+    const keyMessage = missingServerKeyMessage(serverConfig, imageModel);
+    if (keyMessage) { setToast(keyMessage); return; }
     if (!trimmedEditRequest) {
       setToast("섹션 수정 요청을 입력하거나 빠른 입력 버튼을 선택해주세요.");
       return;
     }
 
     setEditingSectionId(sectionId);
-    setGenerationPlan({ model, count: 1, startedAt: Date.now() }); setRunStartedAt(Date.now());
+    setGenerationPlan({ model, imageModel, count: 1, startedAt: Date.now() }); setRunStartedAt(Date.now());
     setGenerating(true);
     setToast(`${section.name} 섹션을 수정하고 있습니다.`);
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
-    const requestIdentity = ["edit", project.id, sectionId, model, trimmedEditRequest, section.imageUrl.length].join("|");
+    const requestIdentity = ["edit", project.id, sectionId, imageModel, trimmedEditRequest, section.imageUrl.length].join("|");
     const requestKey = retryRequestKeysRef.current[requestIdentity] ?? randomId();
     retryRequestKeysRef.current[requestIdentity] = requestKey;
     let outcomeKnown = false;
@@ -662,7 +658,7 @@ export function RedesignWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-idempotency-key": requestKey },
         body: JSON.stringify({
-          model,
+          model, imageModel,
           imageUrl: requestImageUrl,
           request: trimmedEditRequest,
           section,
@@ -681,7 +677,7 @@ export function RedesignWizard() {
         ...project,
         sections: project.sections.map((candidate) => (
           candidate.id === sectionId
-            ? addSectionRevision(candidate, data.imageUrl, data.prompt || candidate.prompt, trimmedEditRequest, model)
+            ? addSectionRevision(candidate, data.imageUrl, data.prompt || candidate.prompt, trimmedEditRequest, model, imageModel)
             : candidate
         )),
         status: project.savedAt ? "수정됨" : project.status
@@ -740,8 +736,8 @@ export function RedesignWizard() {
         <StepBar steps={REDESIGN_STEPS} current={view} onJump={(id) => { if (!generating) setView(id as View); }} />
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>정밀형 {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
-          <Badge variant={serverConfig.serverGoogleKeyConfigured ? "green" : "default"}>속도형 {serverConfig.serverGoogleKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
+          <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>{providerModelNames("openai")} {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
+          <Badge variant={serverConfig.serverGoogleKeyConfigured ? "green" : "default"}>{providerModelNames("google")} {serverConfig.serverGoogleKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
           {/* 보관소가 준비된 것과 지식이 들어 있는 것은 다르다. 예전에는 0건이어도
               "연결"이라 떠서, 쓰이지 않는 기능이 켜져 있는 것처럼 보였다. */}
           <Badge
@@ -809,8 +805,8 @@ export function RedesignWizard() {
         )}
         {view === "workspace" && (
           <Workspace
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
+            selectedImageModel={selectedImageModel}
+            setSelectedImageModel={setSelectedImageModel}
             channel={channel}
             setChannel={setChannel}
             characterId={characterId}

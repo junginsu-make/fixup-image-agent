@@ -40,14 +40,16 @@ import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import { copyText } from "../../lib/browser-safe";
 import {
-  models,
+  REDESIGN_FAL_MODEL,
+  projectImageModelName,
   type Model,
   type Project,
   type SectionResult,
 } from "./redesign-model";
+import { ImageModelPicker } from "../_components/image-model-picker";
 import { buildImageFileName, downloadDataUrl, sanitizeDownloadName } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle } from "./redesign-project";
-import { OptionGroup, PlaceholderThumb, Topbar } from "./redesign-bits";
+import { PlaceholderThumb, Topbar } from "./redesign-bits";
 export function Results({
   project,
   rolloutRequest,
@@ -66,7 +68,8 @@ export function Results({
   onToast: (message: string) => void;
   onSave: () => void;
   onSaveToLibrary: () => void;
-  onEditSection: (sectionId: string, editRequest: string, model: Model) => void;
+  /** 고른 그림 모델 id 로 고친다. 분석 AI 는 화면이 이것에서 정한다. */
+  onEditSection: (sectionId: string, editRequest: string, imageModel: string) => void;
   onGenerateRest: () => void;
   generating: boolean;
   editingSectionId: string | null;
@@ -206,7 +209,7 @@ export function Results({
               <CardTitle>리디자인 결과 {project.sections.length}장</CardTitle>
               <CardDescription>저장하면 대시보드의 최근 프로젝트에서 다시 열 수 있습니다.</CardDescription>
             </div>
-            <Badge variant="green" className="shrink-0 whitespace-nowrap">{models[project.model].label}</Badge>
+            <Badge variant="green" className="shrink-0 whitespace-nowrap">{projectImageModelName(project)}</Badge>
           </CardHeader>
           {/*
             **카드 폭을 줄여 한눈에 본다**(2026-09-23 화면 검수). 전에는 1440 화면에서
@@ -280,7 +283,8 @@ export function SectionResultCard({
   section: SectionResult;
   index: number;
   projectTitle: string;
-  onEditSection: (sectionId: string, editRequest: string, model: Model) => void;
+  /** 고른 그림 모델 id 로 고친다. 분석 AI 는 화면이 이것에서 정한다. */
+  onEditSection: (sectionId: string, editRequest: string, imageModel: string) => void;
   editing: boolean;
   disabled: boolean;
 }) {
@@ -288,7 +292,8 @@ export function SectionResultCard({
   const [editRequest, setEditRequest] = React.useState("");
   // 수정 칸을 펼쳤는가. 카드가 들고 있어야 수정이 끝나거나 실패해도 그대로 남는다.
   const [editOpen, setEditOpen] = React.useState(false);
-  const [editModel, setEditModel] = React.useState<Model>("openai");
+  // 기본은 표준형 — 전의 기본(openai)이 그리던 모델과 같다.
+  const [editModel, setEditModel] = React.useState<string>(REDESIGN_FAL_MODEL);
   const revisions = React.useMemo(() => ensureSectionRevisions(section), [section]);
   const currentIndex = Math.max(0, revisions.findIndex((revision) => revision.imageUrl === section.imageUrl));
   const [revisionIndex, setRevisionIndex] = React.useState(currentIndex);
@@ -409,12 +414,7 @@ export function SectionResultCard({
               </Button>
             ))}
           </div>
-          <OptionGroup
-            label="수정 모델"
-            value={editModel}
-            options={[["openai", models.openai.label], ["google", models.google.label]]}
-            onChange={(value) => setEditModel(value as Model)}
-          />
+          <ImageModelPicker legend="수정 모델" value={editModel} onChange={setEditModel} />
           <Button
             type="button"
             onClick={() => onEditSection(section.id, editRequest, editModel)}

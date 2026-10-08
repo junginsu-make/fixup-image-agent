@@ -4,6 +4,7 @@ import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
 import { PDP_RETIRED_MODEL_MESSAGE, isRetiredPdpModel } from "./image-models";
+import { validRedesignModelPair } from "../redesign/model-choice";
 
 // 기존 decoded 업로드 예산 20MiB + base64 팽창 + JSON 메타데이터 여유.
 export const PDP_JSON_LIMIT = Math.ceil(20 * 1024 * 1024 * 4 / 3) + 1024 * 1024;
@@ -121,9 +122,11 @@ const common = {
 };
 const schemas = {
   redesignEdit: z.object({ model: z.enum(["openai", "google"]).optional(),
+    // 고른 그림 모델(2026-10-08, 세 모델). 보이는 셋만, 분석 AI(`model`)와 맞아야 한다.
+    imageModel: text.optional(),
     imageUrl: text.regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/), request: text.trim().min(1),
     section: z.record(text, z.unknown()).optional(), project: z.record(text, z.unknown()).optional(),
-  }).passthrough(),
+  }).passthrough().refine((body) => validRedesignModelPair(body.model, body.imageModel)),
   single: z.object({ ...common, originalImageBase64: text.trim().min(1), section }).passthrough(),
   batch: z.object({ ...common, originalImageBase64: text.trim().min(1), sections: z.array(section).min(1) }).passthrough()
     .refine((body) => body.sections.length <= maxBatchSizeFor(body.page?.imageModel ?? DEFAULT_IMAGE_MODEL), "한 번에 생성할 수 있는 장수를 초과했습니다."),
@@ -248,6 +251,7 @@ export async function readRedesignForm(req: Request): Promise<
       !Number.isInteger(count) || count < 1 || count > 10 || !Number.isInteger(start) || start < 1 ||
       !form.getAll("files").some((file) => file instanceof File && file.size > 0) ||
       (form.has("model") && !["openai", "google"].includes(String(form.get("model")))) ||
+      !validRedesignModelPair(form.get("model") ?? undefined, form.get("imageModel") ?? undefined) ||
       (form.has("ratio") && !redesignRatio.safeParse(form.get("ratio")).success) ||
       (form.has("look") && !z.enum(IMAGE_LOOKS).safeParse(form.get("look")).success)) {
       return { ok: false, response: invalidPdpRequest() };

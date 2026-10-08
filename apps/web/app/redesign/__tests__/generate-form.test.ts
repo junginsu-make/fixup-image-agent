@@ -214,3 +214,16 @@ describe("마법사가 이 조립기를 쓴다", () => {
     expect(나머지).toMatch(/index \+ 1,\s*FULL_PAGE_SECTIONS\)/);
   });
 });
+
+describe("그림 모델도 함께 보낸다", () => {
+  it("**고른 그림 모델을 imageModel 로 보낸다** — 분석 AI(model)와 따로", () => {
+    const form = 채운다({ model: "google", imageModel: "nano-banana-2.1" });
+
+    expect(form.get("model")).toBe("google");
+    expect(form.get("imageModel")).toBe("nano-banana-2.1");
+  });
+
+  it("없으면 안 보낸다 — 서버가 옛 규칙으로 읽는다", () => {
+    expect(채운다().get("imageModel")).toBeNull();
+  });
+});

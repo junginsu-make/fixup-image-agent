@@ -17,7 +17,8 @@ import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
 import { reportImageUsage, reportUsage, type ImageUsageReporter } from "./usage.js";
-import { GROUNDING_RULE } from "@fixup/shared";
+import { GROUNDING_RULE, imageModelName } from "@fixup/shared";
+import { missingKeyMessage, type DrawModel } from "./draw-model.js";
 import { assertNotTruncated, TRUNCATED_CODE } from "./truncation.js";
 import { GOOGLE_READING_MODEL } from "./transcribe.js";
 
@@ -236,6 +237,12 @@ export type GenerateSectionsInput = {
    * 다른 도구가 쓰는 fal 경로와 모델 목록을 함께 쓸 수 없었다.
    */
   generateImage?: RedesignImageGenerator;
+  /**
+   * `generateImage` 가 **실제로 그리는 모델**(2026-10-08). 글 모델에게 이 이름을
+   * 알리고, 결과의 모델 이름·`imageModel` 도 이것으로 적는다. 없으면 옛 직접
+   * 호출의 id 를 쓴다.
+   */
+  drawModel?: DrawModel;
 };
 
 /** 프롬프트와 첨부를 받아 그림 한 장을 돌려준다. */
@@ -399,10 +406,7 @@ export async function generateSections(input: GenerateSectionsInput) {
   console.info(`[generate] request provider=${provider} count=${count} startSection=${startSection} files=${files.length} channel=${channel}`);
 
   if (!apiKey) {
-    throw new RedesignError(
-      provider === "google" ? "속도형 API 키가 필요합니다." : "정밀형 API 키가 필요합니다.",
-      400
-    );
+    throw new RedesignError(missingKeyMessage(input.drawModel), 400);
   }
 
   if (files.length === 0) {
@@ -420,7 +424,7 @@ export async function generateSections(input: GenerateSectionsInput) {
     throw new RedesignError("이미지 생성에 사용할 참조 이미지가 없습니다. PDF는 브라우저에서 PNG로 변환한 뒤 전송됩니다.", 400);
   }
 
-  const modelInfo = modelMeta(provider);
+  const modelInfo = modelMeta(provider, input.drawModel);
   const retrievedKnowledgeText = useKnowledge
     ? await buildKnowledgeContext({
         requestText,
@@ -527,6 +531,8 @@ export async function generateSections(input: GenerateSectionsInput) {
       model: provider,
       modelLabel: modelInfo.label,
       modelId: modelInfo.id,
+      // 실제로 그린 그림 모델. 화면이 이 이름으로 작업을 보여 준다(옛 작업은 없다).
+      imageModel: input.drawModel?.id,
       count: generatedSections.length,
       ratio,
       status: failedSections.length > 0 ? "부분완료" : "완료",
@@ -551,7 +557,7 @@ export async function generateSections(input: GenerateSectionsInput) {
         attachedCount: drawReferences.length,
       }),
       warning: failedSections.length > 0
-        ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. 정밀형 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
+        ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
         : ""
     }
   };
@@ -870,7 +876,7 @@ async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKe
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 생성 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "이미지 생성 실패", response));
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
@@ -897,7 +903,7 @@ async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: str
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 생성 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "이미지 생성 실패", response));
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {
@@ -1224,11 +1230,16 @@ function extractOpenAIText(data: { output?: Array<{ content?: Array<{ text?: str
   return data.output?.flatMap((item) => item.content || []).map((content) => content.text || "").filter(Boolean).join("\n") || "";
 }
 
-function modelMeta(provider: Provider) {
-  if (provider === "google") {
-    return { provider: "google" as const, label: "속도형", id: GOOGLE_NANO_BANANA_2_MODEL };
-  }
-  return { provider: "openai" as const, label: "정밀형", id: OPENAI_IMAGE_MODEL };
+/**
+ * 글 모델에게 알리는 그림 모델. **실제로 그리는 것**이어야 한다(2026-10-08).
+ *
+ * fal 로 그리면 그 모델의 정본 이름과 엔드포인트. 키가 없어 옛 직접 호출로
+ * 떨어지면 그 호출의 id 이고, 이름은 정본이 모르는 id 라 「이전 방식」이다.
+ */
+function modelMeta(provider: Provider, drawModel?: DrawModel) {
+  if (drawModel) return { provider, label: imageModelName(drawModel.id), id: drawModel.endpoint };
+  const id = provider === "google" ? GOOGLE_NANO_BANANA_2_MODEL : OPENAI_IMAGE_MODEL;
+  return { provider, label: imageModelName(id), id };
 }
 
 async function readJsonResponse(response: Response) {
@@ -1262,7 +1273,7 @@ export function humanizeProviderError(message: string) {
   }
   if (message.includes("must be verified") && message.includes("gpt-image-2-2026-04-21")) {
     return [
-      "정밀형 사용 권한이 아직 없습니다.",
+      "이미지 생성 모델 사용 권한이 아직 없습니다.",
       "이 모델은 OpenAI 조직 인증이 필요합니다.",
       "OpenAI Platform > Settings > Organization > General에서 Verify Organization을 완료한 뒤 15분 정도 기다려주세요.",
       message.match(/request_id: [^)]+/)?.[0] || ""
@@ -1270,7 +1281,7 @@ export function humanizeProviderError(message: string) {
   }
   if (message.includes("Invalid image file or mode")) {
     return [
-      "업로드 이미지 형식이 정밀형 편집 입력과 맞지 않습니다.",
+      "업로드 이미지 형식이 이미지 편집 입력과 맞지 않습니다.",
       "긴 상세페이지 캡처나 JPG 색상 모드 문제일 수 있어, 앱에서 PNG 변환/분할 후 다시 전송하도록 수정했습니다.",
       "새로고침 후 다시 생성해주세요.",
       message.match(/request_id: [^)]+/)?.[0] || ""

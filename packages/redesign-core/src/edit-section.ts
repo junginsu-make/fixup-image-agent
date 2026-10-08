@@ -34,6 +34,7 @@ type Provider = "openai" | "google";
 
 import type { RedesignImageGenerator } from "./generate";
 import { reportImageUsage, type ImageUsageReporter } from "./usage.js";
+import { missingKeyMessage, type DrawModel } from "./draw-model.js";
 
 export type EditSectionInput = {
   /** "openai" | "google" (anything not "google" becomes "openai") */
@@ -53,6 +54,8 @@ export type EditSectionInput = {
    * 받고 있었다(2026-09-17 리뷰 F-7-5). 키가 있으면 늘 이쪽이 쓰인다.
    */
   generateImage?: RedesignImageGenerator;
+  /** `generateImage` 가 실제로 그리는 모델(2026-10-08). 회원에게 하는 말에 이 이름을 쓴다. */
+  drawModel?: DrawModel;
   /** 옛 길(업체 직접 호출)로 고친 그림을 알린다. 필수다(설계 2026-09-30 §3.4). */
   onImageUsage: ImageUsageReporter;
 };
@@ -68,10 +71,7 @@ export async function editSection(input: EditSectionInput) {
   const apiKey = provider === "google" ? googleKey : openaiKey;
 
   if (!apiKey) {
-    throw new RedesignError(
-      provider === "google" ? "속도형 API 키가 필요합니다." : "정밀형 API 키가 필요합니다.",
-      400
-    );
+    throw new RedesignError(missingKeyMessage(input.drawModel), 400);
   }
   if (!image) {
     throw new RedesignError("수정할 섹션 이미지가 없습니다.", 400);
@@ -154,7 +154,7 @@ async function editWithOpenAI({
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 섹션 수정 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "섹션 수정 실패", response));
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
@@ -186,7 +186,7 @@ async function editWithGoogle({
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 섹션 수정 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "섹션 수정 실패", response));
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {
@@ -228,7 +228,7 @@ export function humanizeEditError(message: string) {
   if (message.includes("must be verified") && message.includes("gpt-image-2-2026-04-21")) {
     // 조직 인증은 **운영자가** 할 일이다. 회원에게 업체 이름과 절차를 알려 봐야
     // 할 수 있는 것이 없고, 어디에 무엇을 쓰는지만 드러난다.
-    return "정밀형 사용 권한이 아직 없습니다. 운영자에게 문의해 주세요.";
+    return "이미지 생성 모델 사용 권한이 아직 없습니다. 운영자에게 문의해 주세요.";
   }
   return message;
 }

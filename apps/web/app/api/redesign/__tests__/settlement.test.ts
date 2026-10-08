@@ -275,3 +275,102 @@ describe("정확한 출력 크기", () => {
     expect(await 크기((await response.json()).imageUrl)).toBe("1080x1920");
   });
 });
+
+/**
+ * **리디자인도 세 모델 중에서 고른다**(2026-10-08 사용자 결정).
+ *
+ * 화면은 그림 모델을 `imageModel` 로, 분석 AI 를 `model`(openai/google)로 함께
+ * 보낸다. 그리는 것·값 매기는 것·장부에 남기는 것이 모두 **고른 그림 모델**이어야
+ * 한다 — 속도형(2.1)은 디테일형과 같은 Google 분석이지만 단가가 다르다.
+ */
+describe("T-COST: 리디자인 세 모델", () => {
+  const 폼 = (fields: Record<string, string>) => {
+    const form = new FormData();
+    form.append("files", 원본());
+    for (const [key, value] of Object.entries(fields)) form.append(key, value);
+    return new Request("http://local/api/redesign/generate", { method: "POST", body: form });
+  };
+  const 고치기 = (body: Record<string, unknown>) => new Request("http://local/api/redesign/edit", {
+    method: "POST",
+    body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게", ...body }),
+  });
+
+  it("**속도형(2.1)을 고르면 2.1 로 그리고 2.1 의 단가로 받는다**", async () => {
+    const { imageCreditUnits } = await import("../../../../lib/credit-cost");
+
+    const response = await generate(폼({ model: "google", imageModel: "nano-banana-2.1" }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.makeGenerator.mock.calls[0]!.at(-1)).toBe("nano-banana-2.1");
+    expect(mocks.reserve.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-2.1", 1));
+    expect(mocks.settle.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-2.1", 1));
+    expect((mocks.settle.mock.calls[0]!.at(-1) as { model: string }).model).toBe("nano-banana-2.1");
+  });
+
+  it("2.1 의 단가는 sns-core 의 제 단가에서 나온다", async () => {
+    const { imageUnitUsd } = await import("../../../../lib/credit-cost");
+    const { modelById, unitPrice } = await import("@fixup/sns-core");
+
+    expect(imageUnitUsd("nano-banana-2.1")).toBe(unitPrice(modelById("nano-banana-2.1"), "i2i", { width: 1024, height: 1024 }));
+    expect(imageUnitUsd("nano-banana-2.1")).not.toBe(imageUnitUsd("nano-banana-pro"));
+  });
+
+  it("**그리는 모델을 코어에 알린다** — 글 모델에게 실제 모델 이름을 말하게", async () => {
+    await generate(폼({ model: "google", imageModel: "nano-banana-2.1" }));
+
+    const 넘긴것 = mocks.generate.mock.calls[0]![0] as { model: string; drawModel?: { id: string; endpoint: string } };
+    expect(넘긴것.model).toBe("google");
+    expect(넘긴것.drawModel?.id).toBe("nano-banana-2.1");
+    expect(넘긴것.drawModel?.endpoint).toContain("google/nano-banana-2.1");
+  });
+
+  it("imageModel 이 없는 옛 요청은 지금처럼 그린다", async () => {
+    await generate(폼({ model: "google" }));
+
+    expect(mocks.makeGenerator.mock.calls[0]!.at(-1)).toBe("nano-banana-pro");
+  });
+
+  it.each([
+    ["숨긴 모델", { model: "openai", imageModel: "gpt-image-2.5-sunburst" }],
+    ["모르는 모델", { model: "google", imageModel: "nano-banana-99" }],
+    ["분석 AI 와 그림 모델이 어긋남", { model: "openai", imageModel: "nano-banana-2.1" }],
+    ["분석 AI 없이 Google 그림", { imageModel: "nano-banana-pro" }],
+  ])("생성: %s 이면 400 이고 예약하지 않는다", async (_, fields) => {
+    const response = await generate(폼(fields));
+
+    expect(response.status).toBe(400);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it("**고치기: 속도형(2.1)을 고르면 2.1 로 고치고 2.1 의 단가로 받는다**", async () => {
+    const { imageCreditUnits } = await import("../../../../lib/credit-cost");
+
+    const response = await edit(고치기({ model: "google", imageModel: "nano-banana-2.1" }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.makeGenerator.mock.calls[0]!.at(-1)).toBe("nano-banana-2.1");
+    expect(mocks.reserve.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-2.1", 1));
+    expect((mocks.settle.mock.calls[0]!.at(-1) as { model: string }).model).toBe("nano-banana-2.1");
+    const 넘긴것 = mocks.edit.mock.calls[0]![0] as { drawModel?: { id: string } };
+    expect(넘긴것.drawModel?.id).toBe("nano-banana-2.1");
+  });
+
+  it.each([
+    ["숨긴 모델", { model: "openai", imageModel: "gpt-image-2.5-sunburst" }],
+    ["분석 AI 와 그림 모델이 어긋남", { model: "google", imageModel: "gpt-image-2.5-flare" }],
+  ])("고치기: %s 이면 400 이고 예약하지 않는다", async (_, body) => {
+    const response = await edit(고치기(body));
+
+    expect(response.status).toBe(400);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  /** 화면 밖에서 `drawModel` 을 실어 보내도 코어에는 라우트가 정한 것만 간다. */
+  it("고치기: 본문의 drawModel 은 무시한다", async () => {
+    await edit(고치기({ model: "openai", drawModel: { id: "nano-banana-pro", endpoint: "가짜" } }));
+
+    const 넘긴것 = mocks.edit.mock.calls[0]![0] as { drawModel?: { id: string; endpoint: string } };
+    expect(넘긴것.drawModel?.id).toBe("gpt-image-2.5-flare");
+    expect(넘긴것.drawModel?.endpoint).not.toBe("가짜");
+  });
+});

@@ -8,6 +8,7 @@ import { withLlmMeter } from "../../../../lib/llm/meter";
 import { recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { readPdpRequest } from "../../../../lib/pdp/request";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
+import { modelEndpointLabel } from "@fixup/sns-core";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -31,7 +32,10 @@ async function handlePost(req: Request) {
   // 손으로 적은 1 이었다 — 사용량은 1장 줄고 장부에는 4장이 남았다.
   // 고친 그림도 새로 만든 그림과 같은 모델로 그린다. 한 페이지 안에서 섹션마다
   // 다른 모델이 그리면 이어 붙였을 때 결이 갈린다.
-  const falModel = redesignFalModelFor(String((body as { model?: string }).model || "openai"));
+  const falModel = redesignFalModelFor(
+    String((body as { model?: string }).model || "openai"),
+    (body as { imageModel?: string }).imageModel,
+  );
   let generateImage;
   try {
     generateImage = createRedesignImageGenerator(process.env, falModel);
@@ -53,6 +57,8 @@ async function handlePost(req: Request) {
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
       generateImage,
+      // 본문에 실려 온 값이 아니라 라우트가 정한 것만 — 위의 펼침을 덮어쓴다.
+      drawModel: generateImage ? { id: falModel, endpoint: modelEndpointLabel(falModel, true) } : undefined,
       onImageUsage: recordRedesignDirectImage,
     });
     // 고친 그림도 작업의 크기를 지킨다. 「1080×1920」 작업이면 그 크기로 맞춘다.

@@ -103,3 +103,20 @@ describe("만들어지지 않은 섹션", () => {
     expect(그린글(작업())).not.toContain("만들어지지 않은 섹션");
   });
 });
+
+/**
+ * **세 모델 이름으로 말한다**(2026-10-08). 옛 「정밀형」은 지금 어느 모델도 아니다.
+ */
+describe("모델 이름", () => {
+  it("**고른 그림 모델 이름을 딱지로 그린다**", () => {
+    const 글 = 그린글(작업({ model: "google", imageModel: "nano-banana-2.1" }));
+
+    expect(글).toContain("속도형");
+    expect(글).not.toContain("정밀형");
+  });
+
+  it("**옛 작업(imageModel 없음)은 그때 그린 모델 이름으로**", () => {
+    expect(그린글(작업({ model: "google" }))).toContain("디테일형");
+    expect(그린글(작업({ model: "openai" }))).toContain("표준형");
+  });
+});
