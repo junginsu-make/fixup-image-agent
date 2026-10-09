@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 9일까지 **40일**, 작업 묶음(PR) **297개**, 저장 기록(커밋, 합치기 제외) **1,155개**, 배포 꾸러미(릴리스) **261개**.
+8월 31일 첫 저장부터 10월 9일까지 **40일**, 작업 묶음(PR) **298개**, 저장 기록(커밋, 합치기 제외) **1,157개**, 배포 꾸러미(릴리스) **263개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 49 | 320 | 69 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 50 | 322 | 71 |
 
 <a id="w-2026-08-31"></a>
 
@@ -544,8 +544,10 @@
 - 지운 지 6개월이 지난 것은 매일 새벽 4시 30분쯤 서버가 저절로 완전히 지웁니다. 탈퇴하면 지금처럼 바로 함께 지웁니다.
 - 개인정보 처리방침에 회원이 지운 생성 결과물을 6개월 보관한 뒤 파기한다는 내용을 넣었습니다(10월 9일 시행).
 - 개인정보 처리방침에 회원이 지운 참고 이미지, 캐릭터, 쉽게 대화 기록도 6개월 보관한 뒤 파기한다는 내용을 넣었습니다. 무엇을 보관하는지 항목별로 적었습니다.
+- 회원이 탈퇴하면 라이브러리 이미지뿐 아니라 캐릭터 이미지와 스타일 레퍼런스 이미지 파일도 함께 지웁니다. 전에는 이 두 가지 파일이 서버에 남았습니다.
+- 파일이 아주 많은 회원도 탈퇴할 때 빠짐없이 끝까지 지웁니다.
 
-**운영 배포 33회**
+**운영 배포 34회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -580,8 +582,9 @@
 - 10/9 `20261009T063924Z-459730bf` · [#328](https://github.com/junginsu-make/fixup-image-agent/pull/328)
 - 10/9 `20261009T065752Z-abe1848f` · [#330](https://github.com/junginsu-make/fixup-image-agent/pull/330)
 - 10/9 `20261009T091942Z-e782bccf` · [#332](https://github.com/junginsu-make/fixup-image-agent/pull/332)
+- 10/9 `20261009T103148Z-4ae8bc11` · [#334](https://github.com/junginsu-make/fixup-image-agent/pull/334)
 
-<details><summary>이 주의 작업 묶음 49개</summary>
+<details><summary>이 주의 작업 묶음 50개</summary>
 
 
 **10/6**
@@ -644,6 +647,7 @@
 - [#328](https://github.com/junginsu-make/fixup-image-agent/pull/328) feat(credit): 구독을 배정하면 바로 지급하고 매달 배정일에 자동으로 다시 준다 <sub>크레딧·비용 · +634 / −136 · 운영 반영 10/9</sub>
 - [#330](https://github.com/junginsu-make/fixup-image-agent/pull/330) feat: 회원이 지운 것을 6개월 보관한 뒤 자동으로 완전 삭제한다 <sub>회원·로그인 · +3,870 / −219 · 운영 반영 10/9</sub>
 - [#332](https://github.com/junginsu-make/fixup-image-agent/pull/332) docs(legal): 처리방침 삭제 보관에 참고 이미지·캐릭터·쉽게 대화를 넣는다 <sub>캐릭터 · 쉽게 모드 · 라이브러리 · 약관 · +1 / −1 · 운영 반영 10/9</sub>
+- [#334](https://github.com/junginsu-make/fixup-image-agent/pull/334) fix(membership): 탈퇴 때 캐릭터 그림·스타일 레퍼런스 파일도 지운다 <sub>캐릭터 · 크레딧·비용 · 회원·로그인 · 라이브러리 · +88 / −11 · 운영 반영 10/9</sub>
 
 </details>
 
