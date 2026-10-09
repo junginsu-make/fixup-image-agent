@@ -116,7 +116,7 @@ function 플랜말(facts: AccountFacts, now: Date): string {
 function 사용말(usage: UsageSummary | null | undefined): string {
   if (!usage) return "이번 달 사용량을 읽지 못했습니다.";
   const 줄 = [`이번 달에 ${usage.used}장을 썼습니다.`];
-  if (usage.periodEnd) 줄.push(`이번 기간은 ${날짜글(usage.periodEnd)}에 바뀝니다.`);
+  if (usage.periodEnd) 줄.push(`이번 달 사용량은 ${날짜글(usage.periodEnd)}부터 새로 셉니다.`);
   return 줄.join(" ");
 }
 

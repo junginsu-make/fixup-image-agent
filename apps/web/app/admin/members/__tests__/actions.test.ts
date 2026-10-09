@@ -32,7 +32,6 @@ describe("관리자 입력에서 실제 SQL까지", () => {
       { kind:"resolve", user:f.user, request:action, positions:[0], reason:"저장 결과 확인", action },
       { kind:"plan", plan:"test", name:"시험", units:100, amount:10000, active:true },
       { kind:"subscription", users:[f.user], plan:"test", status:"active", action },
-      { kind:"paid", user:f.user, period:"2026-09-01", units:100, amount:10000, action },
       { kind:"status", users:[f.user], status:"suspended", reason:"이용 약관 위반", action },
       { kind:"plan_delete", plan:"test" },
     ];
@@ -78,16 +77,32 @@ describe("관리자 입력에서 실제 SQL까지", () => {
     expect(await changeCredits({ kind:"grant", users:[f.user], grantKind:"purchase", units:-1, amount:0, expires:null, reason:"입력 오류", action })).toMatchObject({ ok:false });
     expect(f.rpc).not.toHaveBeenCalled();
   });
-  it("플랜 배정과 실제 지급의 성공 안내를 구분한다", async () => {
+  /** 2026-10-09 사용자 결정: 배정 = 지급. 「결제 확인하면」을 말하면 관리자가 없는 단추를 찾는다. */
+  it("플랜을 배정하면 크레딧이 들어갔다고 알린다", async () => {
     const assigned = await changeCredits({ kind:"subscription", users:[f.user], plan:"basic", status:"active", action });
-    expect(assigned.message).toContain("결제");
+    expect(assigned.message).toContain("크레딧이 들어갔습니다");
+    expect(assigned.message, "옛 결제 확인 안내가 남아 있다").not.toContain("결제");
     const granted = await changeCredits({ kind:"grant", users:[f.user], grantKind:"purchase", units:100, amount:0, expires:null, reason:"관리자 지급", action });
     expect(granted.message).toContain("100크레딧을 지급했습니다");
   });
-  it("같은 월 결제를 다시 확인하면 기존 지급 이력을 안내한다", async () => {
-    f.rpc.mockResolvedValue({ data: null, error: { message: 'duplicate key value violates unique constraint "subscription_periods_user_id_period_key"' } });
-    const result = await changeCredits({ kind:"paid", user:f.user, period:"2026-09-01", units:75, amount:90000, action });
+  /** 구독 크레딧은 배정·자동 주기로만 나간다. 손으로 「구독」 종류를 주면 주기 밖 lot 가 생긴다. */
+  it("손으로 주는 크레딧에 구독 종류는 받지 않는다", async () => {
+    const result = await changeCredits({ kind:"grant", users:[f.user], grantKind:"subscription", units:10, amount:0, expires:null, reason:"수동 구독", action } as never);
     expect(result).toMatchObject({ ok:false });
-    expect(result.message).toContain("이미 확인");
+    expect(f.rpc).not.toHaveBeenCalled();
+  });
+  /** 수동 결제 확인은 닫았다 — 자동 주기와 겹치면 같은 기간이 두 번 지급된다. */
+  it("결제 확인 명령은 더 받지 않는다", async () => {
+    const result = await changeCredits({ kind:"paid", user:f.user, period:"2026-09-01", units:75, amount:89000, action } as never);
+    expect(result).toMatchObject({ ok:false });
+    expect(f.rpc).not.toHaveBeenCalled();
+  });
+  /** 다른 플랜으로 바꿀 때 남은 구독 크레딧을 거둬들이는데, 처리 중인 작업이 잡고 있으면 DB 가 멈춘다. */
+  it("처리 중인 작업 때문에 플랜을 못 바꾸면 그 까닭을 알린다", async () => {
+    f.rpc.mockResolvedValue({ data: null, error: { message: "credit_grant_has_holds" } });
+    const result = await changeCredits({ kind:"subscription", users:[f.user], plan:"premium", status:"active", action });
+    expect(result).toMatchObject({ ok:false });
+    expect(result.message).toContain("플랜");
+    expect(result.message).toContain("작업이 끝난 뒤");
   });
 });

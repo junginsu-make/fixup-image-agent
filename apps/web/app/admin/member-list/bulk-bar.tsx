@@ -51,7 +51,7 @@ function PlanForm({ users, plans, state }: { users: string[]; plans: CreditPlan[
         </select>
       </Field>
       <Button type="submit" size="sm" disabled={state.pending}>부여 내용 확인</Button>
-      <p className="basis-full text-xs text-muted-foreground">플랜만 붙습니다. 크레딧은 회원 패널의 「결제 확인」에서 그 달 결제를 확인해야 지급됩니다.</p>
+      <p className="basis-full text-xs text-muted-foreground">배정하면 그 자리에서 플랜만큼 크레딧이 바로 들어갑니다. 구독이 켜져 있는 동안 매달 배정한 날에 다시 들어가고, 다른 플랜으로 바꾸면 이전 플랜의 남은 구독 크레딧은 거둬들입니다.</p>
     </form>
   );
 }
@@ -69,7 +69,7 @@ function CancelForm({ rows, state }: { rows: AdminMemberRow[]; state: CreditComm
       <Button size="sm" variant="destructive" disabled={state.pending} onClick={() => state.submit({ kind: "subscription", users: rows.map((row) => row.profile.id), plan: plans[0]!, status: "canceled" })}>
         해지 내용 확인
       </Button>
-      <p className="text-xs text-muted-foreground">해지하면 새 결제 확인을 할 수 없습니다. 이미 지급된 크레딧과, 미리 결제 확인해 둔 달의 크레딧은 그대로 지급·사용됩니다.</p>
+      <p className="text-xs text-muted-foreground">해지하면 다음 달 몫부터 들어가지 않습니다. 이미 들어간 이번 기간의 크레딧은 그 기간이 끝날 때까지 쓸 수 있습니다.</p>
     </div>
   );
 }
