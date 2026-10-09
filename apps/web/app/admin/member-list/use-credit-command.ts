@@ -29,7 +29,7 @@ export function useCreditCommand(onDone?: () => void) {
     setNotice(null); setRetry(null); setReview(null);
     try {
       // HTTP에서도 안전한 UUID를 만들고, 확인·재시도 동안 같은 값을 유지한다.
-      const needsAction = ["grant", "activate", "resolve", "subscription", "status", "paid"].includes(command.kind);
+      const needsAction = ["grant", "activate", "resolve", "subscription", "status"].includes(command.kind);
       setReview((needsAction ? { ...command, action: ("action" in command && command.action) || randomId() } : command) as CreditCommand);
     } catch (error) {
       setNotice({ ok: false, text: error instanceof Error ? error.message : "요청을 준비하지 못했습니다. 다시 시도해 주세요." });

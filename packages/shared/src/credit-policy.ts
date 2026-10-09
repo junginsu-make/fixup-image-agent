@@ -32,17 +32,25 @@ function localDate(value: string | Date) {
   if (!Number.isFinite(date.getTime())) throw new Error("지급 시각이 올바르지 않습니다.");
   return new Date(date.getTime() + KST_OFFSET);
 }
-/** Calendar months in Korea; preserve time of day and clamp Jan 31 to Apr 30. */
-export function purchaseExpiresAt(grantedAt: string | Date): string {
+/** Calendar months in Korea; preserve time of day and clamp the day to the target month's last day. */
+function addKstMonths(grantedAt: string | Date, months: number): string {
   const date = localDate(grantedAt), day = date.getUTCDate();
-  date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + 3);
+  date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + months);
   const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
   date.setUTCDate(Math.min(day, last));
   return new Date(date.getTime() - KST_OFFSET).toISOString();
 }
+/** Jan 31 → Apr 30. */
+export function purchaseExpiresAt(grantedAt: string | Date): string {
+  return addKstMonths(grantedAt, 3);
+}
+/**
+ * 받은 때부터 한 달(2026-10-09 사용자 결정 — 전에는 그 달 말일). Jan 31 → Feb 28.
+ * DB 의 `credit_subscription_cycle_bounds` 첫 주기와 같다. 그 뒤 주기는 DB 가 처음 시작일에서
+ * 다시 센다(1/31 → 2/28 → 3/31) — 이 함수를 이어 부르면 3/28 로 밀리니 그렇게 쓰지 않는다.
+ */
 export function subscriptionExpiresAt(grantedAt: string | Date): string {
-  const date = localDate(grantedAt);
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - KST_OFFSET).toISOString();
+  return addKstMonths(grantedAt, 1);
 }
 
 /** Examples, not promises about variable AI-generated plans or the current form defaults. */

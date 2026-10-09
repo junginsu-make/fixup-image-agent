@@ -21,7 +21,6 @@ const action = "20000000-0000-4000-8000-000000000001";
 describe("확인 카드가 누구에게인지 말한다", () => {
   it("한 명이면 이메일을 적는다", () => {
     expect(describeCommand({ kind: "grant", users: [A], grantKind: "purchase", units: 500, amount: 0, expires: null, reason: "입금 확인", action }, plan, email)).toContain("a@example.invalid");
-    expect(describeCommand({ kind: "paid", user: B, period: "2026-09-01", units: 75, amount: 90000, action }, plan, email)).toContain("b@example.invalid");
     expect(describeCommand({ kind: "subscription", users: [A], plan: "basic", status: "active", action }, plan, email)).toContain("a@example.invalid");
     expect(describeCommand({ kind: "revoke", user: A, grant: action, reason: "취소" }, plan, email)).toContain("a@example.invalid");
   });

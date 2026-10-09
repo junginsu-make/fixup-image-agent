@@ -18,7 +18,6 @@ export function describeCommand(command: CreditCommand, planName: (id: string) =
   const who = (users: string[]) => (users.length === 1 ? emailOf(users[0]!) : `${users.length}명`);
   switch (command.kind) {
     case "grant": return `${who(command.users)}에게 ${command.users.length > 1 ? "각각 " : ""}${command.units.toLocaleString("ko-KR")}크레딧 지급 · 받은 금액 ${command.users.length > 1 ? "각각 " : ""}${won(command.amount)}`;
-    case "paid": return `${emailOf(command.user)} · ${command.period.slice(0, 7)} 결제 확인 · ${command.units.toLocaleString("ko-KR")}크레딧 지급 · 받은 금액 ${won(command.amount)}`;
     case "subscription": return `${who(command.users)} · ${planName(command.plan)} · ${PLAN_STATUS_LABEL[command.status] ?? command.status}`;
     case "status": return `${who(command.users)}을(를) ${command.status === "active" ? "승인" : "정지"}합니다. 조건에 맞지 않는 회원은 건너뜁니다`;
     case "revoke": return `${emailOf(command.user)} · 선택한 지급 건의 남은 크레딧을 회수합니다`;
@@ -43,7 +42,7 @@ export function ConfirmCard({ state, planName, emailOf = (id) => id }: { state: 
             <p className="text-sm font-bold">반영할 내용을 확인하세요</p>
             <p className="text-sm">{describeCommand(review, planName, emailOf)}</p>
             {review.kind === "grant" ? <p className="text-xs text-muted-foreground">{review.grantKind === "purchase" ? "구매 크레딧 · 지급일부터 3개월 유효" : `추가 지급 · 만료 ${review.expires ? new Date(review.expires).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "미지정"}`}</p> : null}
-            {review.kind === "subscription" && review.status === "active" ? <p className="text-sm text-muted-foreground">이 단계에서는 플랜만 배정합니다. 월 구독 크레딧은 해당 회원의 결제 확인 단계에서 지급합니다.</p> : null}
+            {review.kind === "subscription" && review.status === "active" ? <p className="text-sm text-muted-foreground">반영하면 플랜만큼 크레딧이 바로 들어가고, 구독이 켜져 있는 동안 매달 배정한 날에 다시 들어갑니다. 이미 다른 플랜을 쓰는 회원은 이전 플랜의 남은 구독 크레딧을 거둬들입니다.</p> : null}
             {"reason" in review ? <p className="text-xs text-muted-foreground">사유: {review.reason}</p> : null}
             <div className="flex gap-2">
               <Button size="sm" disabled={pending} onClick={() => execute(review)}>{pending ? "반영 중..." : "확인한 내용 반영"}</Button>

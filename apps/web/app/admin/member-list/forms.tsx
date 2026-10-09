@@ -16,8 +16,8 @@ export function Field({ label, children, className = "" }: { label: string; chil
 /**
  * 크레딧 지급. 여러 명에게도, 한 명에게도 같은 폼을 쓴다.
  *
- * 구독 크레딧은 여기서 주지 않는다 — 결제 확인(회원 패널)으로만 준다. 결제가 안 된
- * 달에 크레딧이 나가는 사고를 막으려는 것이다.
+ * 구독 크레딧은 여기서 주지 않는다 — 구독을 배정하면 그 자리에서, 그 뒤로는 매달 배정한
+ * 날에 저절로 들어간다(2026-10-09). 여기서도 주면 같은 기간이 두 번 나간다.
  */
 export function GrantForm({ users, state }: { users: string[]; state: CreditCommandState }) {
   const [kind, setKind] = useState<"purchase" | "bonus">("purchase");
