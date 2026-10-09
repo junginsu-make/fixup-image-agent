@@ -22,12 +22,18 @@ describe("무엇을 저장하는가", () => {
    * 쪽이 맞는지 다시 따져야 한다.
    */
   it("**고객 결제액이 플랜 가격이 된다** — 월 가격이 아니다", () => {
-    const rows = planRowsToSave(PLAN_DEFAULTS);
-    const priced = pricePlans(PLAN_DEFAULTS);
+    // 2026-10-09 부터 기본값은 할인이 없어 두 값이 같다. 규칙은 할인을 준 플랜으로 잰다.
+    const discounted = PLAN_DEFAULTS.map(p => ({ ...p, discountPct: 10 }));
+    const rows = planRowsToSave(discounted);
+    const priced = pricePlans(discounted);
 
-    expect(rows.map(r => r.price_krw)).toEqual([62_033, 109_074, 209_898]);
     expect(rows.map(r => r.price_krw)).toEqual(priced.map(p => p.paidPrice));
     expect(rows.map(r => r.price_krw), "월 가격을 저장하고 있다").not.toEqual(priced.map(p => p.listPrice));
+  });
+
+  /** 2026-10-09 사용자: 정가 그대로 받는다 — 구독 플랜 표의 금액이 저장된다. */
+  it("**기본값은 구독 플랜 표의 정가 89,000·159,000·299,000원을 저장한다**", () => {
+    expect(planRowsToSave(PLAN_DEFAULTS).map(r => r.price_krw)).toEqual([89_000, 159_000, 299_000]);
   });
 
   it("**이름과 아이디가 그대로 간다**", () => {

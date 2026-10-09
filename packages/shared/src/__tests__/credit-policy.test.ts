@@ -27,4 +27,10 @@ describe("서비스와 비용 전략실의 공통 차감 정책", () => {
     expect(WORK_CREDIT_PRESETS.find(x => x.id === "pdp")?.images).toBe(9);
     expect(WORK_CREDIT_PRESETS.find(x => x.id === "poster")?.images).toBe(1);
   });
+  it("카드뉴스 예시는 구독 플랜 표와 같은 5장이다", () => {
+    // 2026-10-09 사용자: 구독 플랜 표(상세페이지 9장·카드뉴스 5장·이미지 1장·인쇄용 2크레딧)가 우선이다.
+    const cardnews = WORK_CREDIT_PRESETS.find(x => x.id === "cardnews");
+    expect(cardnews?.images).toBe(5);
+    expect(cardnews?.label).toBe("카드뉴스 예시 · 5장");
+  });
 });
