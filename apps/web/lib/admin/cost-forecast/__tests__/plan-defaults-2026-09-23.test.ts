@@ -29,38 +29,43 @@ describe("카드뉴스는 5장 기준이다", () => {
   });
 });
 
-describe("2026-09-23 확정 기본값", () => {
+/**
+ * **2026-10-09 사용자: 정가 그대로 받는다.** 구독 플랜 표(월 구독 플랜 계획_261008)가 우선이다.
+ * 09-23 에는 정가에서 약 30% 를 더 깎아 62,033·109,074·209,898원을 받는 기본값이었다 —
+ * 그러면 상세페이지 마진이 최소선 30% 아래로 내려가 할인을 뺐다.
+ */
+describe("2026-10-09 확정 기본값 — 정가 그대로", () => {
   const byId = (id: string) => pricePlans(PLAN_DEFAULTS).find(p => p.id === id)!;
 
-  it("**크레딧·목표 마진·추가 할인이 확정값이다**", () => {
+  it("**크레딧·목표 마진이 확정값이고 추가 할인은 없다**", () => {
     expect(PLAN_DEFAULTS.map(p => [p.id, p.credits, p.targetPct, p.discountPct])).toEqual([
-      ["basic", 75, 53, 30.3],
-      ["premium", 150, 48.5, 31.4],
-      ["ultra", 300, 45.8, 29.8],
+      ["basic", 75, 53, 0],
+      ["premium", 150, 48.5, 0],
+      ["ultra", 300, 45.8, 0],
     ]);
   });
 
-  /** 화면에서 본 값 그대로 나와야 한다(2026-09-23 사용자 화면). */
+  /** 구독 플랜 표의 정가 그대로 나와야 한다. */
   it("**월 가격이 89,000·159,000·299,000원이다**", () => {
     expect(pricePlans(PLAN_DEFAULTS).map(p => p.listPrice)).toEqual([89_000, 159_000, 299_000]);
   });
 
-  it("**고객 결제액이 62,033·109,074·209,898원이다**", () => {
-    expect(pricePlans(PLAN_DEFAULTS).map(p => p.paidPrice)).toEqual([62_033, 109_074, 209_898]);
+  it("**고객 결제액이 정가와 같다**", () => {
+    expect(pricePlans(PLAN_DEFAULTS).map(p => p.paidPrice)).toEqual([89_000, 159_000, 299_000]);
   });
 
-  it("**1개당 827·727·700원이다**", () => {
-    expect(pricePlans(PLAN_DEFAULTS).map(p => Math.round(p.unitPrice))).toEqual([827, 727, 700]);
+  it("**1개당 1,187·1,060·997원이다**", () => {
+    expect(pricePlans(PLAN_DEFAULTS).map(p => Math.round(p.unitPrice))).toEqual([1_187, 1_060, 997]);
   });
 
-  it("**실제 마진이 36.5·29.0·26.6% 다**", () => {
-    expect(byId("basic").marginPct).toBeCloseTo(36.5, 1);
-    expect(byId("premium").marginPct).toBeCloseTo(29.0, 1);
-    expect(byId("ultra").marginPct).toBeCloseTo(26.6, 1);
+  it("**실제 마진이 53.0·48.5·45.8% 다**", () => {
+    expect(byId("basic").marginPct).toBeCloseTo(53.0, 1);
+    expect(byId("premium").marginPct).toBeCloseTo(48.5, 1);
+    expect(byId("ultra").marginPct).toBeCloseTo(45.8, 1);
   });
 
-  it("**크레딧 더 받음이 기준·+14%·+18% 다**", () => {
-    expect(pricePlans(PLAN_DEFAULTS).map(p => p.bonusPct)).toEqual([0, 14, 18]);
+  it("**크레딧 더 받음이 기준·+12%·+19% 다**", () => {
+    expect(pricePlans(PLAN_DEFAULTS).map(p => p.bonusPct)).toEqual([0, 12, 19]);
   });
 });
 

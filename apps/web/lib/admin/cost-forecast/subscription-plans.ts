@@ -6,9 +6,9 @@ import { z } from "zod";
  * 크레딧·목표 마진·추가 할인 셋으로 월 가격을 정한다. 마진은 **와디즈
  * 수수료를 빼기 전** 값이고, 분모는 고객이 낸 금액(부가세 포함)이다.
  *
- * 목표 마진 기본값이 50·40·30 이 아니라 53.4·44.0·34.7 인 까닭: 확정 가격
- * (90,000·144,000·240,000원)을 그대로 내도록 그 가격의 마진을 넣어 두었다.
- * 50% 를 넣으면 83,000원이 된다(사용자 선택: 「확정 가격 유지」).
+ * 목표 마진 기본값이 50·40·30 이 아니라 53·48.5·45.8 인 까닭: 확정 가격
+ * (89,000·159,000·299,000원)을 그대로 내도록 그 가격의 마진을 넣어 두었다.
+ * 50% 를 넣으면 베이직이 83,000원이 된다(사용자 선택: 「확정 가격 유지」).
  */
 export const PLAN_ASSUMPTIONS = Object.freeze({
   costPerCreditKrw: 450, // 1장 원가 예산. 재생성·실패 여유 포함, 실측 아님
@@ -33,15 +33,15 @@ const planSchema = z.object({
 export type PlanInput = z.infer<typeof planSchema>;
 
 /**
- * **2026-09-23 사용자 확정값.**
+ * **2026-10-09 사용자 확정값 — 정가 그대로 받는다.**
  *
- * 월 가격 89,000·159,000·299,000원에서 추가 할인을 얹어 실제로 받는 돈이
- * 62,033·109,074·209,898원이 된다. 1개당 827·727·700원.
+ * 월 가격 89,000·159,000·299,000원(구독 플랜 표). 1개당 1,187·1,060·997원.
+ * 09-23 에는 추가 할인 약 30% 를 얹어 62,033·109,074·209,898원을 받았으나 뺐다.
  */
 export const PLAN_DEFAULTS: readonly PlanInput[] = Object.freeze([
-  { id: "basic", name: "Basic", credits: 75, targetPct: 53, discountPct: 30.3 },
-  { id: "premium", name: "Premium", credits: 150, targetPct: 48.5, discountPct: 31.4 },
-  { id: "ultra", name: "Ultra", credits: 300, targetPct: 45.8, discountPct: 29.8 },
+  { id: "basic", name: "Basic", credits: 75, targetPct: 53, discountPct: 0 },
+  { id: "premium", name: "Premium", credits: 150, targetPct: 48.5, discountPct: 0 },
+  { id: "ultra", name: "Ultra", credits: 300, targetPct: 45.8, discountPct: 0 },
 ]);
 
 export function validatePlanInputs(input: unknown): PlanInput[] {

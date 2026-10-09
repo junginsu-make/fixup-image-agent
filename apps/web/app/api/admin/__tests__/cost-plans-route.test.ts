@@ -98,7 +98,7 @@ describe("무엇을 보내는가", () => {
     await 저장한다();
 
     expect(보낸것.map(c => [c.args.p_id, c.args.p_units, c.args.p_price])).toEqual([
-      ["basic", 75, 62_033], ["premium", 150, 109_074], ["ultra", 300, 209_898],
+      ["basic", 75, 89_000], ["premium", 150, 159_000], ["ultra", 300, 299_000],
     ]);
   });
 

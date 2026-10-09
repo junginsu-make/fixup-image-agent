@@ -48,7 +48,7 @@ export function subscriptionExpiresAt(grantedAt: string | Date): string {
 /** Examples, not promises about variable AI-generated plans or the current form defaults. */
 export const WORK_CREDIT_PRESETS = [
   { id: "pdp", label: "상세페이지 예시 · 8섹션+대표1", images: 9 },
-  { id: "cardnews", label: "카드뉴스 예시 · 8장", images: 8 },
+  { id: "cardnews", label: "카드뉴스 예시 · 5장", images: 5 },
   { id: "poster", label: "포스터 · 1장", images: 1 },
 ] as const;
 
