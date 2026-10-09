@@ -20,6 +20,10 @@ let 상태 = "active";
 let rpc오류: string | null = null;
 let 삭제오류: string | null = null;
 let 저장소파일: Array<{ name: string; id: string | null }> = [];
+/** 라이브러리 밖 버킷의 파일(버킷 → 회원 폴더 바로 아래 목록). */
+let 버킷파일: Record<string, Array<{ name: string; id: string | null }>> = {};
+/** 버킷마다 실제로 지운 경로. */
+const 지운경로: Record<string, string[]> = {};
 
 vi.mock("../../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
@@ -43,12 +47,16 @@ vi.mock("../../supabase/admin", () => ({
     },
     storage: {
       from: (bucket: string) => ({
-        list: async (prefix: string) => {
+        list: async (prefix: string, options?: { limit?: number; offset?: number }) => {
           한일.push(`list:${bucket}/${prefix}`);
-          return { data: prefix.includes("/") ? [] : 저장소파일, error: null };
+          const 전부 = prefix.includes("/") ? [] : (버킷파일[bucket] ?? (bucket === "library" ? 저장소파일 : []));
+          // 저장소처럼 한 번에 limit 개까지만 준다.
+          const offset = options?.offset ?? 0;
+          return { data: 전부.slice(offset, offset + (options?.limit ?? 100)), error: null };
         },
         remove: async (paths: string[]) => {
           한일.push(`remove:${paths.length}`);
+          지운경로[bucket] = [...(지운경로[bucket] ?? []), ...paths];
           return { error: null };
         },
       }),
@@ -78,6 +86,8 @@ beforeEach(() => {
   rpc오류 = null;
   삭제오류 = null;
   저장소파일 = [];
+  버킷파일 = {};
+  for (const key of Object.keys(지운경로)) delete 지운경로[key];
 });
 
 describe("돈 기록이 없으면", () => {
@@ -181,6 +191,56 @@ describe("만든 그림", () => {
     const 계정 = 한일.indexOf("deleteUser:u1");
     expect(파일).toBeGreaterThanOrEqual(0);
     expect(파일, "계정을 먼저 지웠다").toBeLessThan(계정);
+  });
+});
+
+/**
+ * **라이브러리 밖에 놓인 그림도 지운다**(2026-10-09 — 처리방침 「탈퇴 시 즉시 파기」).
+ *
+ * 캐릭터 그림은 `characters` 버킷(`{user}/{캐릭터}/{각도}`), 스타일 레퍼런스는 `references` 버킷
+ * (`{user}/{id}`)에 있다. 표는 회원과 함께 사라지지만 파일은 남았다 — 라이브러리 버킷만 비웠다.
+ */
+describe("라이브러리 밖의 그림", () => {
+  it("**캐릭터 그림과 스타일 레퍼런스 파일도 지운다**", async () => {
+    버킷파일 = {
+      characters: [{ name: "front.png", id: "c1" }],
+      references: [{ name: "r1.png", id: "r1" }, { name: "r1.thumb.webp", id: "r2" }],
+    };
+
+    await 탈퇴();
+
+    expect(지운경로.characters).toEqual(["u1/front.png"]);
+    expect(지운경로.references).toEqual(["u1/r1.png", "u1/r1.thumb.webp"]);
+  });
+
+  it("**닫는 길에서도 지운다**", async () => {
+    돈기록 = true;
+    버킷파일 = { characters: [{ name: "front.png", id: "c1" }] };
+
+    await 탈퇴();
+
+    expect(지운경로.characters).toEqual(["u1/front.png"]);
+  });
+
+  it("**계정을 지우기 전에 지운다**", async () => {
+    버킷파일 = { characters: [{ name: "front.png", id: "c1" }] };
+
+    await 탈퇴();
+
+    expect(한일.indexOf("list:characters/u1")).toBeGreaterThanOrEqual(0);
+    expect(한일.indexOf("list:characters/u1")).toBeLessThan(한일.indexOf("deleteUser:u1"));
+  });
+});
+
+/** 저장소 목록은 한 번에 1000개까지만 준다 — 그 뒤도 끝까지 받아 지운다. */
+describe("파일이 많으면", () => {
+  it("**1000개를 넘어도 모두 지운다**", async () => {
+    저장소파일 = Array.from({ length: 1205 }, (_, i) => ({ name: `f${i}.png`, id: String(i) }));
+
+    await 탈퇴();
+
+    expect(지운경로.library).toHaveLength(1205);
+    expect(new Set(지운경로.library).size).toBe(1205);
   });
 });
 

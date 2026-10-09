@@ -25,9 +25,15 @@ import { checkWithdrawal, withdrawalDone, type WithdrawalPath } from "./withdraw
  * `library_items` 는 `profiles` 를 `on delete cascade` 로 참조하므로 행은
  * 함께 사라진다. **그런데 저장소(Storage)의 그림 파일은 안 사라진다** —
  * 표만 비고 파일은 남는다. 여기서 먼저 지운다.
+ *
+ * 라이브러리 밖에 놓인 그림도 같다(2026-10-09 — 처리방침 「탈퇴 시 즉시 파기」).
+ * 캐릭터 그림은 `characters`(`{user}/{캐릭터}/{각도}`), 스타일 레퍼런스는
+ * `references`(`{user}/{id}`)에 있고, 둘 다 경로 첫 칸이 회원 id 다.
  */
 
-const BUCKET = "library";
+const BUCKETS = ["library", "characters", "references"] as const;
+/** 저장소가 목록을 한 번에 주는 최대 수. 이보다 많으면 다음 쪽을 이어 받는다. */
+const LIST_PAGE = 1000;
 
 export interface WithdrawResult {
   ok: boolean;
@@ -37,24 +43,35 @@ export interface WithdrawResult {
 
 /** 이 회원의 그림 파일을 저장소에서 지운다. 경로 첫 칸이 회원 id 다. */
 async function 파일을지운다(db: ReturnType<typeof createSupabaseAdminClient>, userId: string) {
+  for (const bucket of BUCKETS) await 버킷에서지운다(db, bucket, userId);
+}
+
+async function 버킷에서지운다(
+  db: ReturnType<typeof createSupabaseAdminClient>,
+  bucket: (typeof BUCKETS)[number],
+  userId: string,
+) {
   const 지울것: string[] = [];
   const 훑기 = async (prefix: string, depth: number) => {
     // 끝없이 파고들지 않는다. 저장 규약은 `{user}/{종류}/{작업}/{파일}` 넷이다.
     if (depth > 4) return;
-    const { data, error } = await db.storage.from(BUCKET).list(prefix, { limit: 1000 });
-    if (error || !data) return;
-    for (const entry of data) {
-      const path = `${prefix}/${entry.name}`;
-      // 파일에는 메타가 붙고 폴더에는 안 붙는다.
-      if (entry.id) 지울것.push(path);
-      else await 훑기(path, depth + 1);
+    for (let offset = 0; ; offset += LIST_PAGE) {
+      const { data, error } = await db.storage.from(bucket).list(prefix, { limit: LIST_PAGE, offset });
+      if (error || !data) return;
+      for (const entry of data) {
+        const path = `${prefix}/${entry.name}`;
+        // 파일에는 메타가 붙고 폴더에는 안 붙는다.
+        if (entry.id) 지울것.push(path);
+        else await 훑기(path, depth + 1);
+      }
+      if (data.length < LIST_PAGE) return;
     }
   };
 
   await 훑기(userId, 1);
   // 저장소는 한 번에 받는 수에 한도가 있다. 나눠 보낸다.
   for (let i = 0; i < 지울것.length; i += 100) {
-    await db.storage.from(BUCKET).remove(지울것.slice(i, i + 100));
+    await db.storage.from(bucket).remove(지울것.slice(i, i + 100));
   }
 }
 
