@@ -24,6 +24,7 @@ function 질의(table: string) {
   const self: Record<string, unknown> = {
     select: () => self,
     eq: () => self,
+    is: () => self,
     not: () => self,
     order: () => self,
     limit: () => self,
@@ -69,6 +70,8 @@ const 줄 = { id: A, source_kind: "sns", source_id: B, source_index: 0, owner_id
 beforeEach(() => {
   답들 = {
     "sns_cards.select": { data: [{ user_id: "u2", index: 0, asset_path: "u2/sns/p/0.png" }], error: null },
+    // 원래 작업이 살아 있다(회원이 지우지 않았다).
+    "sns_projects.maybeSingle": { data: { id: A }, error: null },
   };
   올리기답 = { error: null };
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -158,5 +161,15 @@ describe("우리가 쓴 안내는 그대로", () => {
 
     expect(status).toBe(200);
     expect(body.ok).toBe(true);
+  });
+});
+
+/** **회원이 지운 작업은 첫 화면에 걸지 않는다**(2026-10-08) — 누구나 보는 공개 사본이 생긴다(리뷰). */
+describe("회원이 지운 작업", () => {
+  it("걸 그림이 없다고 거절한다", async () => {
+    답들["sns_projects.maybeSingle"] = { data: null, error: null };
+
+    expect(await 읽기(await 걸기()))
+      .toEqual({ status: 400, body: { ok: false, message: "걸 그림을 찾지 못했습니다." } });
   });
 });

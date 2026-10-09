@@ -123,6 +123,10 @@ install -d -o root -g root -m 0755 /usr/local/lib/fixup-image-agent
 install -o root -g root -m 0755 "${script_dir}/monitor.sh" /usr/local/lib/fixup-image-agent/monitor.sh
 install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-monitor.service" /etc/systemd/system/
 install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-monitor.timer" /etc/systemd/system/
+# 회원이 지운 것 6개월 뒤 파기(2026-10-08 계획 3단계). 하루 한 번.
+install -o root -g root -m 0755 "${script_dir}/purge.sh" /usr/local/lib/fixup-image-agent/purge.sh
+install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-purge.service" /etc/systemd/system/
+install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-purge.timer" /etc/systemd/system/
 install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixup-image-agent/app.env.example
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
@@ -158,6 +162,7 @@ if [[ ${worker_state} != masked* ]]; then
   systemctl enable fixup-image-agent-worker.service
 fi
 systemctl enable --now fixup-image-agent-monitor.timer
+systemctl enable --now fixup-image-agent-purge.timer
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
 echo "Host files installed for ${site_address}."

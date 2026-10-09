@@ -10,7 +10,9 @@ vi.mock("../supabase/admin", () => ({
     from: () => {
       const self: Record<string, unknown> = {
         select: () => self,
-        eq: async () => ({ data: [], error: null }),
+        eq: () => self,
+        // 이름 목록은 살아 있는 캐릭터만 읽는다(`is("deleted_at", null)`, 2026-10-08) — 거기서 끝난다.
+        is: async () => ({ data: [], error: null }),
         // 적힌 값만 보고 멈춘다 — 그 뒤 저장소 일은 이 시험의 몫이 아니다.
         insert: async (payload: Record<string, unknown>) => { inserted = payload; return { error: { message: "멈춤" } }; },
       };

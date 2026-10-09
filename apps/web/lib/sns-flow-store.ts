@@ -121,26 +121,29 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        */
       const result = await createSupabaseAdminClient().from("sns_projects")
         .update({ data, status, updated_at: new Date().toISOString() })
-        .eq("id", projectId).eq("user_id", userId)
+        // 회원이 지운 작업에는 쓰지 않는다 — 늦게 끝난 생성이 지운 작업을 고치지 않게(2026-10-08).
+        .eq("id", projectId).eq("user_id", userId).is("deleted_at", null)
         .select("id");
       if (result.error) throw new Error(result.error.message);
       if (!(result.data ?? []).length) throw new SnsProjectNotWritable();
       return { ...project, data, status, updatedAt: new Date().toISOString() };
     },
+    /**
+     * **지우지 않고 지운 때만 적는다**(2026-10-08 사용자 결정). 회원 화면에서는 사라지고(RLS 가 감춘다),
+     * 줄·카드·그림 파일은 남아 관리자가 확인한다 — 6개월 뒤 자동 파기. 회원은 이 칸을 쓸 권한이 없어
+     * 서버 권한으로 쓰되, 소유자·살아 있는 것만 고른다. 고친 줄을 세어 본다 — 안 그러면 「지웠습니다」
+     * 뒤에 새로고침하면 그대로 있다.
+     */
     async remove(projectId) {
       const project = await getProject(projectId);
       if (!project) return false;
-      // 카드 행은 FK cascade 가 지운다. 비용 기록은 project_id 만 비워지고 남는다.
-      // 여기도 소유자 조건을 걸고 지운 줄을 세어 본다 — 안 그러면 「지웠습니다」
-      // 뒤에 새로고침하면 그대로 있다.
-      const removed = await client.from("sns_projects")
-        .delete().eq("id", projectId).eq("user_id", userId)
+      const now = new Date().toISOString();
+      const removed = await createSupabaseAdminClient().from("sns_projects")
+        .update({ deleted_at: now, deleted_by: userId, updated_at: now })
+        .eq("id", projectId).eq("user_id", userId).is("deleted_at", null)
         .select("id");
       if (removed.error) throw new Error(removed.error.message);
       if (!(removed.data ?? []).length) throw new SnsProjectNotWritable();
-      const paths = assetPathsOf(project);
-      // 파일이 남아도 화면에는 안 보인다. 실패해도 삭제 자체는 끝난 것이다.
-      if (paths.length) await client.storage.from("library").remove(paths);
       return true;
     },
   };

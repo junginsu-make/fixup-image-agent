@@ -7,6 +7,8 @@ export interface DocumentDependencies {
   authenticate:()=>Promise<{userId:string} | Response>;
   repo:DocumentRepository;storage:DocumentStorage;
   cleanupLegacy?:(userId:string,sourceIds:string[])=>Promise<void>;
+  /** 회원의 지우기 — 연결된 옛 라이브러리 작업에 지운 때만 적는다(2026-10-08). */
+  hideLegacy?:(userId:string,sourceIds:string[])=>Promise<void>;
 }
 const uploadSchema=assetSchema.omit({path:true,fileName:true}).strict();
 const saveSchema=z.object({baseRevision:z.number().int().nonnegative(),requestId:uuid,document:z.unknown()}).strict();
@@ -27,8 +29,11 @@ export function documentResponseError(error:unknown):Response{
   return Response.json({ok:false,message:error instanceof DocumentError?error.message:status===400?"요청 형식이 올바르지 않습니다.":"작업을 처리하지 못했습니다.",
     ...(error instanceof DocumentError && error.current?{current:error.current}:{})},{status,headers:{"cache-control":"no-store"}});
 }
-/** 지우기를 마친다 — 연결된 옛 라이브러리 그림, 문서 그림 파일을 지우고 문서를 비운다. 관리자의 지우기도 쓴다(2026-10-09). */
-export async function completeDocumentDelete(deps:DocumentDependencies,userId:string,row:Pick<DocumentRecord,"id"|"sourceDraftId">){
+/**
+ * **완전 삭제** — 연결된 옛 라이브러리 그림, 문서 그림 파일을 지우고 문서를 비운다. 2026-10-08 부터 회원의 지우기는
+ * 이것을 부르지 않는다(지운 때만 적는다). 관리자의 완전 삭제와, 예전 방식으로 지우다 끊긴 문서의 정리만 쓴다.
+ */
+export async function completeDocumentDelete(deps:Pick<DocumentDependencies,"repo"|"storage"|"cleanupLegacy">,userId:string,row:Pick<DocumentRecord,"id"|"sourceDraftId">){
   await deps.cleanupLegacy?.(userId,[row.id,...(row.sourceDraftId?[row.sourceDraftId]:[])]);
   await deps.storage.removeAll(userId,row.id);await deps.repo.finishDelete(userId,row.id);
 }
@@ -113,9 +118,12 @@ export function documentHandlers(deps:DocumentDependencies){
       const restored={...past.document,body:{...past.document.body,restoredFromRevision:body.revision}};
       return withUrls(await deps.repo.save(userId,id,body.baseRevision,restored,body.requestId));
     })(),
+    /** 회원의 지우기 — 지운 때만 적는다. 문서·그림은 남아 관리자가 확인한다(2026-10-08 사용자 결정, 6개월 뒤 파기). */
     remove:(_req:Request,id:string)=>run(async userId=>{
-      uuid.parse(id);const row=await deps.repo.markDeleted(userId,id);
-      await completeDelete(userId,row);return {};
+      uuid.parse(id);const row=await requireDoc(userId,id);
+      // 옛 작업을 먼저 — 문서를 먼저 지우면, 옛 작업 표시가 실패했을 때 다시 눌러도 문서를 못 찾는다.
+      await deps.hideLegacy?.(userId,[row.id,...(row.sourceDraftId?[row.sourceDraftId]:[])]);
+      await deps.repo.softDelete(userId,id);return {};
     })(),
   };
 }

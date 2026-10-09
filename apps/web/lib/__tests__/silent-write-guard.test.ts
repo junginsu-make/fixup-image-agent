@@ -57,15 +57,15 @@ describe("라이브러리 삭제", () => {
 
 describe("포스터 삭제", () => {
   it("저장소가 지운 줄이 있었는지 알려 준다", () => {
-    expect(posterStore).toContain('.eq("id", id).eq("user_id", userId)\n        .select("id")');
+    // 2026-10-08 부터 회원의 지우기는 「지운 때」만 적는다. 그래도 고친 줄을 센다.
+    expect(posterStore).toContain('.eq("id", id).eq("user_id", userId).is("deleted_at", null)\n        .select("id")');
     expect(posterStore).toContain("return (data ?? []).length > 0;");
   });
 
-  it("**정말 지워졌을 때만 파일에 손댄다**", () => {
-    // 파일 삭제는 admin 클라이언트라 RLS 를 우회한다. 행 삭제가 막힌 상태로
-    // 이어서 돌면 남의 그림만 되돌릴 수 없게 지운다.
+  /** 회원이 지워도 그림 파일은 남는다(관리자 확인·6개월 보관, 2026-10-08). 지울 수 있는 곳은 관리자 길뿐이다. */
+  it("회원의 지우기는 그림 파일에 손대지 않는다", () => {
     expect(posterRoute).toContain("const removed = await createPosterService(stores.projects).remove(id);");
-    expect(posterRoute.indexOf("if (!removed) {"))
-      .toBeLessThan(posterRoute.indexOf("await removePosterAssets(paths);"));
+    expect(posterRoute).not.toContain("storage");
+    expect(posterRoute).not.toContain("removePosterAssets");
   });
 });

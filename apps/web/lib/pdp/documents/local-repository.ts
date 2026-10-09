@@ -69,15 +69,16 @@ export function createLocalDocumentRepository(root: string): DocumentRepository 
       return read().documents.filter(row => row.copiedFromOwner === ownerId).slice(0, 100)
         .map(({ id, userId, sourceDraftId }) => ({ id, userId, sourceDraftId }));
     },
-    async get(userId, id, revision) {
-      const data = read(); const row = data.documents.find(x => x.id === id && x.userId === userId && !x.deletedAt);
+    async get(userId, id, revision, options) {
+      const data = read(); const row = data.documents.find(x => x.id === id && x.userId === userId && (options?.includeDeleted || !x.deletedAt));
       if (!row) return null;
       return revision === undefined || revision === row.revision ? row
         : data.revisions.find(x => x.id === id && x.userId === userId && x.revision === revision) ?? null;
     },
-    async list(userId) {
-      return read().documents.filter(x => !x.deletedAt && x.document && (userId === null || x.userId === userId))
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(summarize);
+    async list(userId, options) {
+      return read().documents.filter(x => (options?.includeDeleted || !x.deletedAt) && x.document && (userId === null || x.userId === userId))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map(row => ({ ...summarize(row), ...(row.deletedAt ? { deletedAt: row.deletedAt } : {}) }));
     },
     async deletedDraftIds(userId){
       return read().documents.filter(x=>(userId===null || x.userId===userId) && x.deletedAt).flatMap(x=>[x.id,...(x.sourceDraftId?[x.sourceDraftId]:[])]);
@@ -105,6 +106,11 @@ export function createLocalDocumentRepository(root: string): DocumentRepository 
       const data = read(); owned(data, userId, id);
       return data.revisions.filter(x => x.id === id && x.userId === userId).sort((a,b) => b.revision-a.revision)
         .map(x => ({ revision: x.revision, createdAt: x.updatedAt }));
+    },
+    async softDelete(userId, id, deletedBy) {
+      const data = read(), row = owned(data, userId, id);
+      row.deletedAt = new Date().toISOString(); row.deletedBy = deletedBy ?? userId; row.cleanupPending = false;
+      write(data); return row;
     },
     async markDeleted(userId, id) {
       const data = read(), row = owned(data, userId, id, true);

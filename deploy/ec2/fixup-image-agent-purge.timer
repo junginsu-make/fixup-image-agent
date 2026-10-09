@@ -1,0 +1,11 @@
+[Unit]
+Description=Purge members' deleted items older than 6 months, once a day
+
+[Timer]
+# 04:30 KST — 사람이 가장 적게 쓰는 때.
+OnCalendar=*-*-* 19:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

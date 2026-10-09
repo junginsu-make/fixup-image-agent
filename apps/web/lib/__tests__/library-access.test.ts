@@ -33,6 +33,7 @@ function builderFor(table: string) {
   const builder: Record<string, unknown> = {
     select: () => builder,
     delete: () => builder,
+    update: () => builder,
     order: () => builder,
     limit: (count: number) => { cap = count; return builder; },
     not: () => builder,
@@ -42,6 +43,11 @@ function builderFor(table: string) {
     },
     eq: (column: string, value: unknown) => {
       recorded.push({ table, column, value });
+      eqs.push([column, value]);
+      return builder;
+    },
+    // 지운 것 빼기(`is("deleted_at", null)`) — 같은 거르기로 다룬다. 그 칸이 없는 줄은 대상이 아니다.
+    is: (column: string, value: unknown) => {
       eqs.push([column, value]);
       return builder;
     },
@@ -399,5 +405,36 @@ describe("고른 참고 이미지 낱개", () => {
     tableRows.reference_images = [줄("a", "member-1", null)];
     expect(await referenceImagesByIds(MEMBER, [])).toEqual([]);
     expect(recorded.some((entry) => entry.table === "reference_images")).toBe(false);
+  });
+});
+
+/**
+ * **회원이 지운 참고 이미지는 목록에도, 고른 낱개에도 없다**(2026-10-08 사용자 결정 — 계획 2단계).
+ *
+ * 줄·파일은 보관되므로, 읽는 길이 `deleted_at` 을 안 거르면 지운 그림이 고르는 창에 다시 뜨고 생성 재료로
+ * 실려 나간다. 관리자도 보통 목록에서는 안 본다 — 관리자는 「회원이 삭제한 자료」에서 따로 본다.
+ */
+describe("회원이 지운 참고 이미지", () => {
+  const 줄 = (id: string, user_id: string, deleted_at: string | null) => ({
+    id, user_id, team_id: null, deleted_at,
+    storage_path: `${user_id}/references/${id}.png`,
+    title: id, purpose: "both", width: null, height: null,
+    created_at: "2026-09-01T00:00:00.000Z",
+  });
+  const GONE = "2026-10-08T00:00:00.000Z";
+
+  it("회원 목록에 안 나온다", async () => {
+    tableRows.reference_images = [줄("live", "member-1", null), 줄("gone", "member-1", GONE)];
+    expect((await listReferenceImages(MEMBER)).map((image) => image.id)).toEqual(["live"]);
+  });
+
+  it("관리자의 보통 목록에도 안 나온다 — 고르는 창이 같은 목록을 쓴다", async () => {
+    tableRows.reference_images = [줄("live", "member-9", null), 줄("gone", "member-9", GONE)];
+    expect((await listReferenceImages(ADMIN)).map((image) => image.id)).toEqual(["live"]);
+  });
+
+  it("id 를 알아도 생성 재료로 안 읽힌다", async () => {
+    tableRows.reference_images = [줄("gone", "member-1", GONE)];
+    expect(await referenceImagesByIds(MEMBER, ["gone"])).toEqual([]);
   });
 });

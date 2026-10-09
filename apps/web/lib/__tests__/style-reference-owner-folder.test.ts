@@ -27,7 +27,7 @@ vi.mock("../supabase/admin", () => {
   const table = (name: string) => {
     const rows = () => (name === "style_references" ? st.rows : []);
     const self: Record<string, unknown> = {
-      select: () => self, eq: () => self, order: () => self, range: () => self, limit: () => self, delete: () => self,
+      select: () => self, eq: () => self, is: () => self, order: () => self, range: () => self, limit: () => self, delete: () => self,
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve({ data: rows(), error: null, count: rows().length })),
     };

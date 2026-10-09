@@ -40,6 +40,8 @@ function builderFor(table: string) {
   const self: Record<string, unknown> = {
     select: () => self,
     eq: (column: string, value: unknown) => { (eqBy[table] ??= []).push([column, value]); return self; },
+    // 지운 것 빼기도 같은 조건 목록에 적는다 — 회원이 지운 작업을 복사하지 않는지 본다.
+    is: (column: string, value: unknown) => { (eqBy[table] ??= []).push([`is:${column}`, value]); return self; },
     order: () => self,
     insert: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
       inserted = row;
@@ -372,5 +374,23 @@ describe("copyWorkToSelf — 포스터", () => {
     expect(eqBy.poster_generation_requests).toContainEqual(["id", requests[1]!.id]);
     // 원본 요청은 **이 작업 것만** 읽는다.
     expect(eqBy.poster_generation_requests).toContainEqual(["project_id", "원본"]);
+  });
+});
+
+/**
+ * **회원이 지운 작업은 복사하지 않는다**(2026-10-08). 내 사본은 6개월 파기·탈퇴 파기에 안 걸려 영영 남는다 —
+ * 처리방침 제2-1조와 어긋난다(리뷰).
+ */
+describe("copyWorkToSelf — 회원이 지운 작업", () => {
+  it("카드뉴스: 살아 있는 원본만 고른다", async () => {
+    sourceRow = snsSource();
+    await copyWorkToSelf("sns", "원본", "관리자B");
+    expect(eqBy["sns_projects"]).toContainEqual(["is:deleted_at", null]);
+  });
+
+  it("포스터: 살아 있는 원본만 고른다", async () => {
+    sourceRow = null;
+    await expect(copyWorkToSelf("poster", "원본", "관리자B")).rejects.toThrow();
+    expect(eqBy["poster_projects"]).toContainEqual(["is:deleted_at", null]);
   });
 });

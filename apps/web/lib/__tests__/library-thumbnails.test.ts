@@ -59,6 +59,7 @@ function builderFor(table: string) {
     order: () => self,
     limit: () => self,
     eq: () => self,
+    is: () => self,
     single: async () => ({ data: { id: "item-1" }, error: null }),
     then: (resolve: (r: unknown) => unknown) =>
       Promise.resolve(resolve(
@@ -268,6 +269,12 @@ describe("listLibraryItems — 목록은 작은 사본을 쓴다", () => {
   });
 });
 
+/**
+ * 파일까지 지우는 것은 **관리자의 완전 삭제**다(2026-10-08 — 회원의 지우기는 지운 때만 적고 파일을 남긴다,
+ * `soft-delete-writes.test.ts`). 그래서 아래 지우기 시험은 관리자로 한다.
+ */
+const ADMIN = { userId: "admin-1", role: "admin" as const };
+
 describe("deleteLibraryItem — 작은 사본도 함께 지운다", () => {
   it("원본과 사본을 한 번에 지운다 — 사본만 남으면 아무도 못 찾는다", async () => {
     imageSelectRows = [
@@ -275,7 +282,7 @@ describe("deleteLibraryItem — 작은 사본도 함께 지운다", () => {
       { path: "user-1/a/1.webp", thumb_path: null, user_id: "user-1" },
     ];
 
-    await deleteLibraryItem({ userId: "user-1", role: "member" }, "a");
+    await deleteLibraryItem(ADMIN, "a");
 
     expect(removed.flat().sort()).toEqual([
       "user-1/a/0.thumb.webp",
@@ -291,7 +298,7 @@ describe("deleteLibraryItem — 작은 사본도 함께 지운다", () => {
     deleteReturnsNoRows = true;
     imageSelectRows = [{ path: "user-1/a/0.webp", thumb_path: null }];
 
-    const result = await deleteLibraryItem({ userId: "user-1", role: "member" }, "a");
+    const result = await deleteLibraryItem(ADMIN, "a");
 
     expect(result.ok).toBe(false);
     expect("denied" in result && result.denied).toBe(true);
@@ -348,7 +355,7 @@ describe("deleteLibraryItem — 못 읽으면 지우지 않는다", () => {
     // 사라지고 파일은 전부 남는데 화면에는 「지웠다」가 뜬다.
     failImageSelect = true;
 
-    const result = await deleteLibraryItem({ userId: "user-1", role: "member" }, "a");
+    const result = await deleteLibraryItem(ADMIN, "a");
 
     expect(result.ok).toBe(false);
     expect(removed).toHaveLength(0);

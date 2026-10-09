@@ -129,7 +129,7 @@ describe("서버 문서 화면 연결",()=>{
     await act(async()=>{buttonWith("전체 삭제").props.onClick();});await flush();
     expect(asked).toHaveLength(1);
     expect(asked[0]).toContain("2개");
-    expect(asked[0]).toContain("라이브러리의 이 작업 그림도 함께 지워집니다. 되돌릴 수 없습니다");
+    expect(asked[0]).toContain("라이브러리에서도 함께 사라집니다. 되돌릴 수 없습니다");
     expect(state.remove).not.toHaveBeenCalled();
   });
   it("W1: 플래그가 꺼지면 전체 삭제 확인 문구는 그대로다",async()=>{

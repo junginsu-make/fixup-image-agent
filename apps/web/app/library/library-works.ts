@@ -71,6 +71,8 @@ export interface LibraryListItem {
   sourceId?:string|null;
   /** 서버 문서 카드면 그 문서 id(`/api/library` 가 문서도 싣는다). */
   documentId?:string;
+  /** 회원이 지운 때. 관리자 목록에만 온다(2026-10-08). */
+  deletedAt?: string;
 }
 
 /** 작업물 탭의 카드 한 장. `works-tab.tsx` 의 `Work` 와 같은 모양이다. */
@@ -108,6 +110,8 @@ export interface LibraryWork {
    * 카드로 바뀐다(`mergeDocumentWorks`). 못 읽은 채로 지우면 일반 삭제로 가 엉뚱한 안내가 뜬다(W24).
    */
   documentUnconfirmed?:boolean;
+  /** 회원이 지운 때. 관리자 목록에만 온다 — 「회원이 삭제함」 표시(2026-10-08). */
+  deletedAt?: string;
 }
 
 export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
@@ -144,6 +148,7 @@ function toLibraryWork(item: LibraryListItem): LibraryWork {
   return {
     id: item.id,
     sourceId:item.sourceId,
+    ...(item.deletedAt ? { deletedAt: item.deletedAt } : {}),
     ...(item.documentId?{documentUnconfirmed:true}:{}),
     tool: item.tool,
     title: item.title,

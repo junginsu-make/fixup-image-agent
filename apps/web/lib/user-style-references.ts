@@ -335,6 +335,8 @@ async function loadLibraryReferences(
     .from("reference_images")
     .select("id,title,storage_path")
     .eq("user_id", userId)
+    // 회원이 지운 그림은 보관만 한다 — 다시 재료로 쓰지 않는다(2026-10-08).
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error || !data?.length) return [];

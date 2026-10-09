@@ -13,6 +13,8 @@ import type { SnsProjectRecord } from "../../app/api/sns/projects/project-servic
  */
 
 vi.mock("server-only", () => ({}));
+// 회원이 지운 첨부 대조(2026-10-08)는 `sns-refresh-retired.test.ts` 가 잰다 — 여기서는 지운 것이 없다.
+vi.mock("../sns/retired-attachments", () => ({ retiredAttachmentPaths: async () => new Set() }));
 
 const uploads: Array<{ path: string; contentType: string }> = [];
 const cardUpdates: Array<Record<string, unknown>> = [];

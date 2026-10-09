@@ -8,7 +8,7 @@ vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => fa
 vi.mock("../../../../../lib/supabase/admin", () => {
   const builder = (table: string) => {
     const self: Record<string, unknown> = {
-      select: () => self, eq: () => self, update: () => self,
+      select: () => self, eq: () => self, is: () => self, update: () => self,
       insert: (payload: Record<string, unknown>) => { if (table === "characters") inserted = payload; return self; },
       maybeSingle: async () => ({
         data: { id: "원본", user_id: "회원A", name: "나", model_id: "gpt-image-2.5-flare" }, error: null,

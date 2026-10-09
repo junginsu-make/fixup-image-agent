@@ -87,7 +87,17 @@ describe("W24 문서 목록을 못 읽었을 때의 지우기", () => {
     await flush();
     await pressDelete("서버 상세페이지");
     expect(text()).toContain("지울까요?");
-    expect(text()).toContain("라이브러리의 이 작업 그림도 함께 지워집니다.");
+    expect(text()).toContain("라이브러리에서도 함께 사라집니다.");
+    expect(text()).not.toContain("함께 지워집니다");
+  });
+
+  /** 회원의 지우기는 「지운 때」만 적는다(2026-10-08). 확인 창이 「그림도 사라진다」고 말하면 사실이 아니다. */
+  it("회원에게는 내 화면에서 사라진다고 말한다", async () => {
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    await pressDelete("옛 작업");
+    expect(text()).toContain("내 화면에서 사라지고, 되돌릴 수 없습니다.");
+    expect(text()).not.toContain("만들어 둔 그림도 함께 사라지고");
   });
 
   it("문서가 아닌 옛 작업은 지금처럼 확인 창을 연다", async () => {

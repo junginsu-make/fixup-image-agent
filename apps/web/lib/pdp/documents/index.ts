@@ -8,7 +8,7 @@ import { createLocalDocumentStorage, createRemoteDocumentStorage } from "./stora
 import { documentHandlers } from "./http";
 import { adminDocumentHandlers } from "./admin";
 import {serverDocumentsEnabled} from "./flags";
-import {deleteDocumentLegacy} from "./delete-legacy";
+import {deleteDocumentLegacy,hideDocumentLegacy} from "./delete-legacy";
 export {serverDocumentsEnabled} from "./flags";
 export function documentServices(){
   return isLocalStoreEnabled()
@@ -20,6 +20,7 @@ export function createDocumentHandlers(){
   const services=()=>documentServices();
   return documentHandlers({enabled:serverDocumentsEnabled,
     cleanupLegacy:async(userId,ids)=>{if(!isLocalStoreEnabled())await deleteDocumentLegacy(createSupabaseAdminClient(),userId,ids);},
+    hideLegacy:async(userId,ids)=>{if(!isLocalStoreEnabled())await hideDocumentLegacy(createSupabaseAdminClient(),userId,ids);},
     authenticate:async()=>{
     const auth=await authenticateApiMember();return auth.ok?{userId:auth.member.userId}:auth.response;
   },repo:new Proxy({} as ReturnType<typeof services>["repo"],{get:(_,key)=>Reflect.get(services().repo,key)}),
@@ -27,7 +28,7 @@ export function createDocumentHandlers(){
 }
 export function createAdminDocumentHandlers(){
   return adminDocumentHandlers({enabled:serverDocumentsEnabled,
-    // 관리자의 지우기도 연결된 옛 라이브러리 그림을 지운다 — 회원용과 같은 정리(2026-10-09).
+    // 완전 삭제가 연결된 옛 라이브러리 그림도 지운다 — 회원용과 같은 정리(2026-10-08).
     cleanupLegacy:async(userId,ids)=>{if(!isLocalStoreEnabled())await deleteDocumentLegacy(createSupabaseAdminClient(),userId,ids);},
     authenticate:async()=>{
     const auth=await authenticateApiAdmin();return auth.ok?{userId:auth.member.userId}:auth.response;

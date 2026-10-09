@@ -71,6 +71,8 @@ export interface DocumentRecord {
   sourceDraftId: string | null; createdAt: string; updatedAt: string;
   deletedAt: string | null; lastRequestId: string | null;
   cleanupPending?:boolean;
+  /** 지운 사람(2026-10-08). 회원이 지우면 문서는 남고 관리자가 확인한다 — 6개월 뒤 파기. */
+  deletedBy?:string|null;
   /** 관리자 사본의 원래 회원. 서버만 적고, 그 회원이 떠날 때 사본도 지운다. */
   copiedFromOwner?:string|null;
   /** 이 문서가 한 번이라도 가졌던 섹션 그림 지문(오래 전 것부터). 서버가 저장할 때만 더한다(`heldImageTagsAfter`). */
@@ -79,6 +81,8 @@ export interface DocumentRecord {
 export type DocumentCopy = Pick<DocumentRecord, "id" | "userId" | "sourceDraftId">;
 export interface DocumentRevision { revision: number; createdAt: string }
 export interface DocumentSummary extends Omit<DocumentRecord, "document" | "lastRequestId" | "deletedAt"> {
+  /** 회원이 지운 때. 관리자 목록에만 온다(`list(null,{includeDeleted:true})`). */
+  deletedAt?: string | null;
   imageTags?: string[];
   title: string; stage: string; sectionCount:number; aspectRatio:string|null; imageCount: number; cover: DocumentAsset | null;
 }

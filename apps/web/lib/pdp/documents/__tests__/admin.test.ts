@@ -47,6 +47,46 @@ describe("관리자의 서버 문서 열람과 복사",()=>{
 });
 
 /**
+ * **관리자는 회원이 지운 문서도 본다**(2026-10-08 사용자 결정). 목록에는 「지운 때」가 함께 오고, 열어 볼 수 있다.
+ * 완전 삭제는 관리자만 — 연결된 옛 그림·파일까지 지우고 문서를 비운다(예전 회원 지우기와 같은 정리).
+ */
+describe("관리자 — 회원이 지운 문서",()=>{
+  const doc=()=>({schemaVersion:3,id,title:"작업",stage:"input",sourceMode:"image",assets:{},
+    body:{sections:[],inputs:{},settings:{},references:[],blueprint:{},editor:null}}) as never;
+  it("목록에 지운 문서도 지운 때와 함께 싣는다",async()=>{
+    const {h,repo}=setup();await repo.create(owner,id);await repo.save(owner,id,0,doc(),crypto.randomUUID());
+    await repo.softDelete(owner,id);
+    const body=await (await h.list()).json();
+    expect(body.documents.map((d:{id:string;deletedAt?:string})=>[d.id,Boolean(d.deletedAt)])).toEqual([[id,true]]);
+  });
+  it("지운 문서를 열어 본다",async()=>{
+    const {h,repo}=setup();await repo.create(owner,id);await repo.save(owner,id,0,doc(),crypto.randomUUID());
+    await repo.softDelete(owner,id);
+    expect((await h.get(new Request("http://local/?owner="+owner),id)).status).toBe(200);
+  });
+  it("완전 삭제는 옛 그림·파일까지 정리하고 문서를 비운다",async()=>{
+    const {repo,storage}=setup();await repo.create(owner,id,"legacy");await repo.save(owner,id,0,doc(),crypto.randomUUID());
+    await repo.softDelete(owner,id);
+    const cleanupLegacy=vi.fn(async()=>{});
+    const h=adminDocumentHandlers({enabled:()=>true,authenticate:async()=>({userId:admin}),repo,storage,cleanupLegacy} as never);
+    expect((await h.remove(new Request("http://local/?owner="+owner),id)).status).toBe(200);
+    expect(cleanupLegacy).toHaveBeenCalledWith(owner,[id,"legacy"]);
+    expect(storage.removeAll).toHaveBeenCalledWith(owner,id);
+    expect((await repo.get(owner,id,undefined,{includeDeleted:true}))?.document).toBeNull();
+  });
+  it("살아 있는 문서도 관리자는 완전히 지운다",async()=>{
+    const {h,repo,storage}=setup();await repo.create(owner,id);await repo.save(owner,id,0,doc(),crypto.randomUUID());
+    expect((await h.remove(new Request("http://local/?owner="+owner),id)).status).toBe(200);
+    expect(storage.removeAll).toHaveBeenCalledWith(owner,id);
+  });
+  it("관리자가 아니면 완전 삭제하지 못한다",async()=>{
+    const {h,repo,storage}=setup(false);await repo.create(owner,id);
+    expect((await h.remove(new Request("http://local/?owner="+owner),id)).status).toBe(404);
+    expect(storage.removeAll).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * **관리자는 남의 상세페이지도 지운다**(2026-10-09 사용자 — 9843ohs·ai.dev 는 모든 결과물을 보고 지울 수 있어야 한다).
  * 회원 주소는 자기 문서만 찾으므로 관리자 주소에 주인을 실어 보낸다. 회원이 지울 때와 같이 그림 파일까지 지운다.
  */

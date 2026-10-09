@@ -20,6 +20,7 @@ interface Row {
   id: string; user_id: string; team_id: string | null; storage_path: string;
   thumb_path: string | null; title: string | null; purpose: string;
   width: number | null; height: number | null;
+  deleted_at?: string | null;
 }
 
 /** 표 안의 줄. id 로 찾는다. */
@@ -44,6 +45,8 @@ let insertedRows: Row[] = [];
 function query(table: string) {
   const state: {
     ids?: string[];
+    /** `is("deleted_at", null)` — 지운 것 빼기. 읽기에만 건다. */
+    liveOnly?: boolean;
     filters: Array<[string, unknown]>;
     op: "select" | "update" | "delete";
     patch?: Record<string, unknown>;
@@ -74,7 +77,9 @@ function query(table: string) {
       return { data: null, error: null };
     }
     return {
-      data: table === "reference_images" ? (state.ids ?? []).map((id) => rows.get(id)).filter(Boolean) : [],
+      data: table === "reference_images"
+        ? (state.ids ?? []).map((id) => rows.get(id)).filter((row) => row && (!state.liveOnly || !row.deleted_at))
+        : [],
       error: null,
     };
   };
@@ -82,6 +87,7 @@ function query(table: string) {
   const self: Record<string, unknown> = {
     select: () => self,
     in: (_col: string, ids: string[]) => { state.ids = ids; return self; },
+    is: (column: string, value: unknown) => { if (column === "deleted_at" && value === null) state.liveOnly = true; return self; },
     eq: (column: string, value: unknown) => { state.filters.push([column, value]); return self; },
     update: (patch: Record<string, unknown>) => { state.op = "update"; state.patch = patch; return self; },
     delete: () => { state.op = "delete"; return self; },
@@ -305,6 +311,16 @@ describe("무엇을 복사하나", () => {
     넣기(원본("a"));
 
     const copies = await copyReferencesToSelf(["a", "지워진것"], 관리자, 주인, 관리자팀);
+
+    expect(copies.map((entry) => entry.from)).toEqual(["a"]);
+  });
+
+  /** 회원이 지운 그림은 보관만 한다(2026-10-08) — 지우던 때처럼 빼고 넘어간다. 관리자 라이브러리로 새어 나가지 않는다. */
+  it("회원이 지운 그림은 옮기지 않는다", async () => {
+    넣기(원본("a"));
+    넣기({ ...원본("지운것"), deleted_at: "2026-10-08T00:00:00.000Z" });
+
+    const copies = await copyReferencesToSelf(["a", "지운것"], 관리자, 주인, 관리자팀);
 
     expect(copies.map((entry) => entry.from)).toEqual(["a"]);
   });

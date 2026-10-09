@@ -11,7 +11,9 @@ vi.mock("../supabase/admin", () => ({
     from: () => {
       const self: Record<string, unknown> = {
         select: () => self,
-        eq: async () => ({ data: null, error: { message: "relation \"characters\" permission denied for schema public" } }),
+        eq: () => self,
+        // 이름 목록은 살아 있는 캐릭터만 읽는다(`is("deleted_at", null)`, 2026-10-08) — 거기서 끝난다.
+        is: async () => ({ data: null, error: { message: "relation \"characters\" permission denied for schema public" } }),
         insert: () => { throw new Error("이름을 못 읽었는데 저장하면 안 된다"); },
       };
       return self;

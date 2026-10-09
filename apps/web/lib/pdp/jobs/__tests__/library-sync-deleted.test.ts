@@ -14,6 +14,8 @@ const st = vi.hoisted(() => ({
   /** 회원의 지운 문서 목록 전체를 읽은 횟수 — 동기화마다 읽으면 안 된다(최종 리뷰 L4). */
   listed: 0,
   checkFails: false,
+  /** 라이브러리 작업을 찾을 때 건 `is` 조건. */
+  isCalls: [] as Array<[string, unknown]>,
   save: vi.fn(async () => ({ ok: true, id: "new-item", imageCount: 1 })),
 }));
 
@@ -42,7 +44,7 @@ vi.mock("../../../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => {
       const q: Record<string, unknown> = {
-        select: () => q, eq: () => q, in: () => q, order: () => q, limit: () => q,
+        select: () => q, eq: () => q, is: (column: string, value: unknown) => { st.isCalls.push([column, value]); return q; }, in: () => q, order: () => q, limit: () => q,
         then: (ok: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok),
       };
       return q;
@@ -57,7 +59,7 @@ const DOC = "22222222-2222-4222-8222-222222222222";
 const job = { userId: U, documentId: DOC, pageSectionIds: ["s1"], images: [{ sectionId: "s1", image: { base64: "iVBORw0KGgo=", mimeType: "image/png" } }] };
 
 beforeEach(() => {
-  Object.assign(st, { flag: true, deleted: [], asked: [], listed: 0, checkFails: false });
+  Object.assign(st, { flag: true, deleted: [], asked: [], listed: 0, checkFails: false, isCalls: [] });
   st.save.mockClear();
   vi.restoreAllMocks();
 });
@@ -98,5 +100,16 @@ describe("W12 지운 문서의 늦은 생성", () => {
     await syncDocumentLibraryLater(job);
     expect(st.save).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+/**
+ * **회원이 지운 라이브러리 작업은 보관 중인 자료다**(2026-10-08). 맞추기가 그 작업을 후보로 고르면 그림을 덧붙이거나
+ * 갈아 끼우면서 옛 파일을 지운다 — 보관한 증거가 바뀐다(리뷰).
+ */
+describe("지운 라이브러리 작업", () => {
+  it("맞출 작업을 찾을 때 지운 작업은 고르지 않는다", async () => {
+    await syncDocumentLibraryLater(job);
+    expect(st.isCalls).toContainEqual(["deleted_at", null]);
   });
 });

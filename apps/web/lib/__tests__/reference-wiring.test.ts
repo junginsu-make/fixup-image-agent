@@ -34,6 +34,8 @@ function builderFor(table: string) {
     update: () => self,
     delete: () => self,
     eq: () => self,
+    is: () => self,
+    not: () => self,
     // 목록에 팀 조건이 붙는다. 팀이 없으면 「팀이 안 붙은 것 + 내 것」이라
     // 지금까지와 같은 줄이 나온다.
     or: () => self,

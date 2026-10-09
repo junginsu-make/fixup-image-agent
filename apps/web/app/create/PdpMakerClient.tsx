@@ -962,7 +962,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
   const handleDeleteAllDrafts = useCallback(async () => {
     // 서버 모드는 한 건 삭제처럼 라이브러리의 그림까지 지운다. 그 사실을 같은 말로 알린다.
     const shouldDelete = window.confirm(serverDocumentsEnabled
-      ? `저장된 작업 ${drafts.length}개를 모두 삭제할까요?\n라이브러리의 이 작업 그림도 함께 지워집니다. 되돌릴 수 없습니다.`
+      ? `저장된 작업 ${drafts.length}개를 모두 삭제할까요?\n라이브러리에서도 함께 사라집니다. 되돌릴 수 없습니다.`
       : `저장된 작업 ${drafts.length}개를 모두 삭제할까요?
 되돌릴 수 없습니다.`,
     );
@@ -983,7 +983,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
 
   const handleDeleteDraft = useCallback(
     async (draftId: string) => {
-      const shouldDelete = window.confirm(serverDocumentsEnabled?"이 저장된 작업을 삭제할까요? 라이브러리의 이 작업 그림도 함께 지워집니다.":"이 저장된 작업을 삭제할까요?");
+      const shouldDelete = window.confirm(serverDocumentsEnabled?"이 저장된 작업을 삭제할까요? 라이브러리에서도 함께 사라집니다.":"이 저장된 작업을 삭제할까요?");
       if (!shouldDelete) {
         return;
       }

@@ -68,6 +68,8 @@ vi.mock("../../../supabase/admin", () => {
       select: () => q, order: () => q, limit: () => q, or: () => q,
       eq: (key: string, value: unknown) => { filters.push((row) => row[key] === value); return q; },
       in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return q; },
+      // 지운 작업 거르기(2026-10-08). 이 시험의 줄에는 지운 것이 없어 「비어 있음」과 같은지만 본다.
+      is: (key: string, value: unknown) => { filters.push((row) => (row[key] ?? null) === value); return q; },
       range: (from: number, to: number) => { window = [from, to]; return q; },
       maybeSingle: async () => ({ data: pick()[0] ?? null, error: null }),
       then: (ok: (value: unknown) => unknown, fail?: (reason: unknown) => unknown) => {

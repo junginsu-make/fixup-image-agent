@@ -10,25 +10,27 @@ export function adminDocumentHandlers(deps:DocumentDependencies){
     }catch(e){return documentResponseError(e);}
   };
   return {
+    // 회원이 지운 문서도 싣는다 — 「지운 때」와 함께(2026-10-08, 지워도 남겨 관리자가 확인).
     list:()=>run(async viewer=>{
-      const docs=await deps.repo.list(null);
+      const docs=await deps.repo.list(null,{includeDeleted:true});
       const urls=await deps.storage.urls(Object.fromEntries(docs.flatMap(d=>d.cover?[[d.id,d.cover]]:[])));
       return {documents:docs.map(({heldImageTags:_held,...d})=>({...d,mine:d.userId===viewer,coverUrl:urls[d.id]??null}))};
     })(),
     get:(req:Request,id:string)=>run(async()=>{
       uuid.parse(id);const owner=uuid.parse(new URL(req.url).searchParams.get("owner"));
-      const record=await deps.repo.get(owner,id);if(!record?.document)throw notFound();
+      const record=await deps.repo.get(owner,id,undefined,{includeDeleted:true});if(!record?.document)throw notFound();
       validateDocument(record.document,owner,id);
       return {record,urls:await deps.storage.urls(record.document.assets)};
     })(),
     /**
-     * **관리자는 남의 상세페이지도 지운다**(2026-10-09 사용자). 회원 주소는 자기 문서만 찾으므로 주인을 실어 받는다.
-     * 회원이 지울 때와 같이 지운 표시 → 옛 라이브러리 그림·문서 그림 파일까지 지운다.
+     * **관리자의 완전 삭제.** 회원이 지운 것이든 살아 있는 것이든 옛 그림·파일까지 지우고 문서를 비운다.
+     * 살아 있으면 먼저 지운 때를 적는다(완전 삭제 함수가 그것을 요구한다).
      */
-    remove:(req:Request,id:string)=>run(async()=>{
+    remove:(req:Request,id:string)=>run(async viewer=>{
       uuid.parse(id);const owner=uuid.parse(new URL(req.url).searchParams.get("owner"));
-      const row=await deps.repo.markDeleted(owner,id);
-      await completeDocumentDelete(deps,owner,row);
+      const record=await deps.repo.get(owner,id,undefined,{includeDeleted:true});if(!record)throw notFound();
+      if(!record.deletedAt)await deps.repo.softDelete(owner,id,viewer);
+      await completeDocumentDelete(deps,owner,record);
       return {};
     })(),
     copy:(req:Request,id:string)=>run(async viewer=>{

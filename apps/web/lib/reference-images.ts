@@ -54,6 +54,8 @@ export interface ReferenceImageView extends ReferenceImageRow {
   mine: boolean;
   /** 누가 올렸는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
   ownerEmail: string | null;
+  /** 회원이 지운 때. 관리자 「회원이 삭제한 자료」 목록에만 실린다. */
+  deletedAt?: string;
 }
 
 /** 목록을 보는 사람. 클라이언트가 보낸 값이 아니라 세션에서 꺼낸 것만 넣는다. */
@@ -164,6 +166,8 @@ export async function getReferenceImageFile(
     .select("storage_path,user_id")
     .eq("id", id)
     .eq("user_id", userId)
+    // 회원이 지운 것은 없는 것이다 — 줄·파일은 보관되어 있다(2026-10-08).
+    .is("deleted_at", null)
     .limit(1);
   const row = (data as Array<{ storage_path?: string }> | null)?.[0];
   if (error || !row?.storage_path) return null;
@@ -248,11 +252,24 @@ export async function referenceImagesByIds(
   return ids.map((id) => byId.get(id)).filter((image): image is ReferenceImageView => Boolean(image));
 }
 
+/**
+ * **회원이 지운 참고 이미지**(관리자 「회원이 삭제한 자료」, 2026-10-08 — 계획 2단계). 최근에 지운 것부터 400장.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 회원이 부르면 자기가 지운 것만 나오지만, 회원 화면에는 이것을
+ * 보이지 않는다.
+ */
+export async function listDeletedReferenceImages(viewer: ReferenceViewer): Promise<ReferenceImageView[]> {
+  if (isLocalStoreEnabled()) return [];
+  return readReferences(viewer, [
+    (query) => query.order("deleted_at", { ascending: false }).limit(400),
+  ], { deleted: true });
+}
+
 /** 서명까지 하려면 한 client 로 이어야 한다 — 질의와 저장소가 같은 것을 쓴다. */
 function referenceQuery(supabase: ReturnType<typeof createSupabaseAdminClient>) {
   return supabase
     .from("reference_images")
-    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at");
+    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at,deleted_at");
 }
 
 type ReferenceNarrow = (
@@ -268,6 +285,7 @@ type ReferenceNarrow = (
 async function readReferences(
   viewer: ReferenceViewer,
   narrows: ReferenceNarrow[],
+  options: { deleted?: boolean } = {},
 ): Promise<ReferenceImageView[]> {
   const visibility = referenceVisibility({
     userId: viewer.userId,
@@ -276,16 +294,22 @@ async function readReferences(
 
   const supabase = createSupabaseAdminClient();
   const scoped = (narrow: ReferenceNarrow) => {
-    const query = narrow(referenceQuery(supabase));
+    /*
+      **회원이 지운 것은 빼거나, 그것만 읽는다**(2026-10-08 — 계획 2단계). 줄·파일이 보관되므로 여기서 안
+      거르면 지운 그림이 고르는 창에 다시 뜨고 생성 재료로 실려 나간다. 관리자도 보통 목록에서는 안 본다 —
+      「회원이 삭제한 자료」(`listDeletedReferenceImages`)에서만 본다.
+    */
+    const kept = narrow(referenceQuery(supabase));
+    const query = options.deleted ? kept.not("deleted_at", "is", null) : kept.is("deleted_at", null);
     if (visibility.kind === "own") return query.eq("user_id", visibility.userId);
     return query;
   };
 
   const results = await Promise.all(narrows.map((narrow) => scoped(narrow)));
-  const byId = new Map<string, ReferenceImageDbRow & { team_id: string | null }>();
+  const byId = new Map<string, ReferenceImageDbRow & { team_id: string | null; deleted_at?: string | null }>();
   for (const { data, error } of results) {
     if (error) throw new Error(error.message);
-    for (const row of (data ?? []) as Array<ReferenceImageDbRow & { team_id: string | null }>) {
+    for (const row of (data ?? []) as Array<ReferenceImageDbRow & { team_id: string | null; deleted_at?: string | null }>) {
       // 먼저 온 줄이 앞자리를 지킨다. 같은 줄이 두 질의에 다 나올 수 있다.
       if (!byId.has(row.id)) byId.set(row.id, row);
     }
@@ -322,6 +346,7 @@ async function readReferences(
 
   return rows.map((row) => ({
     ...toRow(row),
+    ...(options.deleted && row.deleted_at ? { deletedAt: row.deleted_at } : {}),
     signedUrl: urlByPath.get(row.storage_path) ?? null,
     thumbUrl: row.thumb_path ? urlByPath.get(row.thumb_path) ?? null : null,
     mine: row.user_id === viewer.userId,
@@ -471,7 +496,7 @@ export async function referenceTitlesOf(userId: string, titles: readonly string[
   const supabase = createSupabaseAdminClient();
   const found = await Promise.all(titles.map(async (title) => {
     const { data, error } = await supabase
-      .from("reference_images").select("id").eq("user_id", userId).eq("title", title).limit(1);
+      .from("reference_images").select("id").eq("user_id", userId).eq("title", title).is("deleted_at", null).limit(1);
     if (error) throw new Error(error.message);
     return (data ?? []).length ? title : null;
   }));
@@ -487,7 +512,15 @@ export async function referenceTitlesOf(userId: string, titles: readonly string[
  *
  * 없으면 아무 일도 하지 않는다. 지울 것이 없는 것은 실패가 아니다.
  */
-export async function removeReferenceImagesByTitle(userId: string, title: string): Promise<void> {
+export async function removeReferenceImagesByTitle(
+  userId: string,
+  title: string,
+  /**
+   * 회원이 지운 캐릭터를 관리자가 완전히 지울 때, 그 캐릭터와 **함께 보관된 사본만**(지운 때가 같은 것). 안 주면
+   * 살아 있는 것만 — 보관 중인 옛 캐릭터 사본을 같은 이름의 새 캐릭터가 지우지 않게(2026-10-08).
+   */
+  deletedAt: string | null = null,
+): Promise<void> {
   if (isLocalStoreEnabled()) {
     const paths = await getLocalDatabase().update((data) => {
       const matched = data.referenceImages.filter(
@@ -506,11 +539,12 @@ export async function removeReferenceImagesByTitle(userId: string, title: string
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data } = await supabase
+  const matching = supabase
     .from("reference_images")
     .select("id,storage_path,thumb_path")
     .eq("user_id", userId)
     .eq("title", title);
+  const { data } = await (deletedAt ? matching.eq("deleted_at", deletedAt) : matching.is("deleted_at", null));
   if (!data?.length) return;
 
   // 행을 먼저 지운다. 파일이 먼저 사라지면 목록에는 남고 미리보기만 깨진다.

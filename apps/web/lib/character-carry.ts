@@ -254,7 +254,8 @@ async function carryRemote({ userId, fromId, toId }: CarryInput): Promise<CarryR
 
   const admin = createSupabaseAdminClient();
   const { data: owned, error } = await admin.from("characters")
-    .select("id,name").eq("user_id", userId).in("id", [fromId, toId]);
+    // 회원이 지운 캐릭터에서도, 지운 캐릭터로도 옮기지 않는다 — 보관만 한다(2026-10-08).
+    .select("id,name").eq("user_id", userId).in("id", [fromId, toId]).is("deleted_at", null);
   if (error) throw new Error(error.message);
   if ((owned ?? []).length !== 2) throw new CharacterCarryNotFound();
 

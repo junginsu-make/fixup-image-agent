@@ -24,6 +24,8 @@ import {
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { teamIdOf } from "../../../lib/teams/store";
 import { hasFullScope, viewerFrom } from "../../../lib/access/core";
+import { softDeleteCharacter } from "../../../lib/character-soft-delete";
+import { isLocalStoreEnabled } from "../../../lib/local-store";
 import { sniffImageMime } from "../../../lib/image-encoding";
 
 export const runtime = "nodejs";
@@ -430,6 +432,18 @@ export async function DELETE(req: Request) {
       return Response.json({ ok: false, message: "캐릭터를 찾지 못했습니다." }, { status: 400 });
     }
     const admin = hasFullScope(viewerFrom(auth.member), "delete");
+
+    /*
+      **회원이 지우면 보관한다**(2026-10-08 사용자 결정 — 계획 2단계). 줄·각도·파일·라이브러리 사본은 남고 지운
+      때만 적힌다. 회원 화면과 만들기 재료에서는 사라지고, 관리자가 「회원이 삭제한 자료」에서 확인한다(6개월 뒤
+      파기). 로컬 파일 저장소는 개발용이라 지금처럼 지운다.
+    */
+    if (!admin && !isLocalStoreEnabled()) {
+      const kept = await softDeleteCharacter(auth.member.userId, id);
+      if (kept.ok) return Response.json(kept);
+      return Response.json({ ok: false, message: kept.message }, { status: kept.notFound ? 404 : 500 });
+    }
+
     const owner = admin ? await characterOwnerOf(id, auth.member.userId) : auth.member.userId;
     if (!owner) return Response.json({ ok: false, message: "캐릭터를 찾지 못했습니다." }, { status: 404 });
 

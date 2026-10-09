@@ -96,17 +96,23 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
       const client = createSupabaseAdminClient();
       const { data, error } = await client.from("poster_projects")
         .update(projectPatchRow(patch, new Date().toISOString()))
-        .eq("id", id).eq("user_id", userId).select(PROJECT_COLUMNS).maybeSingle();
+        // 회원이 지운 작업에는 쓰지 않는다 — 늦게 끝난 생성이 지운 작업을 고치지 않게(2026-10-08).
+        .eq("id", id).eq("user_id", userId).is("deleted_at", null).select(PROJECT_COLUMNS).maybeSingle();
       const row = checked(data as PosterProjectRow | null, error, "포스터 작업 고치기");
       if (!row) throw notFound("포스터 작업");
       return toProjectRecord(row);
     },
+    /**
+     * **지우지 않고 지운 때만 적는다**(2026-10-08 사용자 결정). 회원 화면에서는 사라지고, 줄·그림 파일은 남아
+     * 관리자가 확인한다 — 6개월 뒤 자동 파기. 회원은 이 칸을 쓸 권한이 없어 서버 권한으로 쓰되 소유자·살아 있는
+     * 것만 고른다. **고친 줄을 받아 본다** — 조건에 안 걸리면 supabase-js 는 오류 대신 빈 결과를 주므로, 세지
+     * 않으면 남의 작업 지우기가 성공으로 보인다.
+     */
     async remove(id) {
-      const client = await createSupabaseServerClient();
-      // **지운 줄을 받아 본다.** 조건에 안 걸리면 supabase-js 는 오류 대신
-      // 빈 결과를 주므로, 세지 않으면 남의 작업 삭제가 성공으로 보인다.
-      const { data, error } = await client
-        .from("poster_projects").delete().eq("id", id).eq("user_id", userId)
+      const now = new Date().toISOString();
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_projects").update({ deleted_at: now, deleted_by: userId, updated_at: now })
+        .eq("id", id).eq("user_id", userId).is("deleted_at", null)
         .select("id");
       checked(null, error, "포스터 작업 지우기");
       return (data ?? []).length > 0;

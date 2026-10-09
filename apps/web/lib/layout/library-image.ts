@@ -58,6 +58,8 @@ export async function referenceImageBytes(userId: string, id: string): Promise<L
     .select("storage_path")
     .eq("id", id)
     .eq("user_id", userId)
+    // 회원이 지운 그림은 보관만 한다 — 다시 재료로 쓰지 않는다(2026-10-08).
+    .is("deleted_at", null)
     .maybeSingle();
   if (row.error || !row.data) return undefined;
 
