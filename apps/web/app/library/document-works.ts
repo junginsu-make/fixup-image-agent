@@ -1,6 +1,6 @@
 import type {DocumentSummary} from "../../lib/pdp/documents/model";
 import type {LibraryWork} from "./library-works";
-export type DocumentListEntry=DocumentSummary & {mine:boolean;coverUrl:string|null;ownerEmail?:string|null};
+export type DocumentListEntry=DocumentSummary & {mine:boolean;coverUrl:string|null;ownerEmail?:string|null;deletedAt?:string|null};
 export function mergeDocumentWorks(legacy:LibraryWork[],documents:DocumentListEntry[]):LibraryWork[]{
   // 서버가 그림 단위로 걸러 준 옛 항목을 다시 초안 번호로 없애지 않는다.
   const ids=new Set(documents.map(d=>d.id));
@@ -11,6 +11,8 @@ export function mergeDocumentWorks(legacy:LibraryWork[],documents:DocumentListEn
     cover:d.coverUrl,imageCount:d.imageCount,images:[],intent:"",settings:[["장수",d.imageCount+"장"]] as Array<[string,string]>,
     href:d.mine?`/create?doc=${d.id}`:`/library/pdp/${d.id}?owner=${d.userId}`,
     documentId:d.id,documentOwner:d.userId,sourceId:d.sourceDraftId??d.id,
+    // 회원이 지운 문서. 관리자 목록에만 온다 — 「회원이 삭제함」 표시(2026-10-08).
+    ...(d.deletedAt?{deletedAt:d.deletedAt}:{}),
   }))];
 }
 /** 연결된 문서에서 아는 것 — 지금 그림 지문과, 서버가 저장 때마다 더한 「가졌던」 그림 지문. */

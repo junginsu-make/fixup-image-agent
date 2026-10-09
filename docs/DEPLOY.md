@@ -442,6 +442,42 @@ ssh -i <운영 키> ubuntu@54.180.68.212 'sudo systemctl restart fixup-image-age
 ③ 재시작 뒤에는 옛 열쇠로 잠긴 계정마다 「키를 풀지 못했습니다」 알림 메일이 **계정 수만큼 한 통씩** 온다 —
 회전 중이라면 정상이다(④에서 키를 다시 넣으면 풀린다).
 
+### 6개월 자동 파기 타이머 (처음 한 번, 2026-10 지워도 보관 3단계)
+
+회원이 지운 것(결과물·참고 이미지·캐릭터·쉽게 대화)은 줄·파일이 남고, 지운 지 6개월이 지나면 하루 한 번
+타이머(`fixup-image-agent-purge.timer`, 04:30 KST)가 서버 안 주소 `/api/internal/purge-deleted` 를 불러 완전히
+지운다. 그 주소는 `app.env` 의 `CRON_SECRET`(32자 이상)을 실은 요청만 받는다 — 값이 없으면 아예 돌지 않는다.
+워커(masked)와 상관없다.
+
+**이 기능이 든 릴리스를 먼저 배포한다** — 옛 앱에는 그 주소가 없다. 그다음:
+
+1. 비밀값을 넣는다(값이 화면·기록에 찍히지 않게 **서버에서 만든다**). 먼저 있는지 본다:
+   ```bash
+   ssh -i <운영 키> ubuntu@54.180.68.212 'sudo grep -c "^CRON_SECRET=" /etc/fixup-image-agent/app.env || true'
+   ```
+   `0` 이면 넣는다(잃어도 새로 만들면 된다 — 사본을 남길 필요 없다):
+   ```bash
+   ssh -i <운영 키> ubuntu@54.180.68.212 'set -e; F=/etc/fixup-image-agent/app.env; sudo cp -a $F /root/app.env.bak-$(date +%Y%m%d%H%M); S=$(openssl rand -hex 32); printf "\n# 6개월 자동 파기 타이머(docs/DEPLOY.md 「6개월 자동 파기 타이머」)\nCRON_SECRET=%s\n" "$S" | sudo tee -a $F >/dev/null; unset S; sudo stat -c "%a %U:%G" $F; sudo grep -c "^CRON_SECRET=" $F'
+   ```
+   Expected: `640 root:fixup-agent`, `1`
+2. 재시작해 앱이 값을 읽게 한다(위 「배포 전에 최근 생성 요청을 본다」를 먼저):
+   ```bash
+   ssh -i <운영 키> ubuntu@54.180.68.212 'sudo systemctl restart fixup-image-agent; sleep 8; systemctl is-active fixup-image-agent; curl -s -o /dev/null -w "local=%{http_code}\n" http://127.0.0.1:3000/'
+   ```
+3. 타이머를 깐다(이번 릴리스의 ops 꾸러미를 푼 `/tmp/ops-<sha8>` 에서):
+   ```bash
+   ssh -i <운영 키> ubuntu@54.180.68.212 'set -e; D=/tmp/ops-<sha8>/deploy/ec2; sudo install -o root -g root -m 0755 $D/purge.sh /usr/local/lib/fixup-image-agent/purge.sh; sudo install -o root -g root -m 0644 $D/fixup-image-agent-purge.service $D/fixup-image-agent-purge.timer /etc/systemd/system/; sudo systemctl daemon-reload; sudo systemctl enable --now fixup-image-agent-purge.timer; systemctl list-timers fixup-image-agent-purge.timer --no-pager'
+   ```
+   (`install-host.sh` 를 다시 돌릴 때도 같은 것을 깐다.)
+4. 한 번 손으로 돌려 본다 — 아직 6개월 지난 것이 없으면 모두 0 건이다:
+   ```bash
+   ssh -i <운영 키> ubuntu@54.180.68.212 'sudo systemctl start fixup-image-agent-purge.service; sudo journalctl -u fixup-image-agent-purge -n 5 --no-pager'
+   ```
+   Expected: `{"ok":true,"report":{"sns":{"purged":0,"failed":0},…}}`. 몇 건 지웠는지는 앱 기록에도 남는다
+   (`sudo journalctl -u fixup-image-agent | grep "\[purge\]"`)
+
+**되돌리기**: `sudo systemctl disable --now fixup-image-agent-purge.timer` — 자동 파기만 멈춘다. 지운 것은 계속 보관된다.
+
 ### 서버 크기 바꾸기 (AWS 콘솔, 약 5분 정지)
 
 운영 서버는 **운영 AWS 계정**에 있다. 콘솔 EC2 → 인스턴스 선택 →

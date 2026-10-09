@@ -33,7 +33,7 @@ vi.mock("../supabase/admin", () => {
   const query = (table: string) => {
     const rows = () => (table === "characters" ? [character()] : st.views);
     const builder: Record<string, unknown> = {};
-    for (const method of ["select", "order", "limit", "in", "eq", "or", "delete"]) builder[method] = () => builder;
+    for (const method of ["select", "order", "limit", "in", "eq", "or", "is", "not", "delete"]) builder[method] = () => builder;
     builder.maybeSingle = async () => ({ data: rows()[0] ?? null, error: null });
     builder.then = (resolve: (value: unknown) => void) => resolve({ data: rows(), error: null });
     return builder;

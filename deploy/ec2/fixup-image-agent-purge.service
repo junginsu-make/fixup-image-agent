@@ -1,0 +1,11 @@
+[Unit]
+Description=Fixup Image Agent purge (members' deleted items older than 6 months)
+After=fixup-image-agent.service
+
+[Service]
+Type=oneshot
+# 하는 일은 서버 안 주소를 한 번 부르는 것뿐이다 — root 가 필요 없다. app.env 는 0640 root:fixup-agent 라 읽힌다.
+User=fixup-agent
+Group=fixup-agent
+NoNewPrivileges=true
+ExecStart=/usr/bin/bash /usr/local/lib/fixup-image-agent/purge.sh

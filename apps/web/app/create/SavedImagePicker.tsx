@@ -180,7 +180,7 @@ export function SavedImagePicker({
    */
   const handleDelete = async (image: SavedImage) => {
     if (image.documentId) return;
-    if (!window.confirm(`'${image.name}' 를 아주 지울까요? 되돌릴 수 없습니다.`)) return;
+    if (!window.confirm(`'${image.name}' 를 지울까요? 되돌릴 수 없습니다.`)) return;
     setDeletingId(image.id);
     setMessage("");
     try {

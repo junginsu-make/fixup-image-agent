@@ -31,6 +31,7 @@ function builder(table: string) {
     select: () => self,
     order: () => self,
     eq: (column: string, value: unknown) => { queries.push({ column, value }); return self; },
+    is: () => self,
     or: (filter: string) => { queries.push({ column: "or", value: filter }); return self; },
     maybeSingle: async () => ({ data: parentVisible ? { id: "item-1" } : null, error: null }),
     then: (resolve: (r: unknown) => unknown) =>

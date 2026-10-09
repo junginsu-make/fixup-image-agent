@@ -24,7 +24,7 @@ const 옛캐릭터 = {
 
 function 질의(result: { data: unknown; error: null }) {
   const builder: Record<string, unknown> = {};
-  for (const method of ["select", "order", "limit", "in", "eq", "or"]) {
+  for (const method of ["select", "order", "limit", "in", "eq", "or", "is", "not"]) {
     builder[method] = (...args: unknown[]) => {
       calls.push({ method, args });
       return builder;

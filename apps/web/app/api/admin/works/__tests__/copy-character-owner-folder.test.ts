@@ -14,7 +14,7 @@ vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => fa
 vi.mock("../../../../../lib/supabase/admin", () => {
   const builder = (table: string) => {
     const self: Record<string, unknown> = {
-      select: () => self, eq: () => self, insert: () => self, update: () => self,
+      select: () => self, eq: () => self, is: () => self, insert: () => self, update: () => self,
       maybeSingle: async () => ({ data: { id: "원본", user_id: "회원A", name: "나" }, error: null }),
       single: async () => ({ data: { id: "새캐릭터" }, error: null }),
       then: (resolve: (value: unknown) => unknown) =>

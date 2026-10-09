@@ -36,6 +36,7 @@ vi.mock("../supabase/admin", () => {
       range: () => self,
       in: () => self,
       eq: () => self,
+      is: () => self,
       or: () => self,
       delete: () => { op = "delete"; return self; },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),

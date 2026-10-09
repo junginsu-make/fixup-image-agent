@@ -11,6 +11,8 @@ import type { SnsProjectRecord } from "../../app/api/sns/projects/project-servic
  * 전에도 그 위치를 서명한 주소를 썼으므로 결과물은 같다.
  */
 vi.mock("server-only", () => ({}));
+// 회원이 지운 첨부 대조(2026-10-08)는 `sns-refresh-retired.test.ts` 가 잰다 — 여기서는 지운 것이 없다.
+vi.mock("../sns/retired-attachments", () => ({ retiredAttachmentPaths: async () => new Set() }));
 vi.mock("../local-store", () => ({
   isLocalStoreEnabled: () => false,
   localStoreRoot: () => "/tmp",

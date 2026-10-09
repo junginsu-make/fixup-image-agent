@@ -19,6 +19,8 @@ export const ADMIN_TABS = [
   { href: "/admin/system", label: "시스템 관리" },
   { href: "/admin/cost-lab", label: "비용 전략" },
   { href: "/admin/analytics", label: "방문 분석" },
+  // 회원이 지운 재료를 보고 완전히 지운다(2026-10-08 계획 2단계). 6개월 뒤에는 저절로 지워진다.
+  { href: "/admin/deleted", label: "삭제 보관" },
 ] as const;
 
 /** 지금 주소가 어느 탭인가. 긴 주소가 이긴다 — `/admin` 은 모든 관리자 주소의 앞부분이다. */

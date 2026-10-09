@@ -10,6 +10,8 @@ import {
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { canModifyReferenceImage } from "../../../../lib/reference-images";
+import { softDeleteReferenceImage } from "../../../../lib/reference-soft-delete";
+import { hasFullScope, viewerFrom } from "../../../../lib/access/core";
 import { gridPathsToRemove } from "../../../../lib/grid-thumbnail-path";
 
 export const runtime = "nodejs";
@@ -66,22 +68,36 @@ export async function DELETE(_request: Request, context: Context) {
     const supabase = await createSupabaseServerClient();
     const found = await createSupabaseAdminClient()
       .from("reference_images")
-      .select("user_id,storage_path,thumb_path")
+      .select("user_id,storage_path,thumb_path,deleted_at")
       .eq("id", id)
       .maybeSingle();
     if (found.error) throw new Error(found.error.message);
-    if (!found.data || !canModifyReferenceImage(
+    // 관리자는 완전히 지운다 — 회원이 지운 것도. 회원에게 자기가 지운 것은 없는 것이다.
+    const fullDelete = hasFullScope(viewerFrom(auth.member), "delete");
+    if (!found.data || (!fullDelete && found.data.deleted_at) || !canModifyReferenceImage(
       { userId: auth.member.userId, role: auth.member.profile.role },
       found.data.user_id as string,
     )) {
       return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
     }
 
+    /*
+      **회원이 지우면 보관한다**(2026-10-08 사용자 결정 — 계획 2단계). 줄·파일은 남고 지운 때만 적힌다.
+      묶음 항목도 남지만 회원에게는 RLS 가 감춘다(202610090002). 6개월 뒤 자동 파기.
+    */
+    if (!fullDelete) {
+      if (!await softDeleteReferenceImage(auth.member.userId, id)) {
+        return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
+      }
+      return Response.json({ ok: true });
+    }
+
     // 남의 것을 지우는 것은 **관리자 권한으로** 해야 한다. 세션 클라이언트로
     // 보내면 RLS 가 0줄로 막는데, supabase-js 는 그것을 오류로 주지 않는다 —
     // 화면에는 「지웠다」가 뜨고 실제로는 남는다. 누구 것인지는 위에서 이미
     // 가렸으므로, 여기까지 온 요청은 지워도 되는 것이다.
-    const owned = found.data.user_id === auth.member.userId;
+    // 회원이 지운 줄은 세션에 안 보인다(RLS, 202610090002) — 관리자 자기 것이라도 세션으로 지우면 0줄이다.
+    const owned = found.data.user_id === auth.member.userId && !found.data.deleted_at;
     const writer = owned ? supabase : createSupabaseAdminClient();
     const removed = await writer.from("reference_images").delete().eq("id", id);
     if (removed.error) throw new Error(removed.error.message);
@@ -92,9 +108,8 @@ export async function DELETE(_request: Request, context: Context) {
     }]));
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "지우지 못했습니다." },
-      { status: 500 },
-    );
+    // DB 원문(표·칸 이름)은 화면에 보내지 않는다 — 서버 기록에만 남긴다(2026-10-08 보안 리뷰).
+    console.error("[reference:delete]", error instanceof Error ? error.message : error);
+    return Response.json({ ok: false, message: "지우지 못했습니다." }, { status: 500 });
   }
 }

@@ -70,6 +70,14 @@ export interface LibraryViewer {
 }
 
 /** 읽기 범위. 팀이 있으면 팀 것까지, 없으면 내 것만, 운영자는 전부. */
+/**
+ * **회원이 지운 작업은 회원에게 없는 것이다**(2026-10-08 사용자 결정 — 지워도 남겨 관리자가 확인).
+ * 이 표는 서버 권한으로 읽어 RLS 가 감추지 않으므로, 회원이 읽는 길마다 이것을 건다. 관리자는 다 본다.
+ */
+function hideDeleted<Q>(query: Q, isAdmin: boolean): Q {
+  return isAdmin ? query : (query as unknown as { is: (column: string, value: null) => Q }).is("deleted_at", null);
+}
+
 function readScope(viewer: LibraryViewer): ViewScope {
   return {
     userId: viewer.userId,
@@ -199,6 +207,8 @@ export interface ServerLibraryItem {
   coverThumbUrl: string | null;
   /** 내가 만든 것인가. 관리자 목록에서 남의 것과 구분하는 데 쓴다. */
   mine: boolean;
+  /** 회원이 지운 때. 관리자 목록에만 온다(2026-10-08 — 지워도 남겨 관리자가 확인). */
+  deletedAt?: string;
   /** 누가 만들었는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
   ownerEmail: string | null;
   documentId?:string;
@@ -658,6 +668,8 @@ export async function findLibraryItemBySource(
     .eq("user_id", userId)
     .eq("tool", tool)
     .eq("source_id", sourceId)
+    // 지운 작업에는 이어 붙이지 않는다 — 새 작업을 만든다(지운 것이 되살아나지 않게).
+    .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .limit(1);
   if (error) throw new Error(error.message);
@@ -700,14 +712,14 @@ async function listLegacyLibraryItems(viewer: LibraryViewer): Promise<ServerLibr
   if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
-  let query = scopedRead(
+  let query = hideDeleted(scopedRead(
     supabase
       .from("library_items")
-      .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
+      .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at,deleted_at")
       .order("created_at", { ascending: false })
       .limit(200),
     readScope(viewer),
-  );
+  ), readScope(viewer).isAdmin);
   // 목록에만 건다. 한 건을 열 때는 안 건다 — 프로젝트를 고른 채로 다른 갈래의
   // 작업물 주소를 받으면 열리지 않는 편이 더 놀랍다.
   if (viewer.projectId) query = query.eq("project_id", viewer.projectId);
@@ -765,6 +777,8 @@ async function listLegacyLibraryItems(viewer: LibraryViewer): Promise<ServerLibr
       : null,
     mine: row.user_id === viewer.userId,
     ownerEmail: emails.get(row.user_id as string) ?? null,
+    // 회원이 지운 것. 관리자 목록에만 온다 — 회원 목록은 위에서 이미 뺐다.
+    ...(row.deleted_at ? { deletedAt: String(row.deleted_at) } : {}),
   }));
 }
 
@@ -844,15 +858,17 @@ async function ownsItem(viewer: LibraryViewer, itemId: string): Promise<boolean>
     .select("id")
     .eq("id", itemId)
     .eq("user_id", viewer.userId)
+    .is("deleted_at", null)
     .maybeSingle();
   return Boolean(data);
 }
 
 async function canSeeItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
-  const { data } = await scopedRead(
+  const scope = readScope(viewer);
+  const { data } = await hideDeleted(scopedRead(
     createSupabaseAdminClient().from("library_items").select("id").eq("id", itemId),
-    readScope(viewer),
-  ).maybeSingle();
+    scope,
+  ), scope.isAdmin).maybeSingle();
   return Boolean(data);
 }
 
@@ -965,6 +981,8 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   // 문서 전체 삭제는 확인을 받는 전용 문서 API에서만 처리한다.
   const supabase = createSupabaseAdminClient();
   const owner = libraryScope(viewer, "delete");
+  // 회원은 지운 때만 적는다 — 줄·파일은 남아 관리자가 확인한다(2026-10-08). 관리자는 아래처럼 완전히 지운다.
+  if (owner) return softDeleteLibraryItem(owner, itemId);
 
   /**
    * 조건이 없으면 **아예 걸지 않는다.**
@@ -1013,6 +1031,28 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   }
 
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
+  return { ok: true as const };
+}
+
+/**
+ * **회원의 지우기 — 지운 때만 적는다**(2026-10-08 사용자 결정). 회원 화면에서는 사라지고, 줄·그림 파일은 남아
+ * 관리자가 확인한다 — 6개월 뒤 자동 파기. 소유자·살아 있는 것만 고르고 고친 줄을 센다 — 안 그러면 팀원의
+ * 작업을 지울 때 「지웠다」가 뜨고 새로고침하면 되살아난다.
+ */
+async function softDeleteLibraryItem(owner: string, itemId: string) {
+  const now = new Date().toISOString();
+  const { data, error } = await createSupabaseAdminClient().from("library_items")
+    .update({ deleted_at: now, deleted_by: owner })
+    .eq("id", itemId).eq("user_id", owner).is("deleted_at", null)
+    .select("id");
+  if (error) {
+    // DB 원문(표·칸 이름)은 화면에 보내지 않는다.
+    console.error("[library] 지우기 실패", error.message);
+    return { ok: false as const, message: "작업물을 지우지 못했습니다." };
+  }
+  if (!(data ?? []).length) {
+    return { ok: false as const, denied: true as const, message: "내가 만든 작업물만 지울 수 있습니다." };
+  }
   return { ok: true as const };
 }
 

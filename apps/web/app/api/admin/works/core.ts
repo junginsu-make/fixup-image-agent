@@ -44,3 +44,12 @@ export function withOwner<T extends { userId?: string }>(
 export function ownerIdsOf(rows: ReadonlyArray<{ userId?: string }>): string[] {
   return [...new Set(rows.map((row) => row.userId).filter((id): id is string => Boolean(id)))];
 }
+
+/**
+ * **회원이 지운 작업에 지운 때를 붙인다**(2026-10-08 사용자 결정 — 지워도 남겨 관리자가 확인, 6개월 뒤 파기).
+ * 관리자 목록은 서버 권한으로 읽어 지운 것도 함께 온다. 지운 것에만 `deletedAt` 을 실어 화면이 표시를 단다.
+ */
+export function withDeletedAt<T extends { id: string }>(rows: readonly T[], deleted: ReadonlyMap<string, string>): Array<T & { deletedAt?: string }> {
+  if (!deleted.size) return [...rows];
+  return rows.map((row) => (deleted.has(row.id) ? { ...row, deletedAt: deleted.get(row.id)! } : row));
+}

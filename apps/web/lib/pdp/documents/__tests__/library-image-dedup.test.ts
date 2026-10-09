@@ -11,7 +11,7 @@ vi.mock("../library-adapter",()=>({documentLibraryAdapter:()=>({
 })}));
 vi.mock("../../../supabase/admin",()=>({createSupabaseAdminClient:()=>{
   return {from:(table:string)=>{
-    const q:any={select:()=>q,eq:()=>q,in:()=>q,order:()=>q,limit:()=>q,range:()=>q,
+    const q:any={select:()=>q,eq:()=>q,in:()=>q,is:()=>q,order:()=>q,limit:()=>q,range:()=>q,
       maybeSingle:async()=>({data:{id:"old",source_id:source,tool:"create"},error:null}),
       then:(resolve:any)=>Promise.resolve(resolve({data:table==="library_images"?rows:[{id:"old",user_id:"u",tool:"create",source_id:source,image_count:5,cover_path:rows[0].path}],error:null}))};
     return q;},

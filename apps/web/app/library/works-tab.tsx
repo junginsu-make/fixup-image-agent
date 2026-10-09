@@ -21,7 +21,7 @@ import {
 import type { WorksSummary } from "./library-view-bar";
 import { readEasyWorks, stepsHref, type EasyWorks } from "./easy-href";
 import { readCharacterWorks } from "./character-works";
-import { deleteRequest } from "./work-delete";
+import { deleteRequest, deletedLabel } from "./work-delete";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -112,6 +112,8 @@ interface Work {
   documentUnconfirmed?: boolean;
   /** 캐릭터 표에서 온 카드. 첫 화면 갤러리는 캐릭터를 걸지 못한다(`character-works.ts`). */
   characterId?: string;
+  /** 회원이 지운 때. 관리자 목록에만 온다 — 「회원이 삭제함」 표시(2026-10-08, 지워도 남겨 관리자가 확인). */
+  deletedAt?: string;
 }
 
 /**
@@ -183,6 +185,7 @@ function toSnsWork(project: Record<string, any>): Work {
     ownerEmail: project.ownerEmail ?? null,
     // 회원용 목록은 자기 것만 주므로 `mine` 을 싣지 않는다. 그때는 전부 내 것이다.
     mine: project.mine ?? true,
+    ...(project.deletedAt ? { deletedAt: project.deletedAt } : {}),
     cover: coverOf(coverCard),
     imageCount: images.length,
     images,
@@ -216,6 +219,7 @@ function toPosterWork(project: Record<string, any>): Work {
     userId: project.userId,
     ownerEmail: project.ownerEmail ?? null,
     mine: project.mine ?? true,
+    ...(project.deletedAt ? { deletedAt: project.deletedAt } : {}),
     cover: coverOf(coverShot),
     imageCount: images.length,
     images,
@@ -275,7 +279,8 @@ async function readLibraryWorks(allMembers: boolean, onError?: (message:string)=
 async function readWorkImages(work: Work) {
   try {
     if (work.documentId) {
-      const endpoint = work.mine ? `/api/pdp/documents/${work.documentId}` : `/api/admin/pdp-documents/${work.documentId}?owner=${encodeURIComponent(work.documentOwner ?? "")}`;
+      // 지운 문서는 회원 주소가 못 찾는다 — 관리자 주소로 연다.
+      const endpoint = work.mine && !work.deletedAt ? `/api/pdp/documents/${work.documentId}` : `/api/admin/pdp-documents/${work.documentId}?owner=${encodeURIComponent(work.documentOwner ?? "")}`;
       const response = await fetch(endpoint, { cache: "no-store" });
       const payload = await response.json();
       return response.ok && payload.ok ? documentImages(payload.record, payload.urls) : [];
@@ -403,7 +408,8 @@ export function WorksTab({ filter = "all", onSummary }: {
       // 그대로 남는다. 되돌릴 수 없는 일이라 누른 뒤 한 번 더 묻는다.
       onDelete: canDelete(work) ? () => askDelete(work) : undefined,
       // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다. 캐릭터는 갤러리 갈래가 없어 못 건다.
-      action: showcase && !work.characterId
+      // 회원이 지운 작업은 걸지 않는다(서버도 거절한다).
+      action: showcase && !work.characterId && !work.deletedAt
         ? {
             label: "첫 화면에 걸기",
             doneLabel: "첫 화면에 걸림",
@@ -495,7 +501,7 @@ export function WorksTab({ filter = "all", onSummary }: {
     setDeleting(work.id);
     setMessage("");
     try {
-      // 어디로 지울지는 `work-delete.ts` 가 정한다 — 관리자는 남의 상세페이지·캐릭터도 지운다(2026-10-09).
+      // 어디로 지울지는 `work-delete.ts` 가 정한다 — 회원은 「지운 때」만, 관리자는 완전 삭제(2026-10-08).
       const request = deleteRequest(work, isAdmin === true);
       const body = await (await fetch(request.url, request.init)).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
@@ -741,6 +747,7 @@ export function WorksTab({ filter = "all", onSummary }: {
                   ? <Badge>첫 화면</Badge>
                   : null}
                 {allMembers && !work.mine ? <Badge variant="secondary">{work.ownerEmail ?? "다른 회원"}</Badge> : null}
+                {work.deletedAt ? <Badge variant="destructive">{deletedLabel(work.deletedAt)}</Badge> : null}
                 {opening === work.id ? <Badge variant="secondary">여는 중…</Badge> : null}
                 <Badge variant={(STATUS[work.status] ?? { tone: "secondary" as const }).tone}>
                   {(STATUS[work.status] ?? { label: work.status }).label}
@@ -760,8 +767,9 @@ export function WorksTab({ filter = "all", onSummary }: {
               <DialogTitle>지울까요?</DialogTitle>
               <DialogDescription>
                 「{pending.title}」{labelOf(pending, easyIds)} 작업을 지웁니다.
-                만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다.
-                {pending.documentId ? " 라이브러리의 이 작업 그림도 함께 지워집니다." : null}
+                {/* 회원은 「지운 때」만 적힌다(2026-10-08 — 관리자 확인용으로 보관). 관리자만 완전히 지운다. */}
+                {isAdmin ? " 만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다." : " 내 화면에서 사라지고, 되돌릴 수 없습니다."}
+                {pending.documentId ? (isAdmin ? " 라이브러리의 이 작업 그림도 함께 지워집니다." : " 라이브러리에서도 함께 사라집니다.") : null}
                 {!pending.mine ? (
                   <>
                     <br />

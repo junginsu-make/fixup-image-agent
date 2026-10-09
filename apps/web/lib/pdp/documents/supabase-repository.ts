@@ -3,10 +3,10 @@ import { DocumentError, pinLimitError, UNSAFE_CHARACTERS_MESSAGE, uuid, validate
 import type { DocumentRepository } from "./repository";
 type Row = { id: string; user_id: string; revision: number; document: ServerDocument | null; source_draft_id: string | null;
   created_at: string; updated_at: string; deleted_at: string | null; last_request_id: string | null; copied_from_owner?: string | null;
-  held_image_tags?: string[] | null };
+  held_image_tags?: string[] | null; deleted_by?: string | null };
 export const recordFromRow = (r: Row): DocumentRecord => ({ id:r.id,userId:r.user_id,revision:r.revision,document:r.document,
   sourceDraftId:r.source_draft_id,createdAt:r.created_at,updatedAt:r.updated_at,deletedAt:r.deleted_at,lastRequestId:r.last_request_id,
-  copiedFromOwner:r.copied_from_owner ?? null, heldImageTags:r.held_image_tags ?? [] });
+  copiedFromOwner:r.copied_from_owner ?? null, heldImageTags:r.held_image_tags ?? [], deletedBy:r.deleted_by ?? null });
 export function createSupabaseDocumentRepository(db: SupabaseClient): DocumentRepository {
   const write = async (userId: string, id: string, action: string, payload = {}) => {
     const { data, error } = await db.rpc("pdp_document_write", { p_user:userId,p_id:id,p_action:action,p_payload:payload });
@@ -56,8 +56,9 @@ export function createSupabaseDocumentRepository(db: SupabaseClient): DocumentRe
       if(error)throw new DocumentError(503,"사본을 확인하지 못했습니다.");
       return (data??[]).map(row=>({id:row.id,userId:row.user_id,sourceDraftId:row.source_draft_id}));
     },
-    async get(userId,id,revision) {
-      const { data,error } = await db.from("pdp_documents").select("*").eq("id",id).eq("user_id",userId).is("deleted_at",null).maybeSingle();
+    async get(userId,id,revision,options) {
+      const base = db.from("pdp_documents").select("*").eq("id",id).eq("user_id",userId);
+      const { data,error } = await (options?.includeDeleted ? base : base.is("deleted_at",null)).maybeSingle();
       if (error) throw new DocumentError(503,"작업을 읽지 못했습니다.");
       if (!data) return null;
       const current = recordFromRow(data);
@@ -67,17 +68,19 @@ export function createSupabaseDocumentRepository(db: SupabaseClient): DocumentRe
       if (old.error) throw new DocumentError(503,"이전 버전을 읽지 못했습니다.");
       return old.data ? { ...current, document:old.data.document,revision:old.data.revision,updatedAt:old.data.created_at } : null;
     },
-    async list(userId) {
+    async list(userId,options) {
       // 페이지를 나눠 읽어 기본 1,000행 제한 때문에 오래된 문서를 숨기지 않는다.
       const summaries: DocumentSummary[] = [];
       for (let start=0;;start+=100) {
-        let query = db.from("pdp_documents").select("id,user_id,revision,source_draft_id,created_at,updated_at,summary,held_image_tags").is("deleted_at",null).not("summary","is",null)
+        const base = db.from("pdp_documents").select("id,user_id,revision,source_draft_id,created_at,updated_at,summary,held_image_tags,deleted_at");
+        let query = (options?.includeDeleted ? base : base.is("deleted_at",null)).not("summary","is",null)
           .order("updated_at",{ascending:false}).order("id").range(start,start+99);
         if (userId !== null) query=query.eq("user_id",userId);
         const {data,error}=await query;
         if (error) throw new DocumentError(503,"작업 목록을 읽지 못했습니다.");
         summaries.push(...(data??[]).map(r=>({id:r.id,userId:r.user_id,revision:r.revision,sourceDraftId:r.source_draft_id,
-          createdAt:r.created_at,updatedAt:r.updated_at,...r.summary,heldImageTags:r.held_image_tags ?? []} as DocumentSummary)));
+          createdAt:r.created_at,updatedAt:r.updated_at,...r.summary,heldImageTags:r.held_image_tags ?? [],
+          ...(r.deleted_at?{deletedAt:r.deleted_at}:{})} as DocumentSummary)));
         if ((data?.length ?? 0)<100) break;
       }
       return summaries;
@@ -115,6 +118,15 @@ export function createSupabaseDocumentRepository(db: SupabaseClient): DocumentRe
       return (data ?? []).map(r => ({revision:r.revision,createdAt:r.created_at}));
     },
     markDeleted:(userId,id)=>write(userId,id,"delete"),
+    async softDelete(userId,id,deletedBy){
+      // RPC 의 delete 는 정리 대기를 켠다 — 그러면 다음 목록 요청이 문서를 비운다. 그래서 칸만 직접 적는다.
+      const {data,error}=await db.from("pdp_documents")
+        .update({deleted_at:new Date().toISOString(),deleted_by:deletedBy??userId,cleanup_pending:false})
+        .eq("id",id).eq("user_id",userId).is("deleted_at",null).select("*").maybeSingle();
+      if(error)throw new DocumentError(503,"작업을 지우지 못했습니다.");
+      if(!data)throw new DocumentError(404,"작업을 찾지 못했습니다.");
+      return recordFromRow(data);
+    },
     async finishDelete(userId,id){await write(userId,id,"purge");},
   };
   return repo;

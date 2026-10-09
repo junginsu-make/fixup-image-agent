@@ -87,7 +87,8 @@ export function DeleteWorkButton({
           <DialogHeader>
             <DialogTitle>지울까요?</DialogTitle>
             <DialogDescription>
-              「{title}」{what}을 지웁니다. 만들어 둔 그림도 함께 사라지고,
+              {/* 지운 때만 적고 그림은 남는다(2026-10-08 — 관리자 확인용 보관). 「그림도 사라진다」는 사실이 아니다. */}
+              「{title}」{what}을 지웁니다. 내 화면에서 사라지고,
               되돌릴 수 없습니다.
             </DialogDescription>
           </DialogHeader>

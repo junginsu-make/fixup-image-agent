@@ -1,6 +1,7 @@
 import "server-only";
 import { signPath, signPaths } from "../storage/signing";
 import { inOwnerFolder } from "../storage/owner-folder";
+import { retiredAttachmentPaths } from "./retired-attachments";
 import { STYLE_REFERENCE_MAX_PIXELS } from "../pdp/reference-limits";
 
 import sharp from "sharp";
@@ -264,7 +265,16 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     서버가 그 주소로 그림을 받으러 간다(`uploadReference`).
   */
   // 앞머리만 보면 `%2e%2e`·탭으로 빠져나간다 — 주인 폴더 검사로 본다(2026-10-03).
-  const ownFolder = (path: string | null | undefined): path is string => inOwnerFolder(path, project.userId);
+  /*
+    **회원이 지운 그림의 첨부도 서명하지 않는다**(2026-10-08 — 계획 2단계). 지운 그림의 파일은 보관되어 남으므로,
+    위치만 보고 서명하면 지운 그림이 다시 보이고 생성에 들어간다. 주소가 비면 만들기 두 길이 「쓸 수 없는 첨부」로
+    멈춘다 — 파일이 지워지던 때와 같다. 첨부 위치만 대조하므로 만든 결과 카드는 그대로다.
+  */
+  const retired = await retiredAttachmentPaths(project.userId, project.data.attachments
+    .map((attachment) => attachment.assetPath)
+    .filter((path) => inOwnerFolder(path, project.userId)));
+  const ownFolder = (path: string | null | undefined): path is string =>
+    inOwnerFolder(path, project.userId) && !retired.has(path as string);
   project.data.attachments.forEach((attachment) => {
     if (ownFolder(attachment.assetPath)) paths.add(attachment.assetPath);
   });
@@ -338,8 +348,26 @@ export async function refreshProjectListAssetUrls(
     })));
   }
 
+  /*
+    **회원이 지운 그림 위치는 서명하지 않는다**(2026-10-08 재리뷰). 아직 만들기 전 「그대로 넣기」 카드는 첨부
+    위치를 그대로 갖고 있어, 그냥 서명하면 지운 참고 이미지·결과물이 목록·라이브러리 미리보기에 다시 뜬다.
+    만든 카드는 늘 결과 위치라 대조하지 않는다. 주인마다 한 번 묻는다.
+  */
+  const retired = await retiredCardPaths(projects);
   // 경로는 RLS 를 지나 읽어 온 목록에서 꺼낸 것이다.
-  return withCardUrls(projects, await signPaths(BUCKET, paths, SIGNED_URL_TTL_SECONDS));
+  return withCardUrls(projects, await signPaths(BUCKET, paths.filter((path) => !retired.has(path)), SIGNED_URL_TTL_SECONDS));
+}
+
+async function retiredCardPaths(projects: SnsProjectRecord[]): Promise<Set<string>> {
+  const byOwner = new Map<string, string[]>();
+  for (const project of projects) {
+    const placed = (project.data.flow?.cards ?? [])
+      .filter((card) => card.kind !== "generated" && inOwnerFolder(card.assetPath, project.userId))
+      .map((card) => card.assetPath as string);
+    if (placed.length) byOwner.set(project.userId, [...(byOwner.get(project.userId) ?? []), ...placed]);
+  }
+  const found = await Promise.all([...byOwner].map(([userId, owned]) => retiredAttachmentPaths(userId, owned)));
+  return new Set(found.flatMap((set) => [...set]));
 }
 
 /**

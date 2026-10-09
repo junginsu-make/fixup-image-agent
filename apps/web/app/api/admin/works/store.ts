@@ -26,7 +26,7 @@ import { orderPosterImages, type PosterProjectRecord } from "@fixup/poster-core"
 import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/projects/project-service";
 import { listCharacters } from "../../../../lib/characters";
 import { uniqueCharacterName } from "../../../../lib/character-library";
-import { ownerIdsOf, withOwner } from "./core";
+import { ownerIdsOf, withDeletedAt, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 import { collectEasyWorkIds } from "../../../../lib/easy/store-core";
 import type { LibraryTool } from "../../../../lib/server-library";
@@ -133,19 +133,43 @@ async function listAllPosterProjects() {
 export async function listAllWorks(viewerId: string) {
   if (isLocalStoreEnabled()) return { sns: [], poster: [], easyWorkIds: [] };
 
-  const [sns, poster, easyWorkIds] = await Promise.all([
+  const [sns, poster, easyWorkIds, snsDeleted, posterDeleted] = await Promise.all([
     listAllSnsProjects(),
     listAllPosterProjects(),
     listAllEasyWorkIds(),
+    deletedAtById("sns_projects"),
+    deletedAtById("poster_projects"),
   ]);
   const emails = await emailsByUserId(ownerIdsOf([...sns, ...poster]));
 
   return {
-    sns: withOwner(sns, viewerId, emails),
-    poster: withOwner(poster, viewerId, emails),
+    sns: withDeletedAt(withOwner(sns, viewerId, emails), snsDeleted),
+    poster: withDeletedAt(withOwner(poster, viewerId, emails), posterDeleted),
     easyWorkIds,
   };
 }
+
+/**
+ * 회원이 지운 작업과 지운 때(2026-10-08 — 지워도 남겨 관리자가 확인). 지운 것만 훑는 가벼운 질의다
+ * (`*_deleted_idx`). 못 읽으면 빈 표 — 표시가 없을 뿐 목록은 그대로 준다.
+ */
+async function deletedAtById(table: "sns_projects" | "poster_projects"): Promise<Map<string, string>> {
+  const admin = createSupabaseAdminClient();
+  const found = new Map<string, string>();
+  // 한 번에 1000줄까지만 온다. 끊기면 지운 작업에 표시가 빠져, 관리자가 모르고 첫 화면에 걸 수 있다.
+  for (let from = 0; ; from += DELETED_PAGE) {
+    const { data, error } = await admin.from(table).select("id,deleted_at")
+      .not("deleted_at", "is", null).order("id").range(from, from + DELETED_PAGE - 1);
+    if (error) {
+      console.error(`[admin works] 지운 작업을 읽지 못했습니다(${table})`, error.message);
+      return found;
+    }
+    const rows = (data ?? []) as Array<{ id: string; deleted_at: string }>;
+    for (const row of rows) found.set(row.id, row.deleted_at);
+    if (rows.length < DELETED_PAGE) return found;
+  }
+}
+const DELETED_PAGE = 1000;
 
 /**
  * 모든 회원의 쉽게 대화가 만든 작업 id (2026-09-22 라이브러리 필터).
@@ -511,10 +535,12 @@ export async function copyLibraryWorkToSelf(
 ): Promise<{ id: string }> {
   const admin = createSupabaseAdminClient();
 
+  // 회원이 지운 작업은 복사하지 않는다 — 내 사본은 6개월 파기·탈퇴 파기에 안 걸려 영영 남는다(2026-10-08).
   const { data: source, error: readError } = await admin
     .from("library_items")
     .select("title,tool,aspect_ratio,data,user_id")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
   if (!source) throw new Error("원본을 찾을 수 없습니다.");
@@ -786,7 +812,9 @@ export async function copyReferencesToSelf(
   const { data: sourceRows, error: readError } = await admin
     .from("reference_images")
     .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height")
-    .in("id", unique);
+    .in("id", unique)
+    // 회원이 지운 그림은 옮기지 않는다 — 지우던 때처럼 「가져오지 못했습니다」로 센다(2026-10-08).
+    .is("deleted_at", null);
   if (readError) throw new Error(readError.message);
 
   const results: Array<{ from: string; id: string; storagePath: string }> = [];
@@ -916,7 +944,8 @@ export async function copyCharacterToSelf(
   const admin = createSupabaseAdminClient();
 
   const { data: source, error: readError } = await admin
-    .from("characters").select("*").eq("id", id).maybeSingle();
+    // 회원이 지운 캐릭터는 옮기지 않는다 — 보관만 한다(2026-10-08). 지운 것처럼 「없다」로 답한다.
+    .from("characters").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
   if (readError) throw new Error(readError.message);
   if (!source) throw new Error("원본을 찾을 수 없습니다.");
 
@@ -926,7 +955,8 @@ export async function copyCharacterToSelf(
     그림까지 지워진다(`uniqueCharacterName`).
   */
   const { data: mine, error: namesError } = await admin
-    .from("characters").select("name").eq("user_id", ownerUserId);
+    // 지운 캐릭터의 이름은 다시 쓴다 — `takenCharacterNames` 와 같은 규칙(2026-10-08).
+    .from("characters").select("name").eq("user_id", ownerUserId).is("deleted_at", null);
   if (namesError) throw new Error(namesError.message);
   const taken = ((mine ?? []) as Array<{ name: string | null }>).map((row) => row.name ?? "");
 
@@ -981,6 +1011,13 @@ export async function copyWorkToSelf(
   ownerUserId: string,
 ): Promise<{ id: string }> {
   const admin = createSupabaseAdminClient();
+  // 회원이 지운 작업은 복사하지 않는다 — 내 사본은 6개월 파기·탈퇴 파기에 안 걸려 영영 남는다(2026-10-08).
+  // `readAnyWork` 는 관리자가 지운 것을 보는 데도 쓰여 거기서 거르지 않는다.
+  const { data: live, error: liveError } = await admin
+    .from(kind === "sns" ? "sns_projects" : "poster_projects")
+    .select("id").eq("id", id).is("deleted_at", null).maybeSingle();
+  if (liveError) throw new Error(liveError.message);
+  if (!live) throw new Error("원본을 찾을 수 없습니다.");
   const source = await readAnyWork(kind, id);
   if (!source) throw new Error("원본을 찾을 수 없습니다.");
 

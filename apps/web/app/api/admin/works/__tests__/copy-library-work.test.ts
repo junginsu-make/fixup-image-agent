@@ -32,12 +32,15 @@ const removed: string[][] = [];
 const deletedItems: string[] = [];
 const insertedImages: Array<Record<string, unknown>> = [];
 let itemUpdate: Record<string, unknown> | null = null;
+/** `is` 조건 — 회원이 지운 작업을 복사하지 않는지 본다. */
+const isCalls: Array<[string, string, unknown]> = [];
 
 function builderFor(table: string) {
   const self: Record<string, unknown> = {
     select: () => self,
     order: () => self,
     eq: () => self,
+    is: (column: string, value: unknown) => { isCalls.push([table, column, value]); return self; },
     insert: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
       if (table === "library_images") {
         // **조회와 삽입을 가른다.** 같은 표에 같은 오류를 돌려주면, 삽입이
@@ -117,6 +120,7 @@ beforeEach(() => {
   insertedImages.length = 0;
   itemUpdate = null;
   inserting = false;
+  isCalls.length = 0;
 });
 
 describe("잘 될 때", () => {
@@ -219,5 +223,13 @@ describe("깨지면 아무것도 안 남는다", () => {
 
     await expect(copyLibraryWorkToSelf("없는-id", "관리자B")).rejects.toThrow();
     expect(deletedItems).toHaveLength(0);
+  });
+});
+
+/** **회원이 지운 작업은 복사하지 않는다**(2026-10-08) — 내 사본은 파기에 안 걸려 영영 남는다(리뷰). */
+describe("회원이 지운 작업", () => {
+  it("살아 있는 원본만 고른다", async () => {
+    await copyLibraryWorkToSelf("원본", "관리자B");
+    expect(isCalls).toContainEqual(["library_items", "deleted_at", null]);
   });
 });

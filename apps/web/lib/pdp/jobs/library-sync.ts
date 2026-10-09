@@ -121,6 +121,8 @@ const defaultDeps: LibrarySyncDeps = {
       .eq("user_id", userId)
       .eq("tool", "create")
       .eq("source_id", documentId)
+      // 회원이 지운 작업은 보관 중인 자료다 — 그림을 덧붙이거나 갈아 끼우지 않는다(2026-10-08).
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(MAX_CANDIDATES);
     if (error) throw new Error(error.message);

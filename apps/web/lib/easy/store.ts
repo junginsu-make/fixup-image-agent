@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { createSupabaseServerClient } from "../supabase/server";
+import { createSupabaseAdminClient } from "../supabase/admin";
 import { getLocalDatabase, isLocalStoreEnabled } from "../local-store";
 import {
   collectEasyWorkConversations,
@@ -26,7 +27,8 @@ import {
  *
  * **회원 권한으로 읽고 쓴다.** admin 클라이언트를 안 쓴다 — 비용 장부가 아니라
  * 자기 대화라 RLS 가 그대로 문지기 노릇을 하면 된다. 2026-09-15 에 admin 으로
- * 우회해 남의 파일을 지운 사고가 있었다.
+ * 우회해 남의 파일을 지운 사고가 있었다. 예외는 지우기 하나다 — 지운 때 칸은 회원이 못 쓴다(2026-10-08,
+ * `removeConversation`). 그 한 줄도 주인·살아 있는 것만 고른다.
  */
 
 export interface EasyStore {
@@ -111,17 +113,21 @@ function supabaseEasyStore(userId: string): EasyStore {
     },
 
     async removeConversation(id) {
-      const supabase = await createSupabaseServerClient();
       /*
-       * **정말 지워졌는지 본다.** RLS 가 0줄로 막아도 supabase-js 는 오류를
-       * 안 준다 — 2026-09-15 에 그래서 「지운 줄 알았는데 남아 있는」 상태가
-       * 됐다. 지운 줄을 돌려받아 센다.
+       * **지우지 않고 지운 때만 적는다**(2026-10-08 사용자 결정 — 계획 2단계). 대화 줄·내용은 남아 관리자가
+       * 확인하고(6개월 뒤 파기), 회원 화면에서는 RLS 가 감춘다(202610090002). 회원은 이 칸을 쓸 권한이 없어
+       * 서버 권한으로 쓰되 **주인·살아 있는 것만** 고른다 — 서버 권한은 이 한 줄에만 쓴다.
+       *
+       * **정말 고쳐졌는지 본다.** 0줄을 오류 없이 돌려받으면 2026-09-15 처럼 「지운 줄 알았는데 남아 있는」
+       * 상태가 된다. 고친 줄을 돌려받아 센다.
        */
-      const { data, error } = await supabase
+      const now = new Date().toISOString();
+      const { data, error } = await createSupabaseAdminClient()
         .from("easy_conversations")
-        .delete()
+        .update({ deleted_at: now, deleted_by: userId })
         .eq("id", id)
         .eq("user_id", userId)
+        .is("deleted_at", null)
         .select("id");
       return (checked(data as { id: string }[] | null, error, "대화를 지우지 못했습니다") ?? []).length > 0;
     },

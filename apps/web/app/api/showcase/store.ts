@@ -196,6 +196,17 @@ async function findSourceImage(
     const {findDocumentPublicationSource}=await import("../../../lib/pdp/documents/publication");
     const documentSource=await findDocumentPublicationSource(sourceId,imageIndex);
     if(documentSource)return documentSource;
+  }
+
+  /*
+    **회원이 지운 작업은 걸지 않는다**(2026-10-08 — 지워도 남기지만 관리자만 보고, 6개월 뒤 파기한다).
+    걸면 누구나 보는 공개 사본이 생겨 처리방침 제2-1조와 어긋난다. 상세페이지 문서는 위에서 이미 거른다.
+  */
+  const parentTable = kind === "library" ? "library_items" : kind === "sns" ? "sns_projects" : "poster_projects";
+  const { data: liveParent } = await supabase.from(parentTable).select("id").eq("id", sourceId).is("deleted_at", null).maybeSingle();
+  if (!liveParent) return null;
+
+  if (kind === "library") {
     let query = supabase
       .from("library_images")
       .select("user_id,position,path")

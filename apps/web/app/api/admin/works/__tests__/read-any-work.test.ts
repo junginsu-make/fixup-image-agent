@@ -33,6 +33,8 @@ function builderFor(table: string) {
     order: () => self,
     limit: () => self,
     in: () => self,
+    is: () => self,
+    not: () => self,
     maybeSingle: async () => ({ data: row, error: null }),
     then: (resolve: (x: unknown) => unknown) =>
       Promise.resolve(resolve({

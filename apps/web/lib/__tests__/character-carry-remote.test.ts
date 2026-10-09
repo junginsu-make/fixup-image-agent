@@ -23,7 +23,7 @@ let registered: Array<{ title: string }> = [];
 
 function 질의(table: string) {
   const builder: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "in"]) {
+  for (const method of ["select", "eq", "in", "is"]) {
     builder[method] = (...args: unknown[]) => {
       queries = [...queries, { table, method, args }];
       return builder;

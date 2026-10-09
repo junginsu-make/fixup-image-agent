@@ -13,8 +13,13 @@ const web = join(__dirname, "..", "..", "..");
 const read = (file: string) => readFileSync(join(web, file), "utf8");
 
 describe("탭", () => {
-  it("회원 관리 · 시스템 관리 · 비용 전략 · 방문 분석 순서다", () => {
-    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략", "방문 분석"]);
+  it("회원 관리 · 시스템 관리 · 비용 전략 · 방문 분석 · 삭제 보관 순서다", () => {
+    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략", "방문 분석", "삭제 보관"]);
+  });
+
+  /** 회원이 지운 재료(캐릭터·참고 이미지·쉽게 대화)를 관리자가 보고 완전히 지우는 탭(2026-10-08 계획 2단계). */
+  it("삭제 보관 주소는 삭제 보관 탭이다", () => {
+    expect(activeAdminTab("/admin/deleted")).toBe("/admin/deleted");
   });
 
   it("방문 분석 주소는 방문 분석 탭이다", () => {

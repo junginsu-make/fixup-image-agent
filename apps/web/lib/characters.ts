@@ -137,6 +137,8 @@ export interface CharacterSummary {
   ownerEmail?: string | null;
   /** 만든 모델. 「과정 보기」가 이어받는다. 옛 캐릭터는 없다. */
   modelId?: ImageModelId;
+  /** 회원이 지운 때. 관리자 「회원이 삭제한 자료」 목록에만 실린다(2026-10-08). */
+  deletedAt?: string;
 }
 
 /** 후보를 만들 때 함께 보내는 그림 한 장. 없어도 된다. */
@@ -329,7 +331,8 @@ async function putView(storagePath: string, view: ViewBytes) {
 async function takenCharacterNames(userId: string): Promise<string[]> {
   if (isLocalStoreEnabled()) return (await listLocalCharacters(userId)).map((row) => row.name);
   const { data, error } = await createSupabaseAdminClient()
-    .from("characters").select("name").eq("user_id", userId);
+    // 회원이 지운 캐릭터의 이름은 다시 쓸 수 있다(2026-10-08 계획 2단계). 보관 중인 옛 사본은 지운 때로 갈린다.
+    .from("characters").select("name").eq("user_id", userId).is("deleted_at", null);
   if (error) {
     // 원문은 기록에만 남긴다. 화면에 DB 구조가 나가면 안 된다.
     console.error(`[character] 이름 목록을 읽지 못했습니다: ${error.message}`);
@@ -681,6 +684,8 @@ interface CharacterRecord {
   createdAt: string;
   /** 만든 모델. 옛 줄이거나 지금 목록에 없는 모델이면 없다. */
   modelId?: ImageModelId;
+  /** 회원이 지운 때. 살아 있으면 없다. */
+  deletedAt?: string;
 }
 
 /** 지금도 고를 수 있는 모델인가. 모르는 값으로 그리면 그림 통로가 거절한다. */
@@ -700,6 +705,7 @@ function normalizeRecord(row: Record<string, unknown>): CharacterRecord {
     look: ((row.look as CharacterLook) ?? (visual === "photoreal" ? "photoreal" : "illustration")),
     createdAt: String(row.created_at ?? row.createdAt ?? ""),
     modelId: knownModel(row.model_id ?? row.modelId),
+    ...(row.deleted_at ? { deletedAt: String(row.deleted_at) } : {}),
   };
 }
 
@@ -714,13 +720,17 @@ async function findCharacter(
   userId: string,
   characterId: string,
   teamId: string | null = null,
+  /** 회원이 지운 것도 찾는다. **관리자의 완전 삭제만** 쓴다 — 다른 곳에서 지운 캐릭터가 되살아난다. */
+  includeDeleted = false,
 ): Promise<CharacterRecord | null> {
   if (isLocalStoreEnabled()) {
     const row = await findLocalCharacter(userId, characterId);
     return row ? normalizeRecord(row as unknown as Record<string, unknown>) : null;
   }
+  const byId = createSupabaseAdminClient().from("characters").select("*").eq("id", characterId);
   const { data } = await scopedRead(
-    createSupabaseAdminClient().from("characters").select("*").eq("id", characterId),
+    // 회원이 지운 캐릭터는 생성 재료·다시 만들기·라이브러리 다시 채우기에 안 쓴다(2026-10-08).
+    includeDeleted ? byId : byId.is("deleted_at", null),
     { userId, teamId, isAdmin: false },
   ).maybeSingle();
   return data ? normalizeRecord(data as Record<string, unknown>) : null;
@@ -767,7 +777,12 @@ export async function countRecentCharacters(userId: string, since: Date): Promis
 export async function listCharacters(
   userId: string,
   teamId: string | null = null,
-  options: { allMembers?: boolean; ids?: string[] } = {},
+  options: {
+    allMembers?: boolean;
+    ids?: string[];
+    /** 회원이 지운 것**만**. 관리자 「회원이 삭제한 자료」가 `allMembers` 와 함께 쓴다(2026-10-08). */
+    deleted?: boolean;
+  } = {},
 ): Promise<CharacterSummary[]> {
   /*
    * **id 를 주면 그것만, 개수 제한 없이 찾는다.**
@@ -780,6 +795,8 @@ export async function listCharacters(
   if (ids && !ids.length) return [];
 
   if (isLocalStoreEnabled()) {
+    // 로컬 파일 저장소는 지금처럼 지운다(개발용) — 보관된 것이 없다.
+    if (options.deleted) return [];
     const [rows, views] = await Promise.all([
       listLocalCharacters(userId),
       listLocalCharacterViews(userId),
@@ -802,7 +819,14 @@ export async function listCharacters(
   }
 
   const supabase = createSupabaseAdminClient();
-  const ordered = supabase.from("characters").select("*").order("created_at", { ascending: false });
+  /*
+    **회원이 지운 것은 빼거나, 그것만 읽는다**(2026-10-08 — 계획 2단계). 서버 권한으로 읽으므로 RLS 가 안 막는다 —
+    이 거르기가 유일한 방어선이다. 관리자 전체 보기도 지운 것은 안 본다(「회원이 삭제한 자료」에서만 본다).
+  */
+  const all = supabase.from("characters").select("*");
+  const ordered = options.deleted
+    ? all.not("deleted_at", "is", null).order("deleted_at", { ascending: false })
+    : all.is("deleted_at", null).order("created_at", { ascending: false });
   const { data, error } = await scopedRead(
     // 관리자 전체 보기는 모든 회원을 합친 목록이다. 회원용 상한(100)으로 자르면 옛 캐릭터가 사라진다(2026-10-08).
     ids ? ordered.in("id", ids) : ordered.limit(options.allMembers ? 1000 : 100),
@@ -1000,8 +1024,12 @@ export async function characterOwnerOf(characterId: string, viewerId: string): P
   return data ? String((data as { user_id: string }).user_id) : null;
 }
 
+/**
+ * **완전 삭제** — 줄·각도·파일·라이브러리 사본까지. 2026-10-08 부터 회원의 지우기는 이것을 부르지 않는다
+ * (`softDeleteCharacter` 가 지운 때만 적는다). 관리자의 지우기와 로컬 저장소만 쓴다.
+ */
 export async function deleteCharacter(userId: string, characterId: string) {
-  const character = await findCharacter(userId, characterId);
+  const character = await findCharacter(userId, characterId, null, true);
 
   if (isLocalStoreEnabled()) {
     const paths = await deleteLocalCharacter(userId, characterId);
@@ -1036,8 +1064,9 @@ export async function deleteCharacter(userId: string, characterId: string) {
   if (character) {
     // 다각도 한 장도 라이브러리에 한 줄로 들어가 있다. 빠뜨리면 캐릭터를
     // 지워도 그 한 장이 남아 다른 작업에 끌려 들어온다.
+    // 회원이 지운 캐릭터면 **그때 함께 보관된 사본만** 지운다 — 같은 이름의 새 캐릭터 사본은 남는다(2026-10-08).
     for (const id of [...CHARACTER_ANGLES.map((angle) => angle.id as string), CHARACTER_SHEET.id]) {
-      await removeReferenceImagesByTitle(userId, characterReferenceTitle(character.name, id));
+      await removeReferenceImagesByTitle(userId, characterReferenceTitle(character.name, id), character.deletedAt ?? null);
     }
   }
 

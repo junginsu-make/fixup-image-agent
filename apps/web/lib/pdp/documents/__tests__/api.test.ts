@@ -21,26 +21,37 @@ const doc=():ServerDocument=>({schemaVersion:3,id,title:"작업",stage:"input",s
   body:{sections:[],inputs:{},settings:{},references:[],blueprint:{},editor:null}});
 afterEach(()=>{for(const root of roots.splice(0)){if(!root.startsWith(join(tmpdir(),"pdp-api-")))throw Error("unsafe");rmSync(root,{recursive:true,force:true});}});
 describe("문서 API 경계",()=>{
-  it("F20: 삭제 도중 파일 정리가 끊겨도 다음 목록 요청이 정리를 재시도한다",async()=>{
+  /**
+   * **회원이 지우면 지운 때만 적는다**(2026-10-08 사용자 결정 — 지워도 남겨 관리자가 확인, 6개월 뒤 파기).
+   * 회원 화면(목록·열기)에서는 사라지고, 문서·그림·연결된 옛 그림은 그대로 남는다. 목록을 열어도 정리하지 않는다.
+   * 연결된 옛 라이브러리 작업에도 지운 때를 적는다 — 안 적으면 주소로 직접 열면 그림이 보인다(리뷰).
+   */
+  it("회원의 지우기는 문서를 감추기만 하고 그림·옛 그림은 남긴다 — 목록을 열어도 정리하지 않는다",async()=>{
+    const {repo,storage}=setup();await repo.create(user,id,"legacy");await repo.save(user,id,0,doc(),crypto.randomUUID());
+    const cleanupLegacy=vi.fn(async()=>{});const hideLegacy=vi.fn(async()=>{});
+    const h=documentHandlers({enabled:()=>true,authenticate:async()=>({userId:user}),repo,storage,cleanupLegacy,hideLegacy} as any);
+    expect((await h.remove(request({},"DELETE"),id)).status).toBe(200);
+    expect(await repo.get(user,id)).toBeNull();
+    const listed=await (await h.list()).json();
+    expect(listed.documents).toEqual([]);
+    expect(storage.removeAll).not.toHaveBeenCalled();
+    expect(cleanupLegacy).not.toHaveBeenCalled();
+    expect(hideLegacy).toHaveBeenCalledWith(user,[id,"legacy"]);
+    const kept=await repo.get(user,id,undefined,{includeDeleted:true});
+    expect(kept?.deletedAt).toBeTruthy();
+    expect(kept?.deletedBy).toBe(user);
+  });
+  it("F20: 예전 방식으로 지우다 끊긴 문서는 다음 목록 요청이 정리를 마친다",async()=>{
     const {repo,h,storage}=setup();await repo.create(user,id);await repo.save(user,id,0,doc(),crypto.randomUUID());
-    storage.removeAll.mockImplementationOnce(async()=>{throw Error("일시 중단");});
-    expect((await h.remove(request({},"DELETE"),id)).status).toBe(503);
+    await repo.markDeleted(user,id);
     expect((await h.list()).status).toBe(200);
-    expect(storage.removeAll).toHaveBeenCalledTimes(2);
+    expect(storage.removeAll).toHaveBeenCalledTimes(1);
     expect((await repo.markDeleted(user,id)).document).toBeNull();
   });
   it.each(["data:image/png;base64,AAAA","A".repeat(4096)])("F19: 임의 src 칸에도 그림 문자열은 넣을 수 없다 (%#)",async src=>{
     const {repo,h}=setup();await repo.create(user,id);const value=doc();
     value.body.editor={layers:[{src}]};
     expect((await h.put(request({baseRevision:0,requestId:crypto.randomUUID(),document:value}),id)).status).toBe(400);
-  });
-  it("F17: 전용 문서 삭제는 연결된 옛 그림도 정리한 다음 문서를 비운다",async()=>{
-    const {repo,storage}=setup();await repo.create(user,id,"legacy");
-    await repo.save(user,id,0,doc(),crypto.randomUUID());
-    const cleanupLegacy=vi.fn(async()=>{expect(await repo.get(user,id)).toBeNull();});
-    const h=documentHandlers({enabled:()=>true,authenticate:async()=>({userId:user}),repo,storage,cleanupLegacy} as any);
-    expect((await h.remove(request({},"DELETE"),id)).status).toBe(200);
-    expect(cleanupLegacy).toHaveBeenCalledWith(user,[id,"legacy"]);
   });
   it.each(["toString","constructor","__proto__"])("실제 자산이 아닌 %s 참조는 거절한다",async(key)=>{
     const {h,repo}=setup();await repo.create(user,id);const invalid=doc();
@@ -111,11 +122,20 @@ describe("문서 API 경계",()=>{
     expect((await repo.get(user,id))?.document?.title).toBe("작업");
     expect((await repo.get(user,id))?.revision).toBe(3);
   });
-  it("파일 삭제 실패 시 503이고 재시도해 정리한다",async()=>{
-    const {h,repo,storage}=setup();await repo.create(user,id);
-    storage.removeAll.mockImplementationOnce(async()=>{throw Error("down");});
-    expect((await h.remove(new Request("http://local/test"),id)).status).toBe(503);
-    expect(await repo.get(user,id)).toBeNull();
+  it("이미 지운 문서를 다시 지우면 없는 것이다",async()=>{
+    const {h,repo}=setup();await repo.create(user,id);
     expect((await h.remove(new Request("http://local/test"),id)).status).toBe(200);
+    expect((await h.remove(new Request("http://local/test"),id)).status).toBe(404);
+  });
+});
+
+describe("회원의 지우기 — 옛 작업 표시가 실패하면",()=>{
+  /** 문서를 먼저 지우면 다시 눌러도 문서를 못 찾아 옛 작업이 영영 주소로 열린다. 옛 작업을 먼저 적는다. */
+  it("문서도 지우지 않는다 — 다시 누르면 처음부터 한다",async()=>{
+    const {repo,storage}=setup();await repo.create(user,id,"legacy");await repo.save(user,id,0,doc(),crypto.randomUUID());
+    const hideLegacy=vi.fn(async()=>{throw new Error("x");});
+    const h=documentHandlers({enabled:()=>true,authenticate:async()=>({userId:user}),repo,storage,hideLegacy} as any);
+    expect((await h.remove(request({},"DELETE"),id)).status).not.toBe(200);
+    expect(await repo.get(user,id)).not.toBeNull();
   });
 });

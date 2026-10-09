@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ownerIdsOf, withOwner } from "../core";
+import { ownerIdsOf, withDeletedAt, withOwner } from "../core";
 
 const ROWS = [
   { id: "a", userId: "u1", title: "가을 운동회" },
@@ -60,5 +60,22 @@ describe("소유자를 덧댈 때", () => {
     const before = JSON.stringify(ROWS);
     withOwner(ROWS, "u1", emails);
     expect(JSON.stringify(ROWS)).toBe(before);
+  });
+});
+
+/**
+ * **회원이 지운 작업에 지운 때를 붙인다**(2026-10-08 — 지워도 남겨 관리자가 확인). 관리자 목록은 서버 권한으로 읽어
+ * 지운 것도 함께 온다. 화면이 「회원이 삭제함」을 달 수 있게 지운 것에만 이 칸을 싣는다.
+ */
+describe("지운 때", () => {
+  it("지운 작업에만 지운 때를 싣는다", () => {
+    const deleted = new Map([["b", "2026-10-08T10:00:00.000Z"]]);
+    expect(withDeletedAt(ROWS, deleted).map((row) => [row.id, (row as { deletedAt?: string }).deletedAt ?? null])).toEqual([
+      ["a", null], ["b", "2026-10-08T10:00:00.000Z"], ["c", null], ["d", null],
+    ]);
+  });
+
+  it("지운 것이 없으면 받은 그대로", () => {
+    expect(withDeletedAt(ROWS, new Map())).toEqual(ROWS);
   });
 });

@@ -344,6 +344,109 @@ describe("캐릭터를 받는 동안", () => {
   });
 });
 
+/**
+ * **관리자는 회원이 지운 작업도 본다**(2026-10-08 사용자 결정). 「회원이 삭제함 · 날짜」 표시가 붙고, 완전히
+ * 지울 수 있다. 남의 상세페이지 문서는 관리자 주소로 지운다.
+ */
+describe("관리자 — 회원이 지운 작업", () => {
+  const DOC = "88888888-8888-4888-8888-888888888888";
+  const OWNER = "99999999-9999-4999-8999-999999999999";
+  function adminFetch() {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url, method });
+      if (method === "DELETE") return json({ ok: true });
+      if (url.startsWith("/api/showcase/manage")) return json({ ok: true, items: [] });
+      if (url.startsWith("/api/admin/works")) {
+        return json({ ok: true, easyWorkIds: [], poster: [], sns: [{ id: S, title: "지운 카드뉴스", status: "ready", ...stamp, mine: false,
+          ownerEmail: "m@example.com", deletedAt: "2026-10-08T03:00:00.000Z",
+          data: { flow: { cards: [{ index: 1, assetUrl: "https://img/s.png" }] } } }] });
+      }
+      if (url.startsWith("/api/admin/pdp-documents")) {
+        return json({ ok: true, documents: [{ id: DOC, userId: OWNER, revision: 1, sourceDraftId: null, createdAt: stamp.createdAt,
+          updatedAt: stamp.updatedAt, title: "지운 상세페이지", stage: "editor", sectionCount: 1, aspectRatio: "9:16", imageCount: 1,
+          cover: null, mine: false, coverUrl: "https://img/d.png", deletedAt: "2026-10-08T03:00:00.000Z" }] });
+      }
+      if (url.startsWith("/api/library")) return json({ ok: true, items: [] });
+      if (url.startsWith("/api/characters")) return json({ ok: true, characters: [] });
+      return new Response("{}", { status: 404 });
+    });
+  }
+
+  it("지운 작업에 「회원이 삭제함」 표시가 붙는다", async () => {
+    vi.stubGlobal("fetch", adminFetch());
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    expect(text()).toContain("지운 카드뉴스");
+    expect(text()).toContain("회원이 삭제함");
+  });
+
+  /**
+   * **관리자는 남의 것도 지운다**(2026-10-09 사용자 — 「카드뉴스는 되는데 상세페이지·캐릭터는 안 된다」).
+   * 상세페이지는 관리자 주소로 완전히 지우고, 캐릭터는 캐릭터 지우기 주소로 보낸다(주인은 서버가 찾는다).
+   */
+  it("관리자는 남의 살아 있는 상세페이지와 캐릭터도 지울 수 있다", async () => {
+    const LIVE = "77777777-7777-4777-8777-777777777777";
+    const base = adminFetch();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url.startsWith("/api/admin/pdp-documents")) {
+        calls.push({ url, method });
+        return json({ ok: true, documents: [{ id: LIVE, userId: OWNER, revision: 1, sourceDraftId: null, createdAt: stamp.createdAt,
+          updatedAt: stamp.updatedAt, title: "남의 상세페이지", stage: "editor", sectionCount: 1, aspectRatio: "9:16", imageCount: 1,
+          cover: null, mine: false, coverUrl: "https://img/live.png" }] });
+      }
+      if (method === "GET" && url.startsWith("/api/characters")) {
+        calls.push({ url, method });
+        return json({ ok: true, characters: [{ id: "char-other", name: "남의 캐릭터", kind: "character", look: "3d",
+          createdAt: stamp.createdAt, mine: false, ownerEmail: "m@example.com",
+          views: [{ angle: "front", url: "https://img/other.png", thumbUrl: null }] }], angles: [{ id: "front", label: "정면" }] });
+      }
+      return base(url, init);
+    }));
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    for (const name of ["남의 상세페이지", "남의 캐릭터"]) {
+      const corner = view.root.find((node) => node.type === "button" && node.props["aria-label"] === `${name} 지우기`);
+      await act(async () => { corner.props.onClick({ stopPropagation() {} }); });
+      await flush();
+      const confirm = view.root.findAll((node) => node.type === "button" && node.findAll((child) => child.children.includes("지웁니다")).length > 0).at(-1)!;
+      await act(async () => { confirm.props.onClick(); });
+      await flush();
+    }
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.url)).toEqual([
+      `/api/admin/pdp-documents/${LIVE}?owner=${OWNER}`, "/api/characters",
+    ]);
+  });
+
+  /** 걸면 누구나 보는 공개 사본이 생긴다 — 처리방침 제2-1조(관리자만 열람)와 어긋난다. 서버도 거절한다. */
+  it("지운 작업에는 「첫 화면에 걸기」가 없다", async () => {
+    vi.stubGlobal("fetch", adminFetch());
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    const card = view.root.find((node) => typeof node.type === "string" && typeof node.props.onClick === "function"
+      && String(node.props.className ?? "").includes("cursor-pointer")
+      && node.findAll((child) => child.children.includes("지운 카드뉴스")).length > 0);
+    await act(async () => { card.props.onClick(); });
+    await flush();
+    expect(gallery.open).toHaveBeenCalled();
+    expect((gallery.open.mock.calls.at(-1)![0] as { action?: unknown }).action).toBeUndefined();
+  });
+
+  it("남의 지운 상세페이지 문서도 지울 수 있고, 관리자 주소로 완전히 지운다", async () => {
+    vi.stubGlobal("fetch", adminFetch());
+    await act(async () => { view = create(<WorksTab />); });
+    await flush();
+    const corner = view.root.find((node) => node.type === "button" && node.props["aria-label"] === "지운 상세페이지 지우기");
+    await act(async () => { corner.props.onClick({ stopPropagation() {} }); });
+    await flush();
+    const confirm = view.root.findAll((node) => node.type === "button" && node.findAll((child) => child.children.includes("지웁니다")).length > 0).at(-1)!;
+    await act(async () => { confirm.props.onClick(); });
+    await flush();
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.url)).toEqual([`/api/admin/pdp-documents/${DOC}?owner=${OWNER}`]);
+  });
+});
+
 /** 카드의 지우기 단추를 누르고 확인 창의 「지웁니다」를 누른다. */
 async function pressDeleteAndConfirm(name: string) {
   const corner = view.root.find((node) => node.type === "button" && node.props["aria-label"] === `${name} 지우기`);
