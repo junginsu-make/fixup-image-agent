@@ -19,9 +19,13 @@ describe("서비스와 비용 전략실의 공통 차감 정책", () => {
     expect(() => imageCredits({ width: NaN, height: 100 })).toThrow();
     expect(() => imageCredits({ width: 100.5, height: 100 })).toThrow();
   });
-  it("구매분은 KST 달력 3개월, 구독은 다음 KST 월초에 끝난다", () => {
+  it("구매분은 KST 달력 3개월, 구독은 받은 때부터 KST 한 달 뒤에 끝난다", () => {
     expect(purchaseExpiresAt("2026-01-30T15:30:00Z")).toBe("2026-04-29T15:30:00.000Z");
-    expect(subscriptionExpiresAt("2026-09-30T15:01:00Z")).toBe("2026-10-31T15:00:00.000Z");
+    // 2026-10-09 사용자: 구독 크레딧은 배정한 날부터 한 달(그 달 말일 소멸이 아니다).
+    expect(subscriptionExpiresAt("2026-09-30T15:01:00Z")).toBe("2026-10-31T15:01:00.000Z");
+    expect(subscriptionExpiresAt("2026-03-25T03:00:00.000Z")).toBe("2026-04-25T03:00:00.000Z");
+    // 1월 31일(한국 시간)에 받으면 2월 마지막 날 같은 시각까지 — DB 주기 계산과 같다.
+    expect(subscriptionExpiresAt("2026-01-31T01:00:00.000Z")).toBe("2026-02-28T01:00:00.000Z");
   });
   it("작업 환산은 상세페이지 전체와 개별 이미지를 구분한다", () => {
     expect(WORK_CREDIT_PRESETS.find(x => x.id === "pdp")?.images).toBe(9);

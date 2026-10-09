@@ -14,7 +14,7 @@ const units = z.number().int().min(1).max(1_000_000);
 const money = z.number().int().min(0).max(100_000_000);
 const reason = z.string().trim().min(3).max(500);
 const Command = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("grant"), users: z.array(id).min(1).max(200), grantKind: z.enum(["purchase", "subscription", "bonus"]), units, amount: money, expires: z.string().datetime().nullable(), reason, action: id }),
+  z.object({ kind: z.literal("grant"), users: z.array(id).min(1).max(200), grantKind: z.enum(["purchase", "bonus"]), units, amount: money, expires: z.string().datetime().nullable(), reason, action: id }),
   // 전환 한 번은 전역 크레딧 잠금을 쥔 채 돈다 — 그 길이만큼 모든 회원의 생성과
   // 잔액 조회가 멈춘다. DB 상한(50)과 같은 값이어야 화면에서 먼저 막힌다.
   z.object({ kind: z.literal("activate"), users: z.array(id).min(1).max(50), ratio: z.number().positive().max(1000), reviewed: z.literal(true), reason, action: id }),
@@ -27,7 +27,6 @@ const Command = z.discriminatedUnion("kind", [
   // 승인·정지. 여기서는 **승인 메일을 보내지 않는다** — 수십 명에게 한 요청 안에서
   // 보내면 그 요청이 먼저 죽는다. 다시 보내기는 /admin 에 회원별로 남아 있다.
   z.object({ kind: z.literal("status"), users: z.array(id).min(1).max(200), status: z.enum(["active", "suspended"]), reason, action: id }),
-  z.object({ kind: z.literal("paid"), user: id, period: z.string().regex(/^\d{4}-\d{2}-01$/), units, amount: money, action: id }),
 ]);
 export type CreditCommand = z.infer<typeof Command>;
 
@@ -36,18 +35,18 @@ export type CreditCommand = z.infer<typeof Command>;
  * 숨기면 무엇이 막혔는지 영영 모른다.
  */
 const DB_REASON: Record<string, string> = {
-  active_subscription_required: "이용 중인 플랜이 없어 결제 확인을 할 수 없습니다. 먼저 플랜을 부여하세요.",
-  outside_subscription_period: "플랜을 시작하기 전이거나 해지한 뒤의 달입니다. 결제 확인 월을 확인하세요.",
   inactive_subscription_plan: "판매 중지된 플랜은 새로 부여할 수 없습니다.",
-  credit_grant_has_holds: "이 지급분으로 처리 중인 작업이 있어 지금은 회수할 수 없습니다. 작업이 끝난 뒤 다시 하세요.",
+  // 회수와 플랜 변경(남은 구독 크레딧을 거둬들인다) 둘 다 이 까닭으로 멈춘다.
+  credit_grant_has_holds: "처리 중인 작업이 이 크레딧을 쓰고 있어 지금은 회수하거나 플랜을 바꿀 수 없습니다. 작업이 끝난 뒤 다시 하세요.",
   credit_source_conflict: "같은 요청이 다른 내용으로 이미 반영됐습니다. 새로고침 후 다시 확인하세요.",
   credit_account_not_activated: "크레딧 계정이 없는 회원이 섞여 있습니다.",
   credit_plan_not_found: "그 플랜을 찾지 못했습니다. 새로고침 후 다시 확인하세요.",
   credit_admin_required: "관리자만 할 수 있습니다.",
   invalid_credit_grant: "지급 내용이 올바르지 않습니다. 크레딧과 금액, 사유를 확인하세요.",
   invalid_credit_expiry: "만료일이 오늘보다 뒤여야 합니다.",
-  invalid_paid_period: "결제 확인 내용이 올바르지 않습니다. 달과 크레딧, 금액을 확인하세요.",
-  subscription_periods_user_id_period_key: "이 회원의 해당 월 결제는 이미 확인됐습니다. 지급 이력을 확인해 주세요.",
+  // 옛 화면이 열려 있을 때만 나온다. 2026-10-09 부터 구독 크레딧은 배정·매달 자동으로 들어간다.
+  subscription_cycle_missing: "구독 크레딧을 만들지 못해 배정을 되돌렸습니다. 잠시 뒤 다시 시도하세요.",
+  subscription_auto_cycle: "이제 결제 확인 없이 구독을 배정하면 크레딧이 들어가고 매달 자동으로 다시 들어갑니다. 화면을 새로고침하세요.",
   credit_reason_required: "사유를 적어 주세요.",
   credit_grant_not_found: "그 지급 기록을 찾지 못했습니다. 새로고침 후 다시 확인하세요.",
   cannot_suspend_self: "지금 쓰는 관리자 계정은 정지할 수 없습니다.",
@@ -79,7 +78,7 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
     if (users.length) {
       const { data, error } = await db.from("profiles").select(`id,email,${ONBOARDING_COLUMNS}`).in("id", users);
       if (error || data?.length !== users.length) throw new Error("선택한 회원을 찾지 못했습니다.");
-      if (["grant", "paid", "subscription"].includes(command.kind) && data.some(needsOnboarding)) throw new Error("가입 정보를 아직 확인하지 않은 회원이 있습니다. 가입 완료 후 지급해 주세요.");
+      if (["grant", "subscription"].includes(command.kind) && data.some(needsOnboarding)) throw new Error("가입 정보를 아직 확인하지 않은 회원이 있습니다. 가입 완료 후 지급해 주세요.");
       if (data.some(target => !canManageTarget({ actorEmail: actor.profile.email, targetEmail: target.email, owner: resolveOwnerEmail(process.env.OWNER_EMAIL) }))) throw new Error(OWNER_PROTECTED_MESSAGE);
     }
     // 결과를 버리지 않는다. 일괄 상태 변경은 조건에 안 맞는 회원을 건너뛰므로,
@@ -116,7 +115,7 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
       // 절반만 새 플랜으로 남지 않고 통째로 되돌아간다.
       case "subscription":
         await call("credit_admin_subscription_many", { p_users: users, p_plan: command.plan, p_status: command.status, p_started: new Date().toISOString(), p_cancel: command.status === "canceled" ? new Date().toISOString() : null, p_action: command.action });
-        outcome = command.status === "active" ? "구독 플랜을 배정했습니다. 해당 월의 결제를 확인하면 월 구독 크레딧이 지급됩니다." : command.status === "canceled" ? "구독 플랜을 해지했습니다." : "구독 플랜을 중단했습니다.";
+        outcome = command.status === "active" ? "구독 플랜을 배정했고 플랜만큼 크레딧이 들어갔습니다. 구독이 켜져 있는 동안 매달 배정한 날에 다시 들어갑니다." : command.status === "canceled" ? "구독 플랜을 해지했습니다." : "구독 플랜을 중단했습니다.";
         break;
       case "status": {
         const moved = await call("credit_admin_member_status", { p_users: users, p_status: command.status, p_reason: command.reason, p_action: command.action });
@@ -127,10 +126,6 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
           : `${users.length}명 중 ${count}명을 ${label}했습니다. 나머지는 조건에 맞지 않아 건너뛰었습니다.`;
         break;
       }
-      case "paid":
-        await call("credit_admin_confirm_period", { p_user: command.user, p_period: command.period, p_paid: command.amount, p_units: command.units, p_source: `paid:${command.action}` });
-        outcome = `${command.period.slice(0, 7)} 결제 확인을 반영했습니다. 구독 기간에 ${command.units.toLocaleString("ko-KR")}크레딧을 사용할 수 있습니다.`;
-        break;
     }
     revalidatePath("/admin"); revalidatePath("/admin/system"); revalidatePath("/settings");
     return { ok: true, message: outcome };

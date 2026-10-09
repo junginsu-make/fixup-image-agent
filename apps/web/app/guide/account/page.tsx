@@ -25,9 +25,9 @@ import { CS_EMAIL } from "../../../lib/cs/contact";
  *
  * 이 저장소에는 **결제 연동이 없다.** 토스·아임포트·Stripe 같은 것을 찾아봤고
  * 하나도 없다(2026-09-28 확인). 플랜과 크레딧은 운영자가 직접 넣는다
- * (`credit_admin_subscription_many` · `credit_admin_grant_many`). 그 달 구독
- * 크레딧은 운영자가 **그 달 결제를 확인해야** 들어온다(`credit_admin_confirm_period`)
- * — 달이 바뀐다고 저절로 들어오지 않는다.
+ * (`credit_admin_subscription_many` · `credit_admin_grant_many`). 구독 크레딧은
+ * **배정하는 순간 들어오고, 켜져 있는 동안 매달 배정한 날에 저절로 다시 들어온다**
+ * (`credit_subscription_cycle`, 2026-10-09 사용자 결정 — 전에는 그 달 결제 확인 뒤에만).
  *
  * 그러면 「결제 방법」을 쓸 수 없다. **없는 것을 있는 것처럼 쓰면 그게 가장
  * 나쁘다** — 사용자가 없는 화면을 찾아다닌다. 그래서 있는 그대로 쓴다.
@@ -204,13 +204,13 @@ export default function AccountGuidePage() {
               ),
             },
             {
-              title: "플랜과 크레딧은 따로입니다",
+              title: "플랜을 넣으면 크레딧이 바로 들어옵니다",
               body: (
                 <>
-                  플랜을 넣는 것과 그 달 크레딧을 넣는 것이 <strong className="text-foreground">따로</strong>
-                  움직입니다. 그 달 구독 크레딧은 운영자가 그 달 결제를 확인하면 들어옵니다. 구독을 신청했는데
-                  계정 화면의 「구독」 칸이 0 이고 「받은 크레딧」에 이번 달 구독 줄이 없으면, 아직 그 달 결제
-                  확인 전입니다. 문의해 주세요.
+                  운영자가 플랜을 넣는 순간 플랜만큼 구독 크레딧이 들어오고,{" "}
+                  <strong className="text-foreground">배정한 날부터 한 달</strong> 동안 쓸 수 있습니다. 구독이
+                  이어지는 동안에는 매달 같은 날짜에 다음 달 몫이 저절로 들어옵니다. 플랜을 바꾸면 바꾼 날부터
+                  새 플랜 몫이 들어오고, 이전 플랜에서 남은 구독 크레딧은 사라집니다.
                 </>
               ),
             },
@@ -228,8 +228,8 @@ export default function AccountGuidePage() {
         <Flow
           nodes={[
             { label: "문의", sub: "필요한 플랜을 알려 주세요", human: true },
-            { label: "플랜 부여", sub: "운영자가 넣습니다" },
-            { label: "그 달 결제 확인", sub: "크레딧은 여기서 들어옵니다" },
+            { label: "플랜 부여", sub: "크레딧이 바로 들어옵니다" },
+            { label: "매달 같은 날", sub: "다음 달 몫이 저절로 들어옵니다" },
             { label: "만들기", sub: "바로 쓸 수 있습니다" },
           ]}
         />
@@ -274,8 +274,8 @@ export default function AccountGuidePage() {
               title: "구독 크레딧은 이월되지 않습니다",
               body: (
                 <>
-                  그 달 몫은 <strong className="text-foreground">그 달에만</strong> 쓸 수 있습니다. 달이 바뀌면
-                  지난 달 몫은 사라집니다. 새 달 몫은 운영자가 그 달 결제를 확인하면 들어옵니다.
+                  한 번 받은 몫은 <strong className="text-foreground">배정한 날부터 한 달</strong> 동안만 쓸 수
+                  있습니다. 그 한 달이 지나면 남은 몫은 사라지고, 구독이 이어지면 새 몫이 그날 들어옵니다.
                 </>
               ),
             },

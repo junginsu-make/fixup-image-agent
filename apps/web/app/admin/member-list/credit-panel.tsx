@@ -6,7 +6,7 @@ import { creditMemberHistory } from "../members/actions";
 import type { AdminMemberRow, CreditPlan } from "./types";
 import { PLAN_STATUS_LABEL } from "./types";
 import type { CreditCommandState } from "./use-credit-command";
-import { Field, GrantForm, SELECT, number, text } from "./forms";
+import { Field, GrantForm, SELECT, text } from "./forms";
 import { MemberInfo } from "./member-info";
 import { needsOnboarding } from "../../../lib/membership/onboarding";
 
@@ -17,7 +17,14 @@ type History = { grants: Grant[]; pending: Pending[]; audit: Audit[] };
 
 const KIND: Record<string, string> = { subscription: "구독", purchase: "구매", bonus: "추가 지급" };
 const day = (value: string | null) => (value ? new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "—");
-const thisMonth = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 7);
+/*
+  배정 = 지급(2026-10-09 사용자 결정). 전에는 배정 뒤 그 달 「결제 확인」을 따로 눌러야 크레딧이
+  나갔고 그 달 말일에 사라졌다. 이제 배정하면 바로 들어가고, 켜져 있는 동안 매달 배정일에 다시 들어간다.
+*/
+export const SUBSCRIPTION_HINT =
+  "플랜을 배정하면 그 자리에서 플랜만큼 크레딧이 들어가고, 배정한 날부터 한 달 동안 씁니다. " +
+  "구독이 켜져 있는 동안 매달 배정한 날에 다시 들어갑니다. 다른 플랜으로 바꾸면 이전 플랜의 남은 크레딧은 거둬들이고 새 플랜 크레딧을 줍니다. " +
+  "입금이 끊기면 「플랜 해지」를 눌러야 다음 달 지급이 멈춥니다.";
 
 /** 회원 한 명의 플랜·크레딧. 표에서 「플랜·크레딧」을 누르면 열린다. */
 export function CreditPanel({ row, plans, state, onClose, version }: { row: AdminMemberRow; plans: CreditPlan[]; state: CreditCommandState; onClose: () => void; version: number }) {
@@ -60,11 +67,8 @@ function CreditSections({ row, plans, state, history, error }: { row: AdminMembe
         <Section title="크레딧 지급" hint="구독과 별도로 주는 크레딧입니다. 구매분은 3개월 동안 쓸 수 있습니다.">
           <GrantForm users={[row.profile.id]} state={state} />
         </Section>
-        <Section title="월 구독" hint="플랜 배정과 크레딧 지급은 두 단계입니다. 플랜을 배정한 뒤 해당 월 결제를 확인해야 생성에 사용할 크레딧이 지급됩니다.">
-          <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
-            <div className="space-y-2"><h4 className="text-sm font-semibold">1. 구독 플랜 배정</h4><PlanControls row={row} plans={plans} state={state} /></div>
-            <div className="space-y-2 border-t pt-4"><h4 className="text-sm font-semibold">2. 결제 확인·월 크레딧 지급</h4><p className="text-xs text-muted-foreground">해당 월의 크레딧은 월말에 소멸합니다.</p><PaidForm row={row} plans={plans} state={state} /></div>
-          </div>
+        <Section title="월 구독" hint={SUBSCRIPTION_HINT}>
+          <div className="space-y-2 rounded-lg border bg-muted/20 p-4"><PlanControls row={row} plans={plans} state={state} /></div>
         </Section>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         {!history && !error ? <p className="text-sm text-muted-foreground">이력을 불러오는 중입니다.</p> : null}
@@ -135,24 +139,6 @@ function PlanControls({ row, plans, state }: { row: AdminMemberRow; plans: Credi
         </Button>
       ) : null}
     </div>
-  );
-}
-
-function PaidForm({ row, plans, state }: { row: AdminMemberRow; plans: CreditPlan[]; state: CreditCommandState }) {
-  const credit = row.credit!;
-  const plan = plans.find((entry) => entry.id === credit.planId);
-  if (!plan || credit.planStatus !== "active") return <p className="text-sm text-muted-foreground">이용 중인 플랜이 있어야 결제를 확인할 수 있습니다.</p>;
-  return (
-    <form key={plan.id} className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
-      event.preventDefault();
-      const f = new FormData(event.currentTarget);
-      state.submit({ kind: "paid", user: row.profile.id, period: `${text(f, "period")}-01`, units: number(f, "units"), amount: number(f, "amount") });
-    }}>
-      <Field label="결제한 달"><Input className="w-40" name="period" type="month" defaultValue={thisMonth()} required /></Field>
-      <Field label="지급 크레딧"><Input className="w-28 tabular-nums" name="units" type="number" min={1} defaultValue={plan.monthly_units} required /></Field>
-      <Field label="받은 금액(원)"><Input className="w-32 tabular-nums" name="amount" type="number" min={0} defaultValue={plan.price_krw} required /></Field>
-      <Button type="submit" size="sm" disabled={state.pending}>결제 확인</Button>
-    </form>
   );
 }
 

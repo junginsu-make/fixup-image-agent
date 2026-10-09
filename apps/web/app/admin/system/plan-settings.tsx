@@ -12,8 +12,8 @@ const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 /**
  * 구독 플랜 설정. 만들기·고치기·판매 중지·삭제.
  *
- * **플랜을 만들어도 회원에게 크레딧이 나가지 않는다.** 회원에게 플랜을 붙이고
- * 그 달 결제를 확인해야 나간다(회원 관리 탭). 삭제는 쓰거나 썼던 회원이 없을
+ * **플랜을 만들어도 회원에게 크레딧이 나가지 않는다.** 회원 관리 탭에서 회원에게 플랜을
+ * 붙이는 순간 나가고, 그 뒤로는 매달 붙인 날에 저절로 나간다(2026-10-09). 삭제는 쓰거나 썼던 회원이 없을
  * 때만 된다(202609220004) — 있으면 판매 중지를 쓴다.
  */
 export function PlanSettings({ plans, enabled }: { plans: CreditPlan[]; enabled: boolean }) {
@@ -27,7 +27,7 @@ export function PlanSettings({ plans, enabled }: { plans: CreditPlan[]; enabled:
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
         <div className="space-y-1.5">
           <CardTitle>구독 플랜</CardTitle>
-          <CardDescription>플랜을 만들어도 크레딧이 바로 나가지 않습니다. 회원 관리 탭에서 플랜을 붙이고 그 달 결제를 확인해야 지급됩니다.</CardDescription>
+          <CardDescription>플랜을 만들어도 크레딧이 바로 나가지 않습니다. 회원 관리 탭에서 회원에게 플랜을 붙이면 그 자리에서 지급되고, 구독이 켜져 있는 동안 매달 붙인 날에 다시 지급됩니다.</CardDescription>
         </div>
         {enabled ? <Button size="sm" variant={adding ? "outline" : "default"} onClick={() => setAdding(!adding)}>{adding ? "닫기" : "플랜 추가"}</Button> : null}
       </CardHeader>

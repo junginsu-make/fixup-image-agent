@@ -74,11 +74,10 @@ describe("구매 크레딧 유효기간", () => {
 });
 
 describe("구독 크레딧은 이월되지 않는다", () => {
-  it("코드가 다음 달 1일에 만료시킨다", () => {
+  it("코드가 받은 때부터 한 달 뒤에 만료시킨다", () => {
     const 받은날 = new Date("2026-03-10T00:00:00.000Z");
     const 끝나는날 = new Date(subscriptionExpiresAt(받은날));
 
-    // 한국 시간 4월 1일 0시 = UTC 3월 31일 15시.
     expect(끝나는날.getTime()).toBeGreaterThan(받은날.getTime());
     expect(끝나는날.getTime() - 받은날.getTime()).toBeLessThan(32 * 24 * 60 * 60 * 1000);
   });
@@ -91,47 +90,45 @@ describe("구독 크레딧은 이월되지 않는다", () => {
   });
 });
 
-describe("구독 크레딧은 받은 달의 말일에 사라진다", () => {
+describe("구독 크레딧은 배정한 날부터 한 달 쓴다", () => {
   /**
-   * **약관을 코드에 맞춘다**(2026-09-29 사용자 결정).
+   * **2026-10-09 사용자 결정 — 약관을 코드에 맞춘다.**
    *
-   * 코드는 결제일이 아니라 **달력**으로 끊는다 — 25일에 받아도 그 달 말일에
-   * 사라진다. 약관은 「해당 결제 주기가 끝날 때까지」라고만 적어서, 회원은
-   * 받은 날부터 한 달을 기대할 수 있었다. 그 차이를 약관이 밝힌다.
+   * 전에는 달력으로 끊었다(25일에 받아도 그 달 말일에 사라짐). 이제 구독을 배정한 날부터
+   * 한 달이 한 주기이고, 구독이 켜져 있는 동안 주기마다 자동으로 다시 들어온다.
    */
-  it("코드가 25일에 준 것을 그 달 말일에 끝낸다", () => {
-    // 한국 시간 3월 25일 정오에 받음 → 한국 시간 4월 1일 0시 = UTC 3월 31일 15시.
-    expect(subscriptionExpiresAt("2026-03-25T03:00:00.000Z")).toBe("2026-03-31T15:00:00.000Z");
+  it("코드가 25일에 준 것을 다음 달 25일에 끝낸다", () => {
+    expect(subscriptionExpiresAt("2026-03-25T03:00:00.000Z")).toBe("2026-04-25T03:00:00.000Z");
   });
 
-  /**
-   * **실제로 지급하는 것은 DB 함수다**(2026-09-29 독립 리뷰). 위 함수는 화면
-   * 계산용이라, 그것만 보면 DB 가 규칙을 바꿔도 모른다. DB 도 「그 달 1일 +
-   * 한 달」(= 다음 달 1일 0시, 한국 시간)로 끝내는지 본다.
-   */
-  it("DB 함수도 그 달이 끝날 때 끝낸다", () => {
+  /** 실제로 지급하는 것은 DB 함수다. DB 도 「시작 + n달 ~ 시작 + (n+1)달」로 끊는지 본다. */
+  it("DB 함수도 배정한 때부터 한 달씩 끊는다", () => {
     const 장부 = readFileSync(
-      join(web, "..", "..", "supabase", "migrations", "202609220001_credit_ledger_v2.sql"),
+      join(web, "..", "..", "supabase", "migrations", "202610090001_subscription_auto_cycle.sql"),
       "utf8",
     );
 
-    expect(장부).toContain(
-      "when p_kind='subscription' then ((credit_period_start()+interval '1 month')::timestamp at time zone 'Asia/Seoul')",
-    );
-    expect(장부).toContain("date_trunc('month',now() at time zone 'Asia/Seoul')");
+    expect(장부).toContain("starts_at := (v_start + make_interval(months => n)) at time zone 'Asia/Seoul'");
+    expect(장부).toContain("expires_at := (v_start + make_interval(months => n + 1)) at time zone 'Asia/Seoul'");
   });
 
-  it("약관이 결제 주기를 달력으로 정의한다", () => {
-    expect(약관).toContain("매월 1일부터 말일까지");
+  it("약관이 결제 주기를 시작한 날부터 한 달로 정의한다", () => {
+    expect(약관).toContain("구독을 시작한 날부터 한 달");
+    expect(약관, "옛 달력 주기가 남아 있다").not.toContain("매월 1일부터 말일까지");
   });
 
-  it("약관이 그 달 말일에 사라진다고 적는다", () => {
-    expect(약관).toContain("지급된 달의 말일");
+  it("약관이 주기가 끝나는 때 사라진다고 적는다", () => {
+    expect(약관).toContain("그 결제 주기가 끝나는 때까지");
+    expect(약관, "옛 말일 소멸이 남아 있다").not.toContain("지급된 달의 말일");
   });
 
-  /** 설명서는 이미 달력 기준으로 적고 있었다. 약관과 같은 말인지 본다. */
-  it("설명서도 달이 바뀌면 사라진다고 적는다", () => {
-    expect(설명서).toContain("달이 바뀌면");
+  it("약관이 결제 확인 뒤 지급이라고 적지 않는다", () => {
+    expect(약관).not.toContain("그 달의 결제를 확인한 뒤 지급");
+  });
+
+  it("설명서도 배정한 날부터 한 달이라고 적는다", () => {
+    expect(설명서).toContain("배정한 날부터 한 달");
+    expect(설명서, "옛 결제 확인 안내가 남아 있다").not.toContain("그 달 결제를 확인하면");
   });
 });
 
